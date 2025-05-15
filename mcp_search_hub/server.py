@@ -4,25 +4,26 @@ import asyncio
 import time
 import uuid
 from typing import Dict
-from fastmcp import FastMCP, Context
+
+from fastmcp import Context, FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from .config import get_settings
+from .models.base import HealthResponse, HealthStatus, MetricsResponse, ProviderStatus
 from .models.query import SearchQuery
-from .models.results import SearchResponse, CombinedSearchResponse
-from .models.base import HealthStatus, HealthResponse, ProviderStatus, MetricsResponse
+from .models.results import CombinedSearchResponse, SearchResponse
 from .providers.base import SearchProvider
+from .providers.exa_mcp import ExaProvider
+from .providers.firecrawl_mcp import FirecrawlProvider
 from .providers.linkup import LinkupProvider
-from .providers.exa import ExaProvider
 from .providers.perplexity import PerplexityProvider
 from .providers.tavily import TavilyProvider
-from .providers.firecrawl_mcp import FirecrawlProvider
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.router import QueryRouter
 from .result_processing.merger import ResultMerger
 from .utils.cache import QueryCache
 from .utils.metrics import MetricsTracker
-from .config import get_settings
 
 
 class SearchServer:
@@ -40,9 +41,12 @@ class SearchServer:
         )
 
         # Initialize providers
+        settings = get_settings()
         self.providers: Dict[str, SearchProvider] = {
             "linkup": LinkupProvider(),
-            "exa": ExaProvider(),
+            "exa": ExaProvider(
+                {"exa_api_key": settings.providers.exa.api_key.get_secret_value()}
+            ),
             "perplexity": PerplexityProvider(),
             "tavily": TavilyProvider(),
             "firecrawl": FirecrawlProvider(),
@@ -395,6 +399,129 @@ class SearchServer:
                 return await firecrawl_provider.firecrawl_generate_llmstxt(
                     url, maxUrls=maxUrls, showFullText=showFullText
                 )
+
+        # Register Exa tools
+        exa_provider = self.providers.get("exa")
+        if exa_provider and isinstance(exa_provider, ExaProvider):
+
+            @self.mcp.tool()
+            async def exa_search(
+                query: str,
+                limit: int = 10,
+                type: str = "neural",
+                **kwargs,
+            ) -> Dict:
+                """
+                Search the web using Exa's semantic search engine.
+
+                Args:
+                    query: Search query string
+                    limit: Maximum number of results (default: 10)
+                    type: Search type ('neural', 'keyword', 'hybrid')
+                """
+                return await exa_provider.mcp_wrapper.invoke_tool(
+                    "web_search_exa",
+                    {"query": query, "limit": limit, "type": type, **kwargs},
+                )
+
+            @self.mcp.tool()
+            async def exa_research_papers(
+                query: str,
+                limit: int = 10,
+                **kwargs,
+            ) -> Dict:
+                """
+                Search for research papers using Exa.
+
+                Args:
+                    query: Search query for research papers
+                    limit: Maximum number of results
+                """
+                return await exa_provider.research_papers(query, limit=limit, **kwargs)
+
+            @self.mcp.tool()
+            async def exa_company_research(
+                query: str,
+                **kwargs,
+            ) -> Dict:
+                """
+                Research companies using Exa.
+
+                Args:
+                    query: Company or industry to research
+                """
+                return await exa_provider.company_research(query, **kwargs)
+
+            @self.mcp.tool()
+            async def exa_competitor_finder(
+                company: str,
+                **kwargs,
+            ) -> Dict:
+                """
+                Find competitors for a company using Exa.
+
+                Args:
+                    company: Company name to find competitors for
+                """
+                return await exa_provider.competitor_finder(company, **kwargs)
+
+            @self.mcp.tool()
+            async def exa_linkedin_search(
+                query: str,
+                limit: int = 10,
+                **kwargs,
+            ) -> Dict:
+                """
+                Search LinkedIn using Exa.
+
+                Args:
+                    query: LinkedIn search query
+                    limit: Maximum number of results
+                """
+                return await exa_provider.linkedin_search(query, limit=limit, **kwargs)
+
+            @self.mcp.tool()
+            async def exa_wikipedia_search(
+                query: str,
+                limit: int = 10,
+                **kwargs,
+            ) -> Dict:
+                """
+                Search Wikipedia using Exa.
+
+                Args:
+                    query: Wikipedia search query
+                    limit: Maximum number of results
+                """
+                return await exa_provider.wikipedia_search(query, limit=limit, **kwargs)
+
+            @self.mcp.tool()
+            async def exa_github_search(
+                query: str,
+                limit: int = 10,
+                **kwargs,
+            ) -> Dict:
+                """
+                Search GitHub using Exa.
+
+                Args:
+                    query: GitHub search query
+                    limit: Maximum number of results
+                """
+                return await exa_provider.github_search(query, limit=limit, **kwargs)
+
+            @self.mcp.tool()
+            async def exa_crawl(
+                url: str,
+                **kwargs,
+            ) -> Dict:
+                """
+                Crawl a URL using Exa.
+
+                Args:
+                    url: URL to crawl and extract content from
+                """
+                return await exa_provider.crawl(url, **kwargs)
 
     async def close(self):
         """Close all provider connections."""
