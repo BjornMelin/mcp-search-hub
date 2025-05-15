@@ -26,6 +26,8 @@ This document provides links to official documentation for all technologies and 
 - [Linkup Search API Reference](https://docs.linkup.com/reference/search-1)
 - [Linkup API Authentication](https://docs.linkup.com/reference/authentication)
 - [Linkup Pricing](https://www.linkup.com/pricing)
+- [Linkup MCP Server (Python)](https://github.com/LinkupPlatform/python-mcp-server)
+- [Linkup MCP Documentation](https://docs.linkup.so/pages/integrations/mcp/mcp)
 
 ### Exa
 
@@ -34,6 +36,8 @@ This document provides links to official documentation for all technologies and 
 - [Exa Content Types](https://docs.exa.ai/reference/content-types)
 - [Exa API Keys](https://dashboard.exa.ai/api-keys)
 - [Exa Pricing](https://exa.ai/pricing)
+- [Exa MCP Server](https://github.com/exa-labs/exa-mcp-server)
+- [Exa MCP Documentation](https://docs.exa.ai/examples/exa-mcp)
 
 ### Perplexity
 
@@ -42,6 +46,8 @@ This document provides links to official documentation for all technologies and 
 - [Perplexity Search Capabilities](https://docs.perplexity.ai/docs/search-capabilities)
 - [Perplexity API Keys](https://www.perplexity.ai/settings/api)
 - [Perplexity Pricing](https://www.perplexity.ai/pricing)
+- [Perplexity MCP Server](https://github.com/ppl-ai/modelcontextprotocol)
+- [Perplexity MCP Documentation](https://docs.perplexity.ai/guides/mcp-server)
 
 ### Tavily
 
@@ -49,6 +55,8 @@ This document provides links to official documentation for all technologies and 
 - [Tavily Search API Reference](https://docs.tavily.com/reference/search-1)
 - [Tavily API Authentication](https://docs.tavily.com/docs/authentication)
 - [Tavily Pricing](https://tavily.com/pricing)
+- [Tavily MCP Server](https://github.com/tavily-ai/tavily-mcp)
+- [Tavily MCP Documentation](https://docs.tavily.com/documentation/mcp)
 
 ### Firecrawl
 
@@ -57,6 +65,7 @@ This document provides links to official documentation for all technologies and 
 - [Firecrawl Authentication](https://docs.firecrawl.dev/docs/authentication)
 - [Firecrawl Deep Research](https://docs.firecrawl.dev/docs/deep-research)
 - [Firecrawl Pricing](https://firecrawl.dev/pricing)
+- [Firecrawl MCP Server](https://github.com/mendableai/firecrawl-mcp-server)
 
 ## MCP Server Integration
 

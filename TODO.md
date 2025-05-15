@@ -38,69 +38,114 @@ _Last updated: May 15, 2025_
 
 ## Provider Integration Improvements
 
-### Strategy: Use Official Provider MCP Servers When Available
+### Strategy: Embed Official Provider MCP Servers Within MCP Search Hub
 
-We've decided to use official MCP servers for providers that offer them, while maintaining basic integration for search functionality. This reduces maintenance burden and ensures we get the latest features directly from the providers.
+We've decided to embed official MCP servers for all providers within MCP Search Hub, creating a unified interface while leveraging provider-maintained functionality. This reduces maintenance burden and ensures we get the latest features directly from the providers.
 
 #### Completed
 
-- [x] Document Firecrawl MCP server integration alongside Search Hub
-- [x] Create multi-server configuration examples for Claude clients
-- [x] Update README with instructions for using multiple MCP servers
-
-#### Official MCP Servers Available
-
 - [x] Firecrawl: Successfully integrated official [firecrawl-mcp-server](https://github.com/mendableai/firecrawl-mcp-server) within MCP Search Hub
   - [x] Created MCP Python SDK wrapper for Firecrawl MCP server
-  - [x] Exposed all Firecrawl tools through our unified server
+  - [x] Exposed all Firecrawl tools through our unified server  
   - [x] Added tests for integrated functionality
-- [ ] Check if Perplexity has an official MCP server
-- [ ] Check if Exa has an official MCP server  
-- [ ] Check if Linkup has an official MCP server
-- [ ] Check if Tavily has an official MCP server
+  - [x] Dynamically register all available tools from the MCP server
 
-#### Provider Updates (for basic search integration)
+#### Official MCP Servers Implementation Plan
 
-- [ ] Update all providers with latest API interfaces
-- [ ] Enhance error handling and retry logic
-- [ ] Ensure compatibility with official MCP servers
+- [ ] Perplexity: Integrate [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol) server
+  - [ ] Create MCP Python SDK wrapper similar to Firecrawl implementation
+  - [ ] Expose all Perplexity tools through unified server (ask, research, search)
+  - [ ] Add subprocess management for Node.js MCP server
+  - [ ] Implement automatic installation check
+  - [ ] Add comprehensive tests
+
+- [ ] Exa: Integrate [exa-mcp-server](https://github.com/exa-labs/exa-mcp-server)
+  - [ ] Create MCP Python SDK wrapper following Firecrawl pattern
+  - [ ] Expose all Exa tools (web_search_exa, research_paper_search, etc.)
+  - [ ] Implement subprocess lifecycle management
+  - [ ] Add installation verification and auto-install
+  - [ ] Create test suite for all exposed tools
+
+- [ ] Linkup: Integrate [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
+  - [ ] Create wrapper (Note: This is already a Python MCP server)
+  - [ ] Expose Linkup search functionality through unified interface
+  - [ ] Implement server lifecycle management
+  - [ ] Add comprehensive tests
+  - [ ] Handle Python-to-Python MCP communication
+
+- [ ] Tavily: Integrate [tavily-mcp](https://github.com/tavily-ai/tavily-mcp) server
+  - [ ] Create MCP Python SDK wrapper following established pattern
+  - [ ] Expose tavily-search and tavily-extract tools
+  - [ ] Implement Node.js subprocess management
+  - [ ] Add auto-installation capability
+  - [ ] Develop test coverage for all tools
+
+#### Implementation Steps for Each Provider
+
+For each provider integration, follow these steps:
+
+1. Create a new provider module (e.g., `providers/perplexity_mcp.py`)
+2. Implement MCP wrapper class with:
+   - Installation check (`_check_installation`)
+   - Installation method (`_install_server`)
+   - Server connection (`initialize`)
+   - Tool invocation proxy (`invoke_tool`)
+   - Cleanup handling
+3. Update `server.py` to dynamically register provider tools
+4. Add comprehensive tests
+5. Update documentation with configuration instructions
 
 ### Provider-Specific Updates
 
-#### Firecrawl Provider
+#### Firecrawl Provider (Completed)
 
-- [x] ~~Implement full tool suite~~ (Using official MCP server instead)
-- [x] Document integration with official firecrawl-mcp-server
-- [x] Successfully embed Firecrawl MCP server within MCP Search Hub
-- [x] Maintain basic search integration for unified search interface
-
-#### Exa Provider
-
-- [ ] Check for official MCP server availability
-- [ ] Update to Exa API v2 for basic search
-  - [ ] Add support for time range filtering
-  - [ ] Implement highlight extraction
-  - [ ] Update response parsing to support new result fields
-
-#### Linkup Provider
-
-- [ ] Check for official MCP server availability
-- [ ] Update to handle advanced output formats (aggregated, curated)
-- [ ] Add support for domain filtering (allowed/blocked domains)
-- [ ] Implement request chunking for deep searches
+- [x] Successfully embedded official [firecrawl-mcp-server](https://github.com/mendableai/firecrawl-mcp-server)
+- [x] Created MCP Python SDK wrapper for subprocess management
+- [x] Exposed all Firecrawl tools through unified interface
+- [x] Added comprehensive tests for all functionality
 
 #### Perplexity Provider
 
-- [ ] Check for official MCP server availability
-- [ ] Update with latest API model options (including "sonar-pro" model)
-- [ ] Maintain basic search integration
+- [ ] Embed official [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol) server
+- [ ] Create MCP wrapper following Firecrawl pattern
+- [ ] Expose perplexity_ask, perplexity_research, and search tools
+- [ ] Implement Node.js subprocess management
+- [ ] Add installation automation
+- [ ] Create comprehensive test suite
+
+#### Exa Provider
+
+- [ ] Embed official [exa-mcp-server](https://github.com/exa-labs/exa-mcp-server)
+- [ ] Create MCP wrapper with subprocess lifecycle management
+- [ ] Expose all Exa tools:
+  - [ ] web_search_exa
+  - [ ] research_paper_search
+  - [ ] company_research
+  - [ ] crawling
+  - [ ] competitor_finder
+  - [ ] linkedin_search
+  - [ ] wikipedia_search_exa
+  - [ ] github_search
+- [ ] Add auto-installation capability
+- [ ] Implement test coverage
+
+#### Linkup Provider
+
+- [ ] Embed official [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
+- [ ] Create wrapper (note: this is already a Python MCP server)
+- [ ] Handle Python-to-Python MCP communication
+- [ ] Expose search functionality through unified interface
+- [ ] Add configuration for premium content sources
+- [ ] Implement comprehensive tests
 
 #### Tavily Provider
 
-- [ ] Check for official MCP server availability
-- [ ] Update with latest API parameters
-- [ ] Add support for image inclusion in results
-- [ ] Implement domain filtering capabilities
+- [ ] Embed official [tavily-mcp](https://github.com/tavily-ai/tavily-mcp) server
+- [ ] Create MCP wrapper following established pattern
+- [ ] Expose tavily-search and tavily-extract tools
+- [ ] Implement Node.js subprocess management
+- [ ] Add automatic installation check
+- [ ] Develop test suite for all tools
 
 ## Query Routing Enhancements
 
