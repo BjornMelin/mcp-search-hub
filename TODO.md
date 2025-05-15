@@ -156,11 +156,14 @@ For each provider integration, follow these steps:
 
 ## Query Routing Enhancements
 
-- [ ] Improve content type detection
+- [x] Improve content type detection
 
-  - [ ] Add more sophisticated keyword detection
-  - [ ] Use regex patterns for better matching
-  - [ ] Consider machine learning-based classification
+  - [x] Add more sophisticated keyword detection
+  - [x] Use regex patterns for better matching
+  - [x] Add weighted scoring system for better accuracy
+  - [x] Implement context-aware detection for ambiguous keywords
+  - [x] Support detection of mixed/hybrid content types
+  - [ ] Consider machine learning-based classification (future enhancement)
 
 - [ ] Enhance router scoring algorithm
 
