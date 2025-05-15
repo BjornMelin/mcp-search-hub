@@ -17,7 +17,7 @@ from .providers.base import SearchProvider
 from .providers.exa_mcp import ExaProvider
 from .providers.firecrawl_mcp import FirecrawlProvider
 from .providers.linkup import LinkupProvider
-from .providers.perplexity import PerplexityProvider
+from .providers.perplexity_mcp import PerplexityProvider
 from .providers.tavily import TavilyProvider
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.router import QueryRouter
@@ -47,7 +47,9 @@ class SearchServer:
             "exa": ExaProvider(
                 {"exa_api_key": settings.providers.exa.api_key.get_secret_value()}
             ),
-            "perplexity": PerplexityProvider(),
+            "perplexity": PerplexityProvider(
+                {"perplexity_api_key": settings.providers.perplexity.api_key.get_secret_value()}
+            ),
             "tavily": TavilyProvider(),
             "firecrawl": FirecrawlProvider(),
         }
@@ -522,6 +524,60 @@ class SearchServer:
                     url: URL to crawl and extract content from
                 """
                 return await exa_provider.crawl(url, **kwargs)
+
+        # Register Perplexity tools
+        perplexity_provider = self.providers.get("perplexity")
+        if perplexity_provider and isinstance(perplexity_provider, PerplexityProvider):
+
+            @self.mcp.tool()
+            async def perplexity_ask(
+                query: str,
+                search_focus: str = "web",
+                **kwargs,
+            ) -> Dict:
+                """
+                Ask Perplexity a question with web search capabilities.
+
+                Args:
+                    query: The question to ask
+                    search_focus: Search focus type ('web', 'academic', 'youtube', etc.)
+                """
+                return await perplexity_provider.mcp_wrapper.call_tool(
+                    "perplexity_ask",
+                    {
+                        "messages": [
+                            {"role": "user", "content": query}
+                        ],
+                        "search_focus": search_focus,
+                        **kwargs
+                    },
+                )
+
+            @self.mcp.tool()
+            async def perplexity_research(
+                query: str,
+                **kwargs,
+            ) -> Dict:
+                """
+                Conduct deep research on a topic using Perplexity.
+
+                Args:
+                    query: The topic to research
+                """
+                return await perplexity_provider.perplexity_research(query, **kwargs)
+
+            @self.mcp.tool()
+            async def perplexity_reason(
+                query: str,
+                **kwargs,
+            ) -> Dict:
+                """
+                Perform reasoning tasks using Perplexity.
+
+                Args:
+                    query: The reasoning task or question
+                """
+                return await perplexity_provider.perplexity_reason(query, **kwargs)
 
     async def close(self):
         """Close all provider connections."""
