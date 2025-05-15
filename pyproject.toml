@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-search-hub"
+version = "1.0.0"
+description = "FastMCP 2.0 server integrating multiple search providers"
+authors = [
+    {name = "Bjorn Melin", email = "bjorn@example.com"}
+]
+requires-python = ">=3.9"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.24.0",
+    "uvicorn>=0.22.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+mcp-search-hub = "mcp_search_hub.main:main"
+
+[tool.setuptools]
+packages = ["mcp_search_hub"]
