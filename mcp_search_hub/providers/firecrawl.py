@@ -1,13 +1,15 @@
 """Firecrawl search provider implementation."""
 
+from typing import Any, Dict, List, Optional
+
 import httpx
-from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
-from .base import SearchProvider
-from ..models.query import SearchQuery
-from ..models.results import SearchResult, SearchResponse
-from ..models.base import HealthStatus
+
 from ..config import get_settings
+from ..models.base import HealthStatus
+from ..models.query import SearchQuery
+from ..models.results import SearchResponse, SearchResult
+from .base import SearchProvider
 
 
 class MapOptions(BaseModel):
@@ -83,9 +85,9 @@ class FirecrawlProvider(SearchProvider):
             # Always include scrape options if raw_content is requested
             if query.raw_content or query.advanced:
                 search_options["scrapeOptions"] = {
-                    "formats": ["markdown", "html"]
-                    if query.raw_content
-                    else ["markdown"],
+                    "formats": (
+                        ["markdown", "html"] if query.raw_content else ["markdown"]
+                    ),
                     "onlyMainContent": True,
                 }
 

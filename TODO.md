@@ -1,6 +1,6 @@
 # MCP Search Hub TODO List
 
-_Last updated: January 15, 2025_
+_Last updated: May 15, 2025_
 
 ## Core Functionality
 
@@ -73,12 +73,12 @@ We've decided to embed official MCP servers for all providers within MCP Search 
   - [x] Add installation verification and auto-install
   - [x] Create test suite for all exposed tools
 
-- [ ] Linkup: Integrate [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
-  - [ ] Create wrapper (Note: This is already a Python MCP server)
-  - [ ] Expose Linkup search functionality through unified interface
-  - [ ] Implement server lifecycle management
-  - [ ] Add comprehensive tests
-  - [ ] Handle Python-to-Python MCP communication
+- [x] Linkup: Integrate [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
+  - [x] Create wrapper (Note: This is already a Python MCP server)
+  - [x] Expose Linkup search functionality through unified interface
+  - [x] Implement server lifecycle management
+  - [x] Add comprehensive tests (22 tests passing)
+  - [x] Handle Python-to-Python MCP communication
 
 - [ ] Tavily: Integrate [tavily-mcp](https://github.com/tavily-ai/tavily-mcp) server
   - [ ] Create MCP Python SDK wrapper following established pattern
@@ -136,14 +136,14 @@ For each provider integration, follow these steps:
 - [x] Add auto-installation capability
 - [x] Implement test coverage
 
-#### Linkup Provider
+#### Linkup Provider (Completed)
 
-- [ ] Embed official [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
-- [ ] Create wrapper (note: this is already a Python MCP server)
-- [ ] Handle Python-to-Python MCP communication
-- [ ] Expose search functionality through unified interface
-- [ ] Add configuration for premium content sources
-- [ ] Implement comprehensive tests
+- [x] Embed official [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
+- [x] Create wrapper (note: this is already a Python MCP server)
+- [x] Handle Python-to-Python MCP communication
+- [x] Expose search functionality through unified interface
+- [x] Add configuration for premium content sources
+- [x] Implement comprehensive tests (22 tests passing)
 
 #### Tavily Provider
 
@@ -279,10 +279,10 @@ Based on our Exa integration experience, here are the immediate next steps:
 
 - [ ] Continue MCP server integrations
   - [x] Perplexity MCP server integration (completed)
-  - [ ] Linkup Python MCP server integration (next priority)
-  - [ ] Tavily MCP server integration
+  - [x] Linkup Python MCP server integration (completed)
+  - [ ] Tavily MCP server integration (next priority)
 
 - [ ] Update documentation
-  - [ ] Update CLAUDE.md with Exa integration details
+  - [ ] Update CLAUDE.md with Exa and Linkup integration details
   - [ ] Add configuration examples for each provider
   - [ ] Document any special requirements or limitations

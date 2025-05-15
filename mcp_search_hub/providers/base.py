@@ -2,9 +2,10 @@
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Tuple
+
+from ..models.base import HealthStatus
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse
-from ..models.base import HealthStatus
 
 
 class SearchProvider(ABC):

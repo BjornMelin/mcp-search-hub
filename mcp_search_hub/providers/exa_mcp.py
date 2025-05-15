@@ -2,6 +2,7 @@
 Exa MCP wrapper provider that embeds the official exa-mcp-server.
 """
 
+import logging
 import os
 import subprocess
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,12 +10,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-import logging
-
-from ..utils.errors import ProviderError
-from ..models.query import SearchQuery
-from ..models.results import SearchResult, SearchResponse
 from ..models.base import HealthStatus
+from ..models.query import SearchQuery
+from ..models.results import SearchResponse, SearchResult
+from ..utils.errors import ProviderError
 from .base import SearchProvider
 
 logger = logging.getLogger(__name__)

@@ -1,11 +1,12 @@
 """Tests for Exa MCP provider integration."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.providers.exa_mcp import ExaMCPProvider, ExaProvider
 from mcp_search_hub.utils.errors import ProviderError
-from mcp_search_hub.models.query import SearchQuery
 
 
 @pytest.fixture

@@ -4,14 +4,13 @@ This provider wraps the official Firecrawl MCP server and exposes its tools
 through our Search Hub server.
 """
 
+import logging
 import os
 import subprocess
 from typing import Any, Dict, List, Optional
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
-import logging
 
 from ..utils.errors import ProviderError
 from .base import SearchProvider

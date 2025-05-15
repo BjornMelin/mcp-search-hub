@@ -1,12 +1,13 @@
 """Main entry point for the MCP Search Hub server."""
 
-from .server import SearchServer
-from .config import get_settings
-import signal
+import argparse
 import asyncio
 import logging
-import argparse
 import os
+import signal
+
+from .config import get_settings
+from .server import SearchServer
 
 
 async def shutdown(server: SearchServer):
