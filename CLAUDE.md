@@ -4,7 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MCP Search Hub is an intelligent multi-provider search aggregation server built on FastMCP 2.0. It integrates five search providers (Linkup, Exa, Perplexity, Tavily, and Firecrawl) under a unified API, intelligently routes queries to the most appropriate provider(s), and combines/ranks results for optimal relevance.
+MCP Search Hub is an intelligent multi-provider search aggregation server built on FastMCP 2.0. It embeds official MCP servers from five search providers (Linkup, Exa, Perplexity, Tavily, and Firecrawl) within a unified interface, intelligently routes queries to the most appropriate provider(s), and combines/ranks results for optimal relevance.
+
+### Architectural Approach: Embedded MCP Servers
+
+We embed official provider MCP servers within MCP Search Hub rather than implementing features ourselves:
+- **Firecrawl**: Successfully embedded [firecrawl-mcp-server](https://github.com/mendableai/firecrawl-mcp-server)
+- **Perplexity**: In progress - [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol)
+- **Exa**: In progress - [exa-mcp-server](https://github.com/exa-labs/exa-mcp-server)
+- **Linkup**: In progress - [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
+- **Tavily**: In progress - [tavily-mcp](https://github.com/tavily-ai/tavily-mcp)
 
 ## Development Commands
 
@@ -70,16 +79,17 @@ ruff check --select I --fix .
 
 1. **Server Layer**
 
-   - `SearchServer` (server.py): FastMCP server implementation that registers tools and orchestrates the search process
+   - `SearchServer` (server.py): FastMCP server implementation that registers tools and orchestrates the search process, including dynamic registration of embedded MCP server tools
 
 2. **Provider Layer**
 
-   - Base `SearchProvider` interface with implementations for each service:
-     - `LinkupProvider`: Factual information (91.0% SimpleQA accuracy)
-     - `ExaProvider`: Academic content and semantic search (90.04% SimpleQA accuracy)
-     - `PerplexityProvider`: Current events and LLM processing (86% accuracy)
-     - `TavilyProvider`: RAG-optimized results (73% SimpleQA accuracy)
-     - `FirecrawlProvider`: Deep content extraction and scraping
+   - Base `SearchProvider` interface with implementations for each service
+   - MCP Wrappers for embedded servers:
+     - `FirecrawlMCPProvider`: Embeds firecrawl-mcp-server (completed)
+     - `PerplexityMCPProvider`: Embeds perplexity-mcp (in progress)
+     - `ExaMCPProvider`: Embeds exa-mcp-server (in progress)
+     - `LinkupMCPProvider`: Embeds python-mcp-server (in progress)
+     - `TavilyMCPProvider`: Embeds tavily-mcp (in progress)
 
 3. **Query Routing**
 
@@ -102,9 +112,25 @@ ruff check --select I --fix .
 1. Client sends search query to the FastMCP server
 2. QueryAnalyzer extracts features from the query
 3. QueryRouter selects appropriate providers
-4. Selected providers execute the search in parallel
-5. Results are combined, ranked, and deduplicated
-6. Final combined results are returned to the client
+4. Selected providers execute search via their embedded MCP servers
+5. MCP wrappers handle communication with provider MCP servers
+6. Results are combined, ranked, and deduplicated
+7. Final combined results are returned to the client
+
+### MCP Server Integration Pattern
+
+When implementing MCP server wrappers:
+
+1. Create a new wrapper module (e.g., `providers/perplexity_mcp.py`)
+2. Implement the MCP wrapper class with:
+   - Installation check (`_check_installation`)
+   - Installation method (`_install_server`)
+   - Server connection (`initialize`)
+   - Tool invocation proxy (`invoke_tool`)
+   - Cleanup handling
+3. Update `server.py` to dynamically register provider tools
+4. Add comprehensive tests
+5. Update documentation
 
 ## Configuration
 
@@ -124,3 +150,7 @@ The application uses environment variables for configuration:
 - Write tests for new components, aiming for >90% coverage
 - Keep provider implementations consistent with the base class interface
 - Use Pydantic for data validation and serialization
+- Follow the established MCP server integration pattern for new providers
+- Ensure proper cleanup of subprocess resources
+- Handle both Node.js and Python MCP servers appropriately
+- Dynamically register all provider tools with consistent naming

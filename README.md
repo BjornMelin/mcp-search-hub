@@ -4,14 +4,15 @@
 
 ## Features
 
-- Integrates five leading search providers (Linkup, Exa, Perplexity, Tavily, and Firecrawl) with unified API
+- Embeds official MCP servers from five leading search providers (Linkup, Exa, Perplexity, Tavily, and Firecrawl) within a unified interface
 - Automatically routes queries to the most appropriate provider(s) based on query characteristics
 - Combines and ranks results for optimal relevance with intelligent deduplication
 - Implements cost control mechanisms and budget constraints
 - Provides caching for improved performance and reduced API costs
 - Handles errors and provider failures gracefully
+- Zero maintenance for provider updates - automatically leverages official MCP server enhancements
 - Easily deployable with Docker or as a standalone Python service
-- Supports both HTTP and STDIO transport methods (when fully implemented)
+- Supports both HTTP and STDIO transport methods
 
 ## Cost Efficiency
 
@@ -19,13 +20,13 @@ MCP Search Hub delivers 30-45% cost reduction compared to single-provider soluti
 
 ## Provider Strengths
 
-The system intelligently routes queries by leveraging each provider's unique strengths:
+The system intelligently routes queries by leveraging each provider's unique strengths, all through embedded official MCP servers:
 
-- **Linkup**: Factual information with 91.0% accuracy on the SimpleQA benchmark
-- **Exa**: Academic content and semantic search with 90.04% SimpleQA accuracy
-- **Perplexity**: Current events and LLM processing with 86% accuracy
-- **Tavily**: RAG-optimized results with 73% SimpleQA accuracy
-- **Firecrawl**: Deep content extraction and scraping capabilities (Note: Firecrawl offers an [official MCP server](https://github.com/mendableai/firecrawl-mcp-server) that provides enhanced functionality beyond what's integrated here)
+- **Linkup**: Factual information with 91.0% accuracy on the SimpleQA benchmark - [official MCP server](https://github.com/LinkupPlatform/python-mcp-server)
+- **Exa**: Academic content and semantic search with 90.04% SimpleQA accuracy - [official MCP server](https://github.com/exa-labs/exa-mcp-server)
+- **Perplexity**: Current events and LLM processing with 86% accuracy - [official MCP server](https://github.com/ppl-ai/modelcontextprotocol)
+- **Tavily**: RAG-optimized results with 73% SimpleQA accuracy - [official MCP server](https://github.com/tavily-ai/tavily-mcp)
+- **Firecrawl**: Deep content extraction and scraping capabilities - [official MCP server](https://github.com/mendableai/firecrawl-mcp-server)
 
 ## Architecture
 
@@ -39,14 +40,21 @@ MCP Search Hub uses a modular architecture with the following core components:
 
 ### Embedded MCP Server Architecture
 
-For providers that offer official MCP servers (like Firecrawl), we've implemented an innovative approach: **embedding their MCP servers within our unified server**. This means:
+We've implemented an innovative approach: **embedding all official provider MCP servers within our unified server**. This means:
 
 - Users interact with a single MCP server (MCP Search Hub)
 - We internally connect to provider MCP servers using the MCP Python SDK
 - All provider tools are exposed through our unified interface
 - Automatic updates when providers enhance their MCP servers
 
-This architectural decision provides several benefits:
+This architectural decision applies to all providers:
+- **Firecrawl**: Successfully embedded with all tools available
+- **Perplexity**: In progress - will expose ask, research, and search tools
+- **Exa**: In progress - will expose web_search_exa, research_paper_search, and more
+- **Linkup**: In progress - Python-to-Python MCP communication for search
+- **Tavily**: In progress - will expose tavily-search and tavily-extract tools
+
+Benefits of this approach:
 - **Zero maintenance**: Provider updates are automatic
 - **Complete features**: Access to all provider capabilities
 - **Unified interface**: Single server for all search needs
@@ -58,10 +66,11 @@ Learn more about this decision in our [Architecture Decisions](docs/architecture
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+ (required for FastMCP 2.0 compatibility)
 - API keys for the search providers you plan to use
 - Docker (optional, for containerized deployment)
 - MCP client that supports HTTP or STDIO transport
+- Node.js (optional, for providers using Node.js MCP servers - will be auto-installed if missing)
 
 ### Using Docker (Recommended)
 
@@ -172,10 +181,10 @@ LINKUP_API_KEY=your_linkup_api_key
 EXA_API_KEY=your_exa_api_key
 PERPLEXITY_API_KEY=your_perplexity_api_key
 TAVILY_API_KEY=your_tavily_api_key
-FIRECRAWL_API_KEY=your_firecrawl_api_key  # Required for embedded Firecrawl server
+FIRECRAWL_API_KEY=your_firecrawl_api_key
 ```
 
-> **Note about Firecrawl**: MCP Search Hub now embeds the official [Firecrawl MCP server](https://github.com/mendableai/firecrawl-mcp-server), providing full access to all Firecrawl capabilities including URL crawling, content extraction, and deep research directly through our unified interface.
+> **Note**: All API keys are required for the embedded MCP servers to function. Each provider's official MCP server is automatically managed and kept up-to-date within MCP Search Hub.
 
 ### Optional Configuration
 
@@ -502,10 +511,11 @@ get_provider_info() -> Dict[str, Dict]
 
 Returns information about all available search providers, including their capabilities, content types, and quality metrics.
 
-### Firecrawl Integration
+### Provider-Specific Tools
 
-MCP Search Hub now **embeds the official Firecrawl MCP server**, providing seamless access to all Firecrawl capabilities through our unified interface:
+MCP Search Hub embeds all official provider MCP servers, giving you access to their complete tool suites:
 
+#### Firecrawl (Completed)
 - `firecrawl_scrape`: Advanced web scraping with screenshot capture
 - `firecrawl_map`: Site mapping and URL discovery
 - `firecrawl_crawl`: Asynchronous site crawling
@@ -515,9 +525,27 @@ MCP Search Hub now **embeds the official Firecrawl MCP server**, providing seaml
 - `firecrawl_deep_research`: Comprehensive research automation
 - `firecrawl_generate_llmstxt`: Generate LLMs.txt files
 
-All these tools are available directly through MCP Search Hub - no separate server configuration needed! The official Firecrawl MCP server is automatically managed and kept up-to-date.
+#### Perplexity (In Progress)
+- `perplexity_ask`: Conversational search with AI
+- `perplexity_research`: Deep research capabilities
+- `perplexity_search`: Web search with citations
 
-For detailed Firecrawl documentation, see the [Firecrawl MCP documentation](https://docs.firecrawl.dev/mcp).
+#### Exa (In Progress)
+- `web_search_exa`: Semantic web search
+- `research_paper_search`: Academic paper search
+- `company_research`: Company information search
+- `linkedin_search`: LinkedIn profile search
+- `wikipedia_search_exa`: Wikipedia search
+- `github_search`: GitHub repository search
+
+#### Linkup (In Progress)
+- `linkup_search`: Premium content search with real-time results
+
+#### Tavily (In Progress)
+- `tavily_search`: RAG-optimized search
+- `tavily_extract`: Content extraction
+
+All these tools are available directly through MCP Search Hub - no separate server configuration needed! The official MCP servers are automatically managed and kept up-to-date.
 
 ## Development
 
