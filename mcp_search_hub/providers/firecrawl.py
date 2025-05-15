@@ -1,11 +1,58 @@
 """Firecrawl search provider implementation."""
 
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel
 from .base import SearchProvider
 from ..models.query import SearchQuery
 from ..models.results import SearchResult, SearchResponse
+from ..models.base import HealthStatus
 from ..config import get_settings
+
+
+class MapOptions(BaseModel):
+    """Options for URL discovery."""
+
+    ignore_sitemap: bool = False
+    include_subdomains: bool = False
+    limit: Optional[int] = None
+    search: Optional[str] = None
+    sitemap_only: bool = False
+
+
+class CrawlOptions(BaseModel):
+    """Options for website crawling."""
+
+    limit: int = 10
+    max_depth: Optional[int] = None
+    include_paths: Optional[List[str]] = None
+    exclude_paths: Optional[List[str]] = None
+    allow_external_links: bool = False
+    scrape_options: Optional[Dict[str, Any]] = None
+
+
+class ExtractOptions(BaseModel):
+    """Options for structured data extraction."""
+
+    prompt: Optional[str] = None
+    schema: Optional[Dict[str, Any]] = None
+    system_prompt: Optional[str] = None
+    enable_web_search: bool = False
+
+
+class DeepResearchOptions(BaseModel):
+    """Options for deep research."""
+
+    max_depth: Optional[int] = None
+    max_urls: Optional[int] = None
+    time_limit: Optional[int] = None
+
+
+class LLMsTxtOptions(BaseModel):
+    """Options for LLMs.txt generation."""
+
+    max_urls: Optional[int] = None
+    show_full_text: bool = False
 
 
 class FirecrawlProvider(SearchProvider):
@@ -43,7 +90,7 @@ class FirecrawlProvider(SearchProvider):
                 }
 
             response = await self.client.post(
-                "https://api.firecrawl.dev/search",
+                "https://api.firecrawl.dev/v1/search",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=search_options,
             )
@@ -104,7 +151,7 @@ class FirecrawlProvider(SearchProvider):
         if not url:
             # If no URL found, try to search for it
             search_response = await self.client.post(
-                "https://api.firecrawl.dev/search",
+                "https://api.firecrawl.dev/v1/search",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json={"query": query.query, "limit": 1},
             )
@@ -123,7 +170,7 @@ class FirecrawlProvider(SearchProvider):
 
         # Now scrape the content
         scrape_response = await self.client.post(
-            "https://api.firecrawl.dev/scrape",
+            "https://api.firecrawl.dev/v1/scrape",
             headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
             json={"url": url, "formats": ["markdown"], "onlyMainContent": True},
         )
@@ -168,6 +215,235 @@ class FirecrawlProvider(SearchProvider):
             timing_ms=0,
         )
 
+    async def firecrawl_map(
+        self, url: str, options: Optional[MapOptions] = None
+    ) -> Dict[str, Any]:
+        """
+        Discover URLs from a starting point.
+
+        Args:
+            url: Starting URL for URL discovery
+            options: Optional configuration options
+
+        Returns:
+            Dictionary containing discovered URLs and metadata
+        """
+        options = options or MapOptions()
+
+        try:
+            map_params = {
+                "url": url,
+                "ignoreSitemap": options.ignore_sitemap,
+                "includeSubdomains": options.include_subdomains,
+                "sitemapOnly": options.sitemap_only,
+            }
+
+            if options.limit:
+                map_params["limit"] = options.limit
+
+            if options.search:
+                map_params["search"] = options.search
+
+            response = await self.client.post(
+                "https://api.firecrawl.dev/v1/map",
+                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
+                json=map_params,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    async def firecrawl_crawl(
+        self, url: str, options: Optional[CrawlOptions] = None
+    ) -> Dict[str, Any]:
+        """
+        Start an asynchronous crawl of multiple pages from a starting URL.
+
+        Args:
+            url: Starting URL for the crawl
+            options: Optional configuration for the crawl
+
+        Returns:
+            Dictionary containing crawl job ID and status
+        """
+        options = options or CrawlOptions()
+
+        try:
+            crawl_params = {
+                "url": url,
+                "limit": options.limit,
+            }
+
+            if options.max_depth is not None:
+                crawl_params["maxDepth"] = options.max_depth
+
+            if options.include_paths:
+                crawl_params["includePaths"] = options.include_paths
+
+            if options.exclude_paths:
+                crawl_params["excludePaths"] = options.exclude_paths
+
+            if options.allow_external_links:
+                crawl_params["allowExternalLinks"] = options.allow_external_links
+
+            if options.scrape_options:
+                crawl_params["scrapeOptions"] = options.scrape_options
+
+            response = await self.client.post(
+                "https://api.firecrawl.dev/v1/crawl",
+                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
+                json=crawl_params,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    async def firecrawl_check_crawl_status(self, crawl_id: str) -> Dict[str, Any]:
+        """
+        Check the status of a crawl job.
+
+        Args:
+            crawl_id: ID of the crawl job to check
+
+        Returns:
+            Dictionary containing crawl job status and results if complete
+        """
+        try:
+            response = await self.client.get(
+                f"https://api.firecrawl.dev/v1/crawl/{crawl_id}",
+                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    async def firecrawl_extract(
+        self, urls: List[str], options: Optional[ExtractOptions] = None
+    ) -> Dict[str, Any]:
+        """
+        Extract structured information from web pages using LLM.
+
+        Args:
+            urls: List of URLs to extract information from
+            options: Options for extraction
+
+        Returns:
+            Dictionary containing extracted structured data
+        """
+        options = options or ExtractOptions()
+
+        try:
+            extract_params = {
+                "urls": urls,
+            }
+
+            if options.prompt:
+                extract_params["prompt"] = options.prompt
+
+            if options.schema:
+                extract_params["schema"] = options.schema
+
+            if options.system_prompt:
+                extract_params["systemPrompt"] = options.system_prompt
+
+            if options.enable_web_search:
+                extract_params["enableWebSearch"] = options.enable_web_search
+
+            response = await self.client.post(
+                "https://api.firecrawl.dev/v1/extract",
+                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
+                json=extract_params,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    async def firecrawl_deep_research(
+        self, query: str, options: Optional[DeepResearchOptions] = None
+    ) -> Dict[str, Any]:
+        """
+        Conduct deep research on a query using web crawling, search, and AI analysis.
+
+        Args:
+            query: The query to research
+            options: Configuration options for the research
+
+        Returns:
+            Dictionary containing research results
+        """
+        options = options or DeepResearchOptions()
+
+        try:
+            research_params = {
+                "query": query,
+            }
+
+            if options.max_depth:
+                research_params["maxDepth"] = options.max_depth
+
+            if options.max_urls:
+                research_params["maxUrls"] = options.max_urls
+
+            if options.time_limit:
+                research_params["timeLimit"] = options.time_limit
+
+            response = await self.client.post(
+                "https://api.firecrawl.dev/v1/deep-research",
+                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
+                json=research_params,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    async def firecrawl_generate_llmstxt(
+        self, url: str, options: Optional[LLMsTxtOptions] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate standardized LLMs.txt file for a given URL, which provides
+        context about how LLMs should interact with the website.
+
+        Args:
+            url: The URL to generate LLMs.txt from
+            options: Configuration options
+
+        Returns:
+            Dictionary containing the generated LLMs.txt content
+        """
+        options = options or LLMsTxtOptions()
+
+        try:
+            llmstxt_params = {
+                "url": url,
+            }
+
+            if options.max_urls:
+                llmstxt_params["maxUrls"] = options.max_urls
+
+            if options.show_full_text:
+                llmstxt_params["showFullText"] = options.show_full_text
+
+            response = await self.client.post(
+                "https://api.firecrawl.dev/v1/generate-llmstxt",
+                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
+                json=llmstxt_params,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
     def _is_extraction_query(self, query: str) -> bool:
         """Determine if a query is asking for content extraction."""
         extraction_keywords = [
@@ -185,13 +461,28 @@ class FirecrawlProvider(SearchProvider):
 
     def _extract_url_from_query(self, query: str) -> Optional[str]:
         """Try to extract a URL from the query."""
-        # Simple URL extraction
+        # Improved URL extraction
         words = query.split()
         for word in words:
+            # Check for URLs with protocol
             if word.startswith(("http://", "https://")):
                 return word
-            if word.startswith("www.") and "." in word[4:]:
-                return "https://" + word
+
+            # Check for common domain patterns
+            if (word.startswith("www.") and "." in word[4:]) or (
+                not word.startswith("www.")
+                and "." in word
+                and any(
+                    word.endswith(tld)
+                    for tld in [".com", ".org", ".net", ".edu", ".gov", ".io", ".co"]
+                )
+            ):
+                # Add https:// prefix if missing
+                if word.startswith("www."):
+                    return "https://" + word
+                else:
+                    return "https://" + word
+
         return None
 
     def get_capabilities(self) -> Dict[str, Any]:
@@ -202,16 +493,57 @@ class FirecrawlProvider(SearchProvider):
                 "content_extraction": True,
                 "scraping": True,
                 "deep_research": True,
+                "url_discovery": True,
+                "crawling": True,
+                "structured_data_extraction": True,
+                "llms_txt_generation": True,
             },
-            "quality_metrics": {"extraction_quality": 0.95},
+            "quality_metrics": {
+                "extraction_quality": 0.95,
+                "search_quality": 0.80,
+                "crawling_speed": 0.90,
+            },
         }
 
     def estimate_cost(self, query: SearchQuery) -> float:
         """Estimate the cost of executing the query."""
         # Firecrawl costs ~$0.02 per search
         # ~$0.05 per content extraction
+        # ~$0.10 per deep research
+        # ~$0.03 per URL discovery
         extraction_query = self._is_extraction_query(query.query)
-        return 0.05 if extraction_query else 0.02
+        deep_research_query = (
+            "research" in query.query.lower() or "analyze" in query.query.lower()
+        )
+
+        if deep_research_query:
+            return 0.10
+        elif extraction_query:
+            return 0.05
+        else:
+            return 0.02
+
+    async def check_status(self) -> tuple[HealthStatus, str]:
+        """Check the status of Firecrawl service."""
+        try:
+            # Make a simple API call to check if Firecrawl is responsive
+            response = await self.client.get(
+                "https://api.firecrawl.dev/v1/status",
+                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
+            )
+
+            if response.status_code == 200:
+                return HealthStatus.OK, "Firecrawl API is operational"
+            else:
+                return (
+                    HealthStatus.DEGRADED,
+                    f"Firecrawl API returned status code {response.status_code}",
+                )
+
+        except httpx.RequestError as e:
+            return HealthStatus.FAILED, f"Connection to Firecrawl API failed: {str(e)}"
+        except Exception as e:
+            return HealthStatus.FAILED, f"Firecrawl status check failed: {str(e)}"
 
     async def close(self):
         """Close the HTTP client."""

@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "search-hub": {
+      "description": "Multi-provider intelligent search aggregation",
+      "url": "http://localhost:8000/mcp"
+    },
+    
+    "firecrawl": {
+      "description": "Advanced web scraping and content extraction",
+      "command": ["npx", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_KEY": "your_firecrawl_api_key"
+      }
+    },
+    
+    "perplexity": {
+      "description": "AI-powered research and reasoning (optional)",
+      "command": ["npx", "perplexity-mcp"],
+      "env": {
+        "PERPLEXITY_API_KEY": "your_perplexity_api_key"
+      }
+    },
+    
+    "exa": {
+      "description": "Academic content and semantic search (optional)",
+      "command": ["npx", "exa-mcp"],
+      "env": {
+        "EXA_API_KEY": "your_exa_api_key"
+      }
+    }
+  }
+}

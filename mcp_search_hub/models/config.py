@@ -31,4 +31,6 @@ class Settings(BaseModel):
     default_budget: Optional[float] = None
     port: int = 8000
     host: str = "0.0.0.0"
-    transport: str = "streamable-http"  # Default to HTTP, can be "stdio" for command-line use
+    transport: str = (
+        "streamable-http"  # Default to HTTP, can be "stdio" for command-line use
+    )

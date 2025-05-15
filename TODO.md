@@ -38,59 +38,69 @@ _Last updated: May 15, 2025_
 
 ## Provider Integration Improvements
 
-### Strategy Options
+### Strategy: Use Official Provider MCP Servers When Available
 
-#### Option 1: Refactor to use official provider MCP servers
+We've decided to use official MCP servers for providers that offer them, while maintaining basic integration for search functionality. This reduces maintenance burden and ensures we get the latest features directly from the providers.
 
-- [ ] Research how to integrate with official provider MCP servers
-- [ ] Update architecture to use official MCP servers as fallbacks
-- [ ] Implement proxy mode to route requests to provider-specific MCP servers
+#### Completed
 
-#### Option 2: Update existing provider implementations
+- [x] Document Firecrawl MCP server integration alongside Search Hub
+- [x] Create multi-server configuration examples for Claude clients
+- [x] Update README with instructions for using multiple MCP servers
 
-- [ ] Update all providers with latest API interfaces and capabilities
-- [ ] Enhance error handling and retry logic across all providers
-- [ ] Implement advanced features for each provider
+#### Official MCP Servers Available
 
-### Exa Provider
+- [x] Firecrawl: Successfully integrated official [firecrawl-mcp-server](https://github.com/mendableai/firecrawl-mcp-server) within MCP Search Hub
+  - [x] Created MCP Python SDK wrapper for Firecrawl MCP server
+  - [x] Exposed all Firecrawl tools through our unified server
+  - [x] Added tests for integrated functionality
+- [ ] Check if Perplexity has an official MCP server
+- [ ] Check if Exa has an official MCP server  
+- [ ] Check if Linkup has an official MCP server
+- [ ] Check if Tavily has an official MCP server
 
-- [ ] Update to Exa API v2
+#### Provider Updates (for basic search integration)
+
+- [ ] Update all providers with latest API interfaces
+- [ ] Enhance error handling and retry logic
+- [ ] Ensure compatibility with official MCP servers
+
+### Provider-Specific Updates
+
+#### Firecrawl Provider
+
+- [x] ~~Implement full tool suite~~ (Using official MCP server instead)
+- [x] Document integration with official firecrawl-mcp-server
+- [x] Successfully embed Firecrawl MCP server within MCP Search Hub
+- [x] Maintain basic search integration for unified search interface
+
+#### Exa Provider
+
+- [ ] Check for official MCP server availability
+- [ ] Update to Exa API v2 for basic search
   - [ ] Add support for time range filtering
   - [ ] Implement highlight extraction
   - [ ] Update response parsing to support new result fields
-- [ ] Add specialized Exa tools (research_paper_search, company_research)
-- [ ] Implement content extraction capability
 
-### Linkup Provider
+#### Linkup Provider
 
+- [ ] Check for official MCP server availability
 - [ ] Update to handle advanced output formats (aggregated, curated)
 - [ ] Add support for domain filtering (allowed/blocked domains)
 - [ ] Implement request chunking for deep searches
-- [ ] Add LinkedIn-specific search capabilities
 
-### Perplexity Provider
+#### Perplexity Provider
 
+- [ ] Check for official MCP server availability
 - [ ] Update with latest API model options (including "sonar-pro" model)
-- [ ] Add support for perplexity_research capability
-- [ ] Add perplexity_reason capability for reasoning tasks
-- [ ] Implement conversation history tracking
+- [ ] Maintain basic search integration
 
-### Tavily Provider
+#### Tavily Provider
 
+- [ ] Check for official MCP server availability
 - [ ] Update with latest API parameters
 - [ ] Add support for image inclusion in results
 - [ ] Implement domain filtering capabilities
-- [ ] Add support for topic-specific search configurations
-
-### Firecrawl Provider
-
-- [ ] Implement full tool suite
-  - [ ] Add firecrawl_map for URL discovery
-  - [ ] Implement firecrawl_crawl for async site crawling
-  - [ ] Add firecrawl_extract for structured data extraction
-  - [ ] Implement firecrawl_deep_research capability
-- [ ] Add support for generating LLMs.txt for website context
-- [ ] Improve URL extraction and content handling
 
 ## Query Routing Enhancements
 

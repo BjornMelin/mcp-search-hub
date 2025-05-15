@@ -16,7 +16,7 @@ from .providers.linkup import LinkupProvider
 from .providers.exa import ExaProvider
 from .providers.perplexity import PerplexityProvider
 from .providers.tavily import TavilyProvider
-from .providers.firecrawl import FirecrawlProvider
+from .providers.firecrawl_mcp import FirecrawlProvider
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.router import QueryRouter
 from .result_processing.merger import ResultMerger
@@ -258,6 +258,143 @@ class SearchServer:
                 provider_info[name] = provider.get_capabilities()
 
             return provider_info
+
+        # Register Firecrawl tools
+        firecrawl_provider = self.providers.get("firecrawl")
+        if firecrawl_provider and isinstance(firecrawl_provider, FirecrawlProvider):
+
+            @self.mcp.tool()
+            async def firecrawl_scrape(
+                url: str,
+                formats: list[str] = ["markdown"],
+                onlyMainContent: bool = True,
+                timeout: int = 30000,
+                **kwargs,
+            ) -> Dict:
+                """
+                Scrape a single webpage with Firecrawl.
+
+                Args:
+                    url: The URL to scrape
+                    formats: Content formats to extract (markdown, html, rawHtml, screenshot, links)
+                    onlyMainContent: Extract only the main content
+                    timeout: Maximum time to wait for page load
+                """
+                return await firecrawl_provider.scrape_url(
+                    url,
+                    formats=formats,
+                    onlyMainContent=onlyMainContent,
+                    timeout=timeout,
+                    **kwargs,
+                )
+
+            @self.mcp.tool()
+            async def firecrawl_map(
+                url: str,
+                search: str = None,
+                ignoreSubdomains: bool = False,
+                limit: int = None,
+            ) -> Dict:
+                """
+                Discover URLs from a starting point using sitemap and crawling.
+
+                Args:
+                    url: Starting URL for URL discovery
+                    search: Optional search term to filter URLs
+                    ignoreSubdomains: Skip subdomains
+                    limit: Maximum number of URLs to return
+                """
+                return await firecrawl_provider.firecrawl_map(
+                    url, search=search, ignoreSubdomains=ignoreSubdomains, limit=limit
+                )
+
+            @self.mcp.tool()
+            async def firecrawl_crawl(
+                url: str, limit: int = 10, maxDepth: int = 3, **options
+            ) -> Dict:
+                """
+                Start an asynchronous crawl of multiple pages.
+
+                Args:
+                    url: Starting URL for the crawl
+                    limit: Maximum number of pages to crawl
+                    maxDepth: Maximum link depth to crawl
+                """
+                return await firecrawl_provider.firecrawl_crawl(
+                    url, limit=limit, maxDepth=maxDepth, **options
+                )
+
+            @self.mcp.tool()
+            async def firecrawl_check_crawl_status(id: str) -> Dict:
+                """
+                Check the status of a crawl job.
+
+                Args:
+                    id: The crawl job ID
+                """
+                return await firecrawl_provider.firecrawl_check_crawl_status(id)
+
+            @self.mcp.tool()
+            async def firecrawl_search(query: str, limit: int = 5, **options) -> Dict:
+                """
+                Search the web with Firecrawl.
+
+                Args:
+                    query: Search query string
+                    limit: Maximum number of results
+                """
+                return await firecrawl_provider.firecrawl_search(
+                    query, limit=limit, **options
+                )
+
+            @self.mcp.tool()
+            async def firecrawl_extract(
+                urls: list[str], prompt: str, systemPrompt: str = None
+            ) -> Dict:
+                """
+                Extract structured information from web pages using LLM.
+
+                Args:
+                    urls: List of URLs to extract information from
+                    prompt: Prompt for the LLM extraction
+                    systemPrompt: System prompt for LLM extraction
+                """
+                return await firecrawl_provider.firecrawl_extract(
+                    urls, prompt=prompt, systemPrompt=systemPrompt
+                )
+
+            @self.mcp.tool()
+            async def firecrawl_deep_research(
+                query: str, maxDepth: int = 3, maxUrls: int = 100, timeLimit: int = 300
+            ) -> Dict:
+                """
+                Conduct deep research on a query using web crawling and AI analysis.
+
+                Args:
+                    query: The query to research
+                    maxDepth: Maximum depth of research iterations
+                    maxUrls: Maximum number of URLs to analyze
+                    timeLimit: Time limit in seconds
+                """
+                return await firecrawl_provider.firecrawl_deep_research(
+                    query, maxDepth=maxDepth, maxUrls=maxUrls, timeLimit=timeLimit
+                )
+
+            @self.mcp.tool()
+            async def firecrawl_generate_llmstxt(
+                url: str, maxUrls: int = 10, showFullText: bool = False
+            ) -> Dict:
+                """
+                Generate standardized LLMs.txt file for a URL.
+
+                Args:
+                    url: The URL to generate LLMs.txt from
+                    maxUrls: Maximum number of URLs to process
+                    showFullText: Whether to show the full LLMs-full.txt
+                """
+                return await firecrawl_provider.firecrawl_generate_llmstxt(
+                    url, maxUrls=maxUrls, showFullText=showFullText
+                )
 
     async def close(self):
         """Close all provider connections."""
