@@ -1,6 +1,6 @@
 # MCP Search Hub TODO List
 
-_Last updated: May 15, 2025 (all MCP server integrations now complete)_
+_Last updated: May 15, 2025 (all MCP server integrations and documentation complete)_
 
 ## Core Functionality
 
@@ -282,7 +282,7 @@ Based on our Exa integration experience, here are the immediate next steps:
   - [x] Linkup Python MCP server integration (completed)
   - [x] Tavily MCP server integration (completed)
 
-- [ ] Update documentation
-  - [ ] Update CLAUDE.md with Exa, Linkup, and Tavily integration details
-  - [ ] Add configuration examples for each provider
-  - [ ] Document any special requirements or limitations
+- [x] Update documentation
+  - [x] Update CLAUDE.md with Exa, Linkup, and Tavily integration details
+  - [x] Add configuration examples for each provider
+  - [x] Document any special requirements and limitations
