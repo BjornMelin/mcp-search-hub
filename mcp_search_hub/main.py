@@ -18,20 +18,20 @@ def main():
     """Run the FastMCP search server."""
     settings = get_settings()
     server = SearchServer()
-    
+
     # Setup signal handlers for graceful shutdown
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(
             sig, lambda s=sig: asyncio.create_task(shutdown(server))
         )
-    
+
     # Run the server
     server.run(
         transport="streamable-http",
         host=settings.host,
         port=settings.port,
-        log_level=settings.log_level
+        log_level=settings.log_level,
     )
 
 

@@ -1,7 +1,6 @@
 """Test configuration for MCP Search Hub."""
 
 import pytest
-import os
 from mcp_search_hub.config import get_settings
 
 
@@ -15,11 +14,11 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("FIRECRAWL_API_KEY", "test_firecrawl_key")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("CACHE_TTL", "1800")
-    
+
     # Clear lru_cache to ensure it picks up the new env vars
     get_settings.cache_clear()
-    
+
     yield
-    
+
     # Clean up
     get_settings.cache_clear()

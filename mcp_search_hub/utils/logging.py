@@ -2,16 +2,16 @@
 
 import logging
 import sys
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 
 def configure_logging(log_level: str = "INFO") -> logging.Logger:
     """
     Configure logging for the application.
-    
+
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        
+
     Returns:
         Configured logger instance
     """
@@ -19,32 +19,36 @@ def configure_logging(log_level: str = "INFO") -> logging.Logger:
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
         numeric_level = logging.INFO
-    
+
     # Configure root logger
     logger = logging.getLogger("mcp_search_hub")
     logger.setLevel(numeric_level)
-    
+
     # Configure handler
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(numeric_level)
-    
+
     # Configure formatter
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     handler.setFormatter(formatter)
-    
+
     # Add handler to logger
     logger.addHandler(handler)
-    
+
     return logger
 
 
-def log_query(logger: logging.Logger, query: Dict[str, Any], features: Optional[Dict[str, Any]] = None):
+def log_query(
+    logger: logging.Logger,
+    query: Dict[str, Any],
+    features: Optional[Dict[str, Any]] = None,
+):
     """
     Log query information.
-    
+
     Args:
         logger: Logger instance
         query: Query information
@@ -55,10 +59,12 @@ def log_query(logger: logging.Logger, query: Dict[str, Any], features: Optional[
         logger.debug(f"Features: {features}")
 
 
-def log_provider_selection(logger: logging.Logger, providers: Dict[str, Any], selected: List[str]):
+def log_provider_selection(
+    logger: logging.Logger, providers: Dict[str, Any], selected: List[str]
+):
     """
     Log provider selection.
-    
+
     Args:
         logger: Logger instance
         providers: Available providers
@@ -71,7 +77,7 @@ def log_provider_selection(logger: logging.Logger, providers: Dict[str, Any], se
 def log_results(logger: logging.Logger, results: Dict[str, Any]):
     """
     Log result information.
-    
+
     Args:
         logger: Logger instance
         results: Result information

@@ -4,11 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-search-hub"
-version = "1.0.0"
+version = "0.1.0"
 description = "FastMCP 2.0 server integrating multiple search providers"
-authors = [
-    {name = "Bjorn Melin", email = "bjorn@example.com"}
-]
+authors = [{ name = "Bjorn Melin" }]
 requires-python = ">=3.9"
 dependencies = [
     "fastmcp>=2.0.0",

@@ -19,6 +19,7 @@ MCP Search Hub delivers 30-45% cost reduction compared to single-provider soluti
 ## Provider Strengths
 
 The system leverages each provider's strengths:
+
 - **Linkup**: Factual information with 91.0% accuracy on the SimpleQA benchmark
 - **Exa**: Academic content and semantic search with 90.04% SimpleQA accuracy
 - **Perplexity**: Current events and LLM processing with 86% accuracy
@@ -30,32 +31,37 @@ The system leverages each provider's strengths:
 ### Using Docker
 
 1. Clone the repository:
-   ```
+
+   ```bash
    git clone https://github.com/BjornMelin/mcp-search-hub.git
    cd mcp-search-hub
    ```
 
 2. Create a `.env` file with your API keys (see `.env.example`):
-   ```
+
+   ```bash
    cp .env.example .env
    # Edit .env with your API keys
    ```
 
 3. Run with Docker Compose:
-   ```
+
+   ```bash
    docker-compose up -d
    ```
 
 ### Manual Installation
 
 1. Clone the repository:
-   ```
+
+   ```bash
    git clone https://github.com/BjornMelin/mcp-search-hub.git
    cd mcp-search-hub
    ```
 
 2. Create a virtual environment and install dependencies:
-   ```
+
+   ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    pip install -r requirements.txt
@@ -64,7 +70,8 @@ The system leverages each provider's strengths:
 3. Set environment variables with your API keys (see `.env.example`).
 
 4. Run the server:
-   ```
+
+   ```bash
    python -m mcp_search_hub.main
    ```
 
@@ -119,11 +126,12 @@ for result in response["results"]:
 
 ### Search Tool
 
-```
+```plaintext
 search(query: SearchQuery) -> CombinedSearchResponse
 ```
 
-#### Parameters:
+#### Parameters
+
 - `query`: The search query text
 - `advanced`: Whether to use advanced search capabilities (default: false)
 - `max_results`: Maximum number of results to return (default: 10)
@@ -132,7 +140,8 @@ search(query: SearchQuery) -> CombinedSearchResponse
 - `budget`: Optional budget constraint in USD
 - `timeout_ms`: Timeout in milliseconds (default: 5000)
 
-#### Returns:
+#### Returns
+
 - `results`: Combined search results
 - `query`: Original query
 - `providers_used`: Providers used for the search
@@ -142,7 +151,7 @@ search(query: SearchQuery) -> CombinedSearchResponse
 
 ### Get Provider Info Tool
 
-```
+```plaintext
 get_provider_info() -> Dict[str, Dict]
 ```
 
