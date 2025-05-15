@@ -17,10 +17,10 @@ _Last updated: May 15, 2025_
   - [x] Modify provider implementations to include full content when raw_content=True
   - [x] Update result processing to handle raw content appropriately
 
-- [ ] Add health check and metrics endpoints
-  - [ ] Implement health check route using @mcp.custom_route("/health")
-  - [ ] Create metrics endpoint for tracking usage statistics
-  - [ ] Add provider status checks to health endpoint
+- [x] Add health check and metrics endpoints
+  - [x] Implement health check route using @mcp.custom_route("/health")
+  - [x] Create metrics endpoint for tracking usage statistics
+  - [x] Add provider status checks to health endpoint
 
 ## Package and Version Updates
 
