@@ -2,11 +2,15 @@
 
 import asyncio
 import time
-from fastmcp import FastMCP, Context
+import uuid
 from typing import Dict
+from fastmcp import FastMCP, Context
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from .models.query import SearchQuery
 from .models.results import SearchResponse, CombinedSearchResponse
+from .models.base import HealthStatus, HealthResponse, ProviderStatus, MetricsResponse
 from .providers.base import SearchProvider
 from .providers.linkup import LinkupProvider
 from .providers.exa import ExaProvider
@@ -17,6 +21,7 @@ from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.router import QueryRouter
 from .result_processing.merger import ResultMerger
 from .utils.cache import QueryCache
+from .utils.metrics import MetricsTracker
 from .config import get_settings
 
 
@@ -48,9 +53,64 @@ class SearchServer:
         self.router = QueryRouter(self.providers)
         self.merger = ResultMerger()
         self.cache = QueryCache(ttl=get_settings().cache_ttl)
+        self.metrics = MetricsTracker()
 
-        # Register tools
+        # Register tools and custom routes
         self._register_tools()
+        self._register_custom_routes()
+
+    def _register_custom_routes(self):
+        """Register custom HTTP routes."""
+
+        @self.mcp.custom_route("/health", methods=["GET"])
+        async def health_check(request: Request) -> JSONResponse:
+            """Health check endpoint."""
+            providers_status = {}
+            overall_status = HealthStatus.OK
+
+            # Check each provider
+            provider_tasks = []
+            for name, provider in self.providers.items():
+                if get_settings().providers.__getattribute__(name).enabled:
+                    provider_tasks.append(
+                        (name, asyncio.create_task(provider.check_status()))
+                    )
+
+            # Wait for all provider checks
+            for name, task in provider_tasks:
+                try:
+                    status, message = await task
+                    providers_status[name] = ProviderStatus(
+                        name=name, status=status, message=message
+                    )
+
+                    # Update overall status based on provider status
+                    if status == HealthStatus.FAILED:
+                        overall_status = HealthStatus.DEGRADED
+                except Exception as e:
+                    providers_status[name] = ProviderStatus(
+                        name=name,
+                        status=HealthStatus.FAILED,
+                        message=f"Check failed: {str(e)}",
+                    )
+                    overall_status = HealthStatus.DEGRADED
+
+            # Return health response
+            response = HealthResponse(
+                status=overall_status, version="1.0.0", providers=providers_status
+            )
+
+            return JSONResponse(response.model_dump())
+
+        @self.mcp.custom_route("/metrics", methods=["GET"])
+        async def metrics(request: Request) -> JSONResponse:
+            """Metrics endpoint."""
+            metrics_data = self.metrics.get_metrics()
+            response = MetricsResponse(
+                metrics=metrics_data, since=self.metrics.get_start_time_iso()
+            )
+
+            return JSONResponse(response.model_dump())
 
     def _register_tools(self):
         """Register FastMCP tools."""
@@ -63,6 +123,10 @@ class SearchServer:
             The system automatically selects the best provider(s) for your query based on
             content type, complexity, and other factors.
             """
+            # Generate a unique request ID and record metrics
+            request_id = str(uuid.uuid4())
+            self.metrics.start_request(request_id)
+
             start_time = time.time()
 
             # Check cache
@@ -72,6 +136,11 @@ class SearchServer:
                 cached_result and not query.providers
             ):  # Skip cache if explicit providers
                 await ctx.info("Retrieved results from cache")
+                # Record cache hit
+                self.metrics.record_query(
+                    set(cached_result.providers_used), from_cache=True
+                )
+                self.metrics.end_request(request_id)
                 return cached_result
 
             # Extract features
@@ -107,17 +176,21 @@ class SearchServer:
 
                 # Collect results
                 provider_results = {}
+                successful_providers = set()
                 for provider_name, task in provider_tasks.items():
                     if task in done and not task.exception():
                         provider_results[provider_name] = task.result()
+                        successful_providers.add(provider_name)
                     else:
                         # Handle errors or timeouts
                         if task.exception():
                             await ctx.error(
                                 f"Provider {provider_name} error: {str(task.exception())}"
                             )
+                            self.metrics.record_error()
                         else:
                             await ctx.warn(f"Provider {provider_name} timed out")
+                            self.metrics.record_error()
 
                         # Create empty response for failed providers
                         provider_results[provider_name] = SearchResponse(
@@ -154,10 +227,18 @@ class SearchServer:
                 # Cache the response
                 self.cache.set(cache_key, response)
 
+                # Record metrics
+                self.metrics.record_query(successful_providers, from_cache=False)
+                self.metrics.end_request(request_id)
+
                 return response
 
             except Exception as e:
                 await ctx.error(f"Search error: {str(e)}")
+                # Record error
+                self.metrics.record_error()
+                self.metrics.end_request(request_id)
+
                 # Return error response
                 return CombinedSearchResponse(
                     results=[],
