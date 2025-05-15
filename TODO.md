@@ -59,12 +59,12 @@ We've decided to embed official MCP servers for all providers within MCP Search 
 
 #### Official MCP Servers Implementation Plan
 
-- [ ] Perplexity: Integrate [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol) server
-  - [ ] Create MCP Python SDK wrapper similar to Firecrawl implementation
-  - [ ] Expose all Perplexity tools through unified server (ask, research, search)
-  - [ ] Add subprocess management for Node.js MCP server
-  - [ ] Implement automatic installation check
-  - [ ] Add comprehensive tests
+- [x] Perplexity: Integrate [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol) server
+  - [x] Create MCP Python SDK wrapper similar to Firecrawl implementation
+  - [x] Expose all Perplexity tools through unified server (ask, research, search)
+  - [x] Add subprocess management for Node.js MCP server
+  - [x] Implement automatic installation check
+  - [x] Add comprehensive tests (23 tests passing)
 
 - [x] Exa: Integrate [exa-mcp-server](https://github.com/exa-labs/exa-mcp-server)
   - [x] Create MCP Python SDK wrapper following Firecrawl pattern
@@ -113,12 +113,12 @@ For each provider integration, follow these steps:
 
 #### Perplexity Provider
 
-- [ ] Embed official [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol) server
-- [ ] Create MCP wrapper following Firecrawl pattern
-- [ ] Expose perplexity_ask, perplexity_research, and search tools
-- [ ] Implement Node.js subprocess management
-- [ ] Add installation automation
-- [ ] Create comprehensive test suite
+- [x] Embed official [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol) server
+- [x] Create MCP wrapper following Firecrawl pattern
+- [x] Expose perplexity_ask, perplexity_research, and search tools
+- [x] Implement Node.js subprocess management
+- [x] Add installation automation
+- [x] Create comprehensive test suite (23 tests passing)
 
 #### Exa Provider (Completed)
 
@@ -278,8 +278,8 @@ Based on our Exa integration experience, here are the immediate next steps:
   - [ ] Document any issues or limitations found
 
 - [ ] Continue MCP server integrations
-  - [ ] Perplexity MCP server integration (next priority)
-  - [ ] Linkup Python MCP server integration
+  - [x] Perplexity MCP server integration (completed)
+  - [ ] Linkup Python MCP server integration (next priority)
   - [ ] Tavily MCP server integration
 
 - [ ] Update documentation

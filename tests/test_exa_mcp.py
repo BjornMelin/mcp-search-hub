@@ -28,7 +28,9 @@ class TestExaMCPProvider:
         """Test successful initialization."""
         with (
             patch("subprocess.run") as mock_run,
-            patch("mcp_search_hub.providers.exa_mcp.stdio_client", new_callable=AsyncMock) as mock_client,
+            patch(
+                "mcp_search_hub.providers.exa_mcp.stdio_client", new_callable=AsyncMock
+            ) as mock_client,
             patch(
                 "mcp_search_hub.providers.exa_mcp.ClientSession"
             ) as mock_session_class,
@@ -60,7 +62,9 @@ class TestExaMCPProvider:
         """Test initialization with server installation."""
         with (
             patch("subprocess.run") as mock_run,
-            patch("mcp_search_hub.providers.exa_mcp.stdio_client", new_callable=AsyncMock) as mock_client,
+            patch(
+                "mcp_search_hub.providers.exa_mcp.stdio_client", new_callable=AsyncMock
+            ) as mock_client,
             patch(
                 "mcp_search_hub.providers.exa_mcp.ClientSession"
             ) as mock_session_class,
@@ -119,14 +123,18 @@ class TestExaMCPProvider:
         # Mock session to be set after initialization
         mock_session = AsyncMock()
         mock_session.call_tool = AsyncMock(return_value={"result": "test"})
-        
+
         async def mock_initialize():
             exa_mcp_provider.session = mock_session
-            
-        with patch.object(exa_mcp_provider, "initialize", side_effect=mock_initialize) as mock_init:
+
+        with patch.object(
+            exa_mcp_provider, "initialize", side_effect=mock_initialize
+        ) as mock_init:
             exa_mcp_provider.session = None
-            result = await exa_mcp_provider.call_tool("web_search_exa", {"query": "test"})
-            
+            result = await exa_mcp_provider.call_tool(
+                "web_search_exa", {"query": "test"}
+            )
+
             mock_init.assert_called_once()
             assert result == {"result": "test"}
 
