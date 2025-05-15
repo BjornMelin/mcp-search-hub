@@ -11,11 +11,11 @@ _Last updated: May 15, 2025_
   - [x] Update shutdown handler for stdio transport
   - [x] Add CLI argument parser to support transport options and API keys
 
-- [ ] Add support for returning raw content from providers when requested
+- [x] Add support for returning raw content from providers when requested
 
-  - [ ] Update SearchQuery model to add raw_content: bool parameter
-  - [ ] Modify provider implementations to include full content when raw_content=True
-  - [ ] Update result processing to handle raw content appropriately
+  - [x] Update SearchQuery model to add raw_content: bool parameter
+  - [x] Modify provider implementations to include full content when raw_content=True
+  - [x] Update result processing to handle raw content appropriately
 
 - [ ] Add health check and metrics endpoints
   - [ ] Implement health check route using @mcp.custom_route("/health")

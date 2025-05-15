@@ -28,22 +28,41 @@ class FirecrawlProvider(SearchProvider):
                 return await self._handle_extraction_query(query)
 
             # Otherwise use search
+            search_options = {
+                "query": query.query,
+                "limit": query.max_results,
+            }
+
+            # Always include scrape options if raw_content is requested
+            if query.raw_content or query.advanced:
+                search_options["scrapeOptions"] = {
+                    "formats": ["markdown", "html"]
+                    if query.raw_content
+                    else ["markdown"],
+                    "onlyMainContent": True,
+                }
+
             response = await self.client.post(
                 "https://api.firecrawl.dev/search",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
-                json={
-                    "query": query.query,
-                    "limit": query.max_results,
-                    "scrapeOptions": {"formats": ["markdown"], "onlyMainContent": True}
-                    if query.advanced
-                    else None,
-                },
+                json=search_options,
             )
             response.raise_for_status()
             data = response.json()
 
             results = []
             for item in data.get("results", []):
+                # For Firecrawl, content might be directly available in the result
+                raw_content = None
+                if query.raw_content:
+                    # If we requested raw content and it's available in the response
+                    if "content" in item and item["content"]:
+                        raw_content = item["content"]
+                    elif "html" in item and item["html"]:
+                        raw_content = item["html"]
+                    elif "markdown" in item and item["markdown"]:
+                        raw_content = item["markdown"]
+
                 results.append(
                     SearchResult(
                         title=item.get("title", ""),
@@ -51,6 +70,7 @@ class FirecrawlProvider(SearchProvider):
                         snippet=item.get("description", ""),
                         source="firecrawl",
                         score=0.5,  # Firecrawl doesn't provide scores, use default
+                        raw_content=raw_content,
                         metadata={
                             "content": item.get("content", ""),
                             "source_type": "search_result",
@@ -110,15 +130,31 @@ class FirecrawlProvider(SearchProvider):
         scrape_data = scrape_response.json()
 
         # Create a single result with the extracted content
+        markdown_content = scrape_data.get("markdown", "")
+        snippet = (
+            markdown_content[:500] + "..."
+            if markdown_content
+            else "No content extracted"
+        )
+
+        # Include raw_content if requested
+        raw_content = None
+        if query.raw_content:
+            if "html" in scrape_data and scrape_data["html"]:
+                raw_content = scrape_data["html"]
+            elif markdown_content:
+                raw_content = markdown_content
+
         results = [
             SearchResult(
                 title=scrape_data.get("title", url),
                 url=url,
-                snippet=scrape_data.get("markdown", "")[:500] + "...",
+                snippet=snippet,
                 source="firecrawl",
                 score=1.0,
+                raw_content=raw_content,
                 metadata={
-                    "content": scrape_data.get("markdown", ""),
+                    "content": markdown_content,
                     "source_type": "extracted_content",
                 },
             )
