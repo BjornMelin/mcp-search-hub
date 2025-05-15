@@ -1,7 +1,7 @@
 """Exa search provider implementation."""
 
 import httpx
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from .base import SearchProvider
 from ..models.query import SearchQuery
 from ..models.results import SearchResult, SearchResponse
@@ -10,16 +10,16 @@ from ..config import get_settings
 
 class ExaProvider(SearchProvider):
     """Exa search provider implementation."""
-    
+
     name = "exa"
-    
+
     def __init__(self):
         self.api_key = get_settings().providers.exa.api_key
         self.client = httpx.AsyncClient(
             timeout=get_settings().providers.exa.timeout,
-            limits=httpx.Limits(max_connections=20)
+            limits=httpx.Limits(max_connections=20),
         )
-    
+
     async def search(self, query: SearchQuery) -> SearchResponse:
         """Execute a search using Exa API."""
         try:
@@ -28,13 +28,15 @@ class ExaProvider(SearchProvider):
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json={
                     "query": query.query,
-                    "numResults": min(query.max_results * 2, 20),  # Request extra for filtering
-                    "useAutoprompt": query.advanced
-                }
+                    "numResults": min(
+                        query.max_results * 2, 20
+                    ),  # Request extra for filtering
+                    "useAutoprompt": query.advanced,
+                },
             )
             response.raise_for_status()
             data = response.json()
-            
+
             results = []
             for item in data.get("results", []):
                 results.append(
@@ -46,19 +48,19 @@ class ExaProvider(SearchProvider):
                         score=item.get("score", 0.0),
                         metadata={
                             "published_date": item.get("publishedDate"),
-                            "author": item.get("author")
-                        }
+                            "author": item.get("author"),
+                        },
                     )
                 )
-            
+
             return SearchResponse(
-                results=results[:query.max_results],  # Limit to max_results
+                results=results[: query.max_results],  # Limit to max_results
                 query=query.query,
                 total_results=len(results),
                 provider="exa",
-                timing_ms=response.elapsed.total_seconds() * 1000
+                timing_ms=response.elapsed.total_seconds() * 1000,
             )
-            
+
         except Exception as e:
             # Return empty response
             return SearchResponse(
@@ -66,9 +68,9 @@ class ExaProvider(SearchProvider):
                 query=query.query,
                 total_results=0,
                 provider="exa",
-                error=str(e)
+                error=str(e),
             )
-    
+
     def get_capabilities(self) -> Dict[str, Any]:
         """Return Exa capabilities."""
         return {
@@ -76,19 +78,17 @@ class ExaProvider(SearchProvider):
             "features": {
                 "semantic_search": True,
                 "highlights": True,
-                "auto_prompt": True
+                "auto_prompt": True,
             },
-            "quality_metrics": {
-                "simple_qa_score": 0.9004
-            }
+            "quality_metrics": {"simple_qa_score": 0.9004},
         }
-    
+
     def estimate_cost(self, query: SearchQuery) -> float:
         """Estimate the cost of executing the query."""
         # Exa costs ~$0.01 per query
         # More for auto-prompting
         return 0.02 if query.advanced else 0.01
-        
+
     async def close(self):
         """Close the HTTP client."""
         await self.client.aclose()
