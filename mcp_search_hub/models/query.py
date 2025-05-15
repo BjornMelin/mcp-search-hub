@@ -26,6 +26,9 @@ class SearchQuery(BaseModel):
     timeout_ms: int = Field(
         5000, description="Timeout in milliseconds", ge=1000, le=30000
     )
+    raw_content: bool = Field(
+        False, description="Whether to include raw content in search results"
+    )
 
 
 class QueryFeatures(BaseModel):

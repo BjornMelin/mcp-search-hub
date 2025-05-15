@@ -66,7 +66,7 @@ class SearchServer:
             start_time = time.time()
 
             # Check cache
-            cache_key = f"{query.query}:{query.advanced}:{query.max_results}"
+            cache_key = f"{query.query}:{query.advanced}:{query.max_results}:{query.raw_content}"
             cached_result = self.cache.get(cache_key)
             if (
                 cached_result and not query.providers
@@ -130,7 +130,9 @@ class SearchServer:
 
                 # Merge and rank results
                 combined_results = self.merger.merge_results(
-                    provider_results, max_results=query.max_results
+                    provider_results,
+                    max_results=query.max_results,
+                    raw_content=query.raw_content,
                 )
 
                 # Calculate costs

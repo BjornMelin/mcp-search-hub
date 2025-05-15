@@ -9,7 +9,10 @@ class ResultMerger:
     """Merges and ranks results from multiple providers."""
 
     def merge_results(
-        self, provider_results: Dict[str, SearchResponse], max_results: int = 10
+        self,
+        provider_results: Dict[str, SearchResponse],
+        max_results: int = 10,
+        raw_content: bool = False,
     ) -> List[SearchResult]:
         """
         Merge results from multiple providers into a unified ranked list.
@@ -17,6 +20,7 @@ class ResultMerger:
         Args:
             provider_results: Dictionary mapping provider names to their results
             max_results: Maximum number of results to return
+            raw_content: Whether raw content was requested in the original query
 
         Returns:
             List of merged and ranked results
@@ -29,11 +33,57 @@ class ResultMerger:
         # Remove duplicates based on URL
         deduplicated = remove_duplicates(all_results)
 
+        # Handle raw content during deduplication
+        if raw_content:
+            deduplicated = self._merge_raw_content(deduplicated)
+
         # Rank combined results
         ranked_results = self._rank_results(deduplicated, provider_results)
 
         # Limit to max_results
         return ranked_results[:max_results]
+
+    def _merge_raw_content(self, results: List[SearchResult]) -> List[SearchResult]:
+        """
+        For duplicate URLs where some have raw_content and others don't,
+        prefer the result with raw_content while preserving metadata.
+        """
+        # Group by URL
+        url_groups = {}
+        for result in results:
+            if result.url not in url_groups:
+                url_groups[result.url] = []
+            url_groups[result.url].append(result)
+
+        # Process groups with more than one result
+        merged_results = []
+        for url, group in url_groups.items():
+            if len(group) == 1:
+                merged_results.append(group[0])
+                continue
+
+            # Find result with raw_content
+            result_with_content = None
+            for result in group:
+                if result.raw_content:
+                    result_with_content = result
+                    break
+
+            if result_with_content:
+                # Use this result but merge metadata from others
+                for result in group:
+                    if result != result_with_content:
+                        # Add non-overlapping metadata
+                        for key, value in result.metadata.items():
+                            if key not in result_with_content.metadata:
+                                result_with_content.metadata[key] = value
+
+                merged_results.append(result_with_content)
+            else:
+                # No result has raw_content, use the first one
+                merged_results.append(group[0])
+
+        return merged_results
 
     def _rank_results(
         self, results: List[SearchResult], provider_results: Dict[str, SearchResponse]

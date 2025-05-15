@@ -12,6 +12,9 @@ class SearchResult(BaseModel):
     snippet: str = Field(..., description="Result snippet or summary")
     source: str = Field(..., description="Source provider")
     score: float = Field(..., description="Relevance score")
+    raw_content: Optional[str] = Field(
+        None, description="Raw content of the result when requested"
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
     )
