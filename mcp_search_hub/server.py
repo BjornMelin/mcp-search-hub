@@ -18,7 +18,7 @@ from .providers.exa_mcp import ExaProvider
 from .providers.firecrawl_mcp import FirecrawlProvider
 from .providers.linkup_mcp import LinkupProvider
 from .providers.perplexity_mcp import PerplexityProvider
-from .providers.tavily import TavilyProvider
+from .providers.tavily_mcp import TavilyProvider
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.router import QueryRouter
 from .result_processing.merger import ResultMerger
@@ -60,7 +60,15 @@ class SearchServer:
                     "perplexity_api_key": settings.providers.perplexity.api_key.get_secret_value()
                 }
             ),
-            "tavily": TavilyProvider(),
+            "tavily": TavilyProvider(
+                {
+                    "tavily_api_key": (
+                        settings.providers.tavily.api_key.get_secret_value()
+                        if settings.providers.tavily.api_key
+                        else None
+                    )
+                }
+            ),
             "firecrawl": FirecrawlProvider(),
         }
 
@@ -607,6 +615,61 @@ class SearchServer:
                 return await linkup_provider.mcp_wrapper.call_tool(
                     "search-web",
                     {"query": query, "depth": depth, **kwargs},
+                )
+        
+        # Register Tavily tools
+        tavily_provider = self.providers.get("tavily")
+        if tavily_provider and isinstance(tavily_provider, TavilyProvider):
+
+            @self.mcp.tool()
+            async def tavily_search(
+                query: str,
+                search_depth: str = "basic",
+                max_results: int = 5,
+                **kwargs,
+            ) -> Dict:
+                """
+                Search the web using Tavily's AI-optimized search.
+
+                Args:
+                    query: Search query string
+                    search_depth: Search depth ('basic' or 'advanced')
+                    max_results: Maximum number of results (default: 5)
+                """
+                return await tavily_provider.mcp_wrapper.call_tool(
+                    "tavily-search",
+                    {
+                        "query": query,
+                        "options": {
+                            "searchDepth": search_depth,
+                            "maxResults": max_results,
+                            **kwargs
+                        }
+                    },
+                )
+
+            @self.mcp.tool()
+            async def tavily_extract(
+                url: str,
+                extract_depth: str = "advanced",
+                **kwargs,
+            ) -> Dict:
+                """
+                Extract and analyze content from a URL using Tavily.
+
+                Args:
+                    url: URL to extract content from
+                    extract_depth: Extraction depth ('basic' or 'advanced')
+                """
+                return await tavily_provider.mcp_wrapper.call_tool(
+                    "tavily-extract",
+                    {
+                        "urls": [url],
+                        "options": {
+                            "extractDepth": extract_depth,
+                            **kwargs
+                        }
+                    },
                 )
 
     async def close(self):
