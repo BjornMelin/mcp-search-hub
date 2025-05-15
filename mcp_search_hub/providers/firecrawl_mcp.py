@@ -11,10 +11,12 @@ from typing import Any, Dict, List, Optional
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from ..models.base import ProviderCapabilities
+import logging
+
 from ..utils.errors import ProviderError
-from ..utils.logging import logger
 from .base import SearchProvider
+
+logger = logging.getLogger(__name__)
 
 
 class FirecrawlMCPProvider:
@@ -102,16 +104,15 @@ class FirecrawlProvider(SearchProvider):
         self.mcp_client = FirecrawlMCPProvider(api_key=self.api_key)
         self._initialized = False
 
-    @property
-    def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(
-            web_search=False,  # Firecrawl is primarily for scraping
-            structured_data=True,
-            markdown_support=True,
-            screenshot_support=True,
-            javascript_rendering=True,
-            api_limits={"rate_limit": 100, "max_results": 50},
-        )
+    def get_capabilities(self) -> Dict[str, Any]:
+        return {
+            "web_search": False,  # Firecrawl is primarily for scraping
+            "structured_data": True,
+            "markdown_support": True,
+            "screenshot_support": True,
+            "javascript_rendering": True,
+            "api_limits": {"rate_limit": 100, "max_results": 50},
+        }
 
     async def _ensure_initialized(self):
         """Ensure the MCP client is initialized."""
