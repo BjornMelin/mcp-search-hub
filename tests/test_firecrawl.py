@@ -1,17 +1,19 @@
 """Tests for the Firecrawl provider functionality."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from mcp_search_hub.providers.firecrawl import (
-    FirecrawlProvider,
-    MapOptions,
-    CrawlOptions,
-    ExtractOptions,
-    DeepResearchOptions,
-    LLMsTxtOptions,
-)
-from mcp_search_hub.models.query import SearchQuery
+
+import pytest
+
 from mcp_search_hub.models.base import HealthStatus
+from mcp_search_hub.models.query import SearchQuery
+from mcp_search_hub.providers.firecrawl import (
+    CrawlOptions,
+    DeepResearchOptions,
+    ExtractOptions,
+    FirecrawlProvider,
+    LLMsTxtOptions,
+    MapOptions,
+)
 
 
 @pytest.fixture

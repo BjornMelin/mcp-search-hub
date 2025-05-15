@@ -1,7 +1,8 @@
 """Tests for Firecrawl MCP provider integration."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from mcp_search_hub.providers.firecrawl_mcp import (
     FirecrawlMCPProvider,

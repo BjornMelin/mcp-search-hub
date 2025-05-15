@@ -16,7 +16,7 @@ from .models.results import CombinedSearchResponse, SearchResponse
 from .providers.base import SearchProvider
 from .providers.exa_mcp import ExaProvider
 from .providers.firecrawl_mcp import FirecrawlProvider
-from .providers.linkup import LinkupProvider
+from .providers.linkup_mcp import LinkupProvider
 from .providers.perplexity_mcp import PerplexityProvider
 from .providers.tavily import TavilyProvider
 from .query_routing.analyzer import QueryAnalyzer
@@ -43,12 +43,22 @@ class SearchServer:
         # Initialize providers
         settings = get_settings()
         self.providers: Dict[str, SearchProvider] = {
-            "linkup": LinkupProvider(),
+            "linkup": LinkupProvider(
+                {
+                    "linkup_api_key": (
+                        settings.providers.linkup.api_key.get_secret_value()
+                        if settings.providers.linkup.api_key
+                        else None
+                    )
+                }
+            ),
             "exa": ExaProvider(
                 {"exa_api_key": settings.providers.exa.api_key.get_secret_value()}
             ),
             "perplexity": PerplexityProvider(
-                {"perplexity_api_key": settings.providers.perplexity.api_key.get_secret_value()}
+                {
+                    "perplexity_api_key": settings.providers.perplexity.api_key.get_secret_value()
+                }
             ),
             "tavily": TavilyProvider(),
             "firecrawl": FirecrawlProvider(),
@@ -545,11 +555,9 @@ class SearchServer:
                 return await perplexity_provider.mcp_wrapper.call_tool(
                     "perplexity_ask",
                     {
-                        "messages": [
-                            {"role": "user", "content": query}
-                        ],
+                        "messages": [{"role": "user", "content": query}],
                         "search_focus": search_focus,
-                        **kwargs
+                        **kwargs,
                     },
                 )
 
@@ -578,6 +586,28 @@ class SearchServer:
                     query: The reasoning task or question
                 """
                 return await perplexity_provider.perplexity_reason(query, **kwargs)
+
+        # Register Linkup tools
+        linkup_provider = self.providers.get("linkup")
+        if linkup_provider and isinstance(linkup_provider, LinkupProvider):
+
+            @self.mcp.tool()
+            async def linkup_search_web(
+                query: str,
+                depth: str = "standard",
+                **kwargs,
+            ) -> Dict:
+                """
+                Search the web using Linkup for real-time information and premium content.
+
+                Args:
+                    query: The search query to perform
+                    depth: Search depth ('standard' or 'deep')
+                """
+                return await linkup_provider.mcp_wrapper.call_tool(
+                    "search-web",
+                    {"query": query, "depth": depth, **kwargs},
+                )
 
     async def close(self):
         """Close all provider connections."""

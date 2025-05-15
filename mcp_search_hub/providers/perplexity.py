@@ -1,11 +1,13 @@
 """Perplexity search provider implementation."""
 
+from typing import Any, Dict
+
 import httpx
-from typing import Dict, Any
-from .base import SearchProvider
-from ..models.query import SearchQuery
-from ..models.results import SearchResult, SearchResponse
+
 from ..config import get_settings
+from ..models.query import SearchQuery
+from ..models.results import SearchResponse, SearchResult
+from .base import SearchProvider
 
 
 class PerplexityProvider(SearchProvider):

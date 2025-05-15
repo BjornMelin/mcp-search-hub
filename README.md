@@ -48,6 +48,7 @@ We've implemented an innovative approach: **embedding all official provider MCP 
 - Automatic updates when providers enhance their MCP servers
 
 This architectural decision applies to all providers:
+
 - **Firecrawl**: Successfully embedded with all tools available
 - **Perplexity**: In progress - will expose ask, research, and search tools
 - **Exa**: In progress - will expose web_search_exa, research_paper_search, and more
@@ -55,6 +56,7 @@ This architectural decision applies to all providers:
 - **Tavily**: In progress - will expose tavily-search and tavily-extract tools
 
 Benefits of this approach:
+
 - **Zero maintenance**: Provider updates are automatic
 - **Complete features**: Access to all provider capabilities
 - **Unified interface**: Single server for all search needs
@@ -175,7 +177,7 @@ MCP Search Hub uses environment variables for configuration. You can set these i
 
 ### Required Configuration
 
-```
+```plaintext
 # API Keys (only required for providers you enable)
 LINKUP_API_KEY=your_linkup_api_key
 EXA_API_KEY=your_exa_api_key
@@ -236,9 +238,11 @@ When using STDIO transport, the server communicates through standard input and o
 #### Claude Desktop
 
 ##### HTTP Transport
+
 1. Open Claude Desktop settings
 2. Navigate to MCP Servers
 3. Add a new HTTP server with the following configuration:
+
    ```json
    {
      "mcpServers": {
@@ -248,31 +252,42 @@ When using STDIO transport, the server communicates through standard input and o
      }
    }
    ```
+
 4. Restart Claude Desktop
 5. Access search capability with: `search("your query here")`
 
-
 ##### STDIO Transport
+
 1. Open Claude Desktop settings
 2. Navigate to MCP Servers
 3. Add a new STDIO server with the following configuration:
+
    ```json
    {
      "mcpServers": {
        "search": {
-         "command": ["uv", "run", "mcp_search_hub.main", "--transport", "stdio"],
+         "command": [
+           "uv",
+           "run",
+           "mcp_search_hub.main",
+           "--transport",
+           "stdio"
+         ],
          "cwd": "/path/to/mcp-search-hub"
        }
      }
    }
    ```
+
    Replace `/path/to/mcp-search-hub` with the actual path to your installation
+
 4. Restart Claude Desktop
 5. Access search capability with: `search("your query here")`
 
 #### Claude Code
 
 ##### HTTP Transport
+
 Configure the HTTP MCP server in your Claude Code settings:
 
 ```bash
@@ -280,6 +295,7 @@ claude config set mcp-servers.search http://localhost:8000/mcp
 ```
 
 ##### STDIO Transport
+
 Configure the STDIO MCP server in your Claude Code settings:
 
 ```bash
@@ -291,13 +307,15 @@ claude config set mcp-servers.search.cwd "/path/to/mcp-search-hub"
 Replace `/path/to/mcp-search-hub` with the actual path to your installation.
 
 Then use it in your sessions with:
-```
+
+```plaintext
 You can now use the search tool. For example: search("latest advancements in artificial intelligence")
 ```
 
 #### VS Code with Claude Extension
 
 ##### HTTP Transport
+
 Add to your settings.json:
 
 ```json
@@ -309,6 +327,7 @@ Add to your settings.json:
 ```
 
 ##### STDIO Transport
+
 Add to your settings.json:
 
 ```json
@@ -325,6 +344,7 @@ Replace `/path/to/mcp-search-hub` with the actual path to your installation.
 #### Cursor
 
 ##### HTTP Transport
+
 Add to your Cursor settings under the Claude section:
 
 ```json
@@ -336,6 +356,7 @@ Add to your Cursor settings under the Claude section:
 ```
 
 ##### STDIO Transport
+
 Add to your Cursor settings under the Claude section:
 
 ```json
@@ -352,14 +373,16 @@ Replace `/path/to/mcp-search-hub` with the actual path to your installation.
 #### Windsurf
 
 ##### HTTP Transport
+
 In Windsurf, navigate to Settings → Claude → MCP Servers and add:
 
-```
+```plaintext
 Name: search
 URL: http://localhost:8000/mcp
 ```
 
 ##### STDIO Transport
+
 In Windsurf, navigate to Settings → Claude → MCP Servers and add:
 
 ```
@@ -516,6 +539,7 @@ Returns information about all available search providers, including their capabi
 MCP Search Hub embeds all official provider MCP servers, giving you access to their complete tool suites:
 
 #### Firecrawl (Completed)
+
 - `firecrawl_scrape`: Advanced web scraping with screenshot capture
 - `firecrawl_map`: Site mapping and URL discovery
 - `firecrawl_crawl`: Asynchronous site crawling
@@ -526,11 +550,13 @@ MCP Search Hub embeds all official provider MCP servers, giving you access to th
 - `firecrawl_generate_llmstxt`: Generate LLMs.txt files
 
 #### Perplexity (In Progress)
+
 - `perplexity_ask`: Conversational search with AI
 - `perplexity_research`: Deep research capabilities
 - `perplexity_search`: Web search with citations
 
 #### Exa (In Progress)
+
 - `web_search_exa`: Semantic web search
 - `research_paper_search`: Academic paper search
 - `company_research`: Company information search
@@ -539,9 +565,11 @@ MCP Search Hub embeds all official provider MCP servers, giving you access to th
 - `github_search`: GitHub repository search
 
 #### Linkup (In Progress)
+
 - `linkup_search`: Premium content search with real-time results
 
 #### Tavily (In Progress)
+
 - `tavily_search`: RAG-optimized search
 - `tavily_extract`: Content extraction
 

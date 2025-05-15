@@ -1,7 +1,8 @@
 """Query analyzer for extracting features."""
 
 import re
-from ..models.query import SearchQuery, QueryFeatures
+
+from ..models.query import QueryFeatures, SearchQuery
 
 
 class QueryAnalyzer:

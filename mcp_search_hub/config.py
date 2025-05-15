@@ -2,8 +2,10 @@
 
 import os
 from functools import lru_cache
+
 from pydantic import SecretStr
-from .models.config import Settings, ProvidersConfig, ProviderConfig
+
+from .models.config import ProviderConfig, ProvidersConfig, Settings
 
 
 @lru_cache()
@@ -39,9 +41,9 @@ def get_settings() -> Settings:
         ),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         cache_ttl=int(os.getenv("CACHE_TTL", "3600")),
-        default_budget=float(os.getenv("DEFAULT_BUDGET"))
-        if os.getenv("DEFAULT_BUDGET")
-        else None,
+        default_budget=(
+            float(os.getenv("DEFAULT_BUDGET")) if os.getenv("DEFAULT_BUDGET") else None
+        ),
         port=int(os.getenv("PORT", "8000")),
         host=os.getenv("HOST", "0.0.0.0"),
         transport=os.getenv("TRANSPORT", "streamable-http"),

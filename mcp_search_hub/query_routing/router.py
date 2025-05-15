@@ -1,6 +1,7 @@
 """Query router for selecting appropriate search providers."""
 
-from typing import List, Dict
+from typing import Dict, List
+
 from ..models.query import QueryFeatures, SearchQuery
 from ..providers.base import SearchProvider
 from .cost_optimizer import CostOptimizer

@@ -1,8 +1,9 @@
 """Tests for the health check and metrics endpoints."""
 
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 

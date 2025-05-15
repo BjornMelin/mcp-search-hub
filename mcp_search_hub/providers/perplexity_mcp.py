@@ -2,6 +2,7 @@
 Perplexity MCP wrapper provider that embeds the official perplexity-mcp server.
 """
 
+import logging
 import os
 import subprocess
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,12 +10,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-import logging
-
-from ..utils.errors import ProviderError
-from ..models.query import SearchQuery
-from ..models.results import SearchResult, SearchResponse
 from ..models.base import HealthStatus
+from ..models.query import SearchQuery
+from ..models.results import SearchResponse, SearchResult
+from ..utils.errors import ProviderError
 from .base import SearchProvider
 
 logger = logging.getLogger(__name__)
@@ -163,13 +162,13 @@ class PerplexityProvider(SearchProvider):
 
             # Parse the result and format it as search results
             results = []
-            
+
             # Extract sources from the response if available
             if isinstance(result, dict):
                 sources = result.get("sources", [])
                 citations = result.get("citations", [])
                 content = result.get("content", "")
-                
+
                 # Process sources
                 for idx, source in enumerate(sources):
                     search_result = SearchResult(
@@ -186,13 +185,15 @@ class PerplexityProvider(SearchProvider):
                         },
                     )
                     results.append(search_result)
-                
+
                 # If no sources but we have content, create a single result
                 if not sources and content:
                     search_result = SearchResult(
                         title=f"Perplexity Answer: {query.query[:50]}...",
                         url="https://perplexity.ai",
-                        snippet=content[:200] + "..." if len(content) > 200 else content,
+                        snippet=(
+                            content[:200] + "..." if len(content) > 200 else content
+                        ),
                         raw_content=content if query.raw_content else None,
                         source="perplexity",
                         score=1.0,
@@ -201,7 +202,7 @@ class PerplexityProvider(SearchProvider):
                     results.append(search_result)
 
             return SearchResponse(
-                results=results[:query.max_results],
+                results=results[: query.max_results],
                 query=query.query,
                 total_results=len(results),
                 provider="perplexity",
@@ -224,12 +225,7 @@ class PerplexityProvider(SearchProvider):
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "perplexity_research",
-            {
-                "messages": [
-                    {"role": "user", "content": query}
-                ],
-                **kwargs
-            }
+            {"messages": [{"role": "user", "content": query}], **kwargs},
         )
 
     async def perplexity_reason(self, query: str, **kwargs) -> Dict[str, Any]:
@@ -237,12 +233,7 @@ class PerplexityProvider(SearchProvider):
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "perplexity_reason",
-            {
-                "messages": [
-                    {"role": "user", "content": query}
-                ],
-                **kwargs
-            }
+            {"messages": [{"role": "user", "content": query}], **kwargs},
         )
 
     def get_capabilities(self) -> Dict[str, Any]:
@@ -273,7 +264,10 @@ class PerplexityProvider(SearchProvider):
             if tools:
                 return HealthStatus.OK, "Perplexity provider is operational"
             else:
-                return HealthStatus.FAILED, "No tools available from Perplexity MCP server"
+                return (
+                    HealthStatus.FAILED,
+                    "No tools available from Perplexity MCP server",
+                )
         except Exception as e:
             logger.error(f"Perplexity health check failed: {e}")
             return HealthStatus.FAILED, f"Health check failed: {str(e)}"

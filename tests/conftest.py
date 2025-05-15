@@ -1,6 +1,7 @@
 """Test configuration for MCP Search Hub."""
 
 import pytest
+
 from mcp_search_hub.config import get_settings
 
 

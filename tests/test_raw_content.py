@@ -1,11 +1,13 @@
 """Tests for raw content functionality."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from mcp_search_hub.models.query import SearchQuery
-from mcp_search_hub.models.results import SearchResult, SearchResponse
-from mcp_search_hub.providers.linkup import LinkupProvider
+from mcp_search_hub.models.results import SearchResponse, SearchResult
 from mcp_search_hub.providers.firecrawl import FirecrawlProvider
+from mcp_search_hub.providers.linkup import LinkupProvider
 from mcp_search_hub.result_processing.merger import ResultMerger
 
 

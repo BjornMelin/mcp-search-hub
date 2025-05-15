@@ -1,6 +1,7 @@
 """Cost optimization strategies."""
 
 from typing import Dict, List
+
 from ..models.query import SearchQuery
 from ..providers.base import SearchProvider
 
