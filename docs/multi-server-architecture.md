@@ -11,7 +11,7 @@ MCP Search Hub is designed to work seamlessly with official MCP servers from var
 
 ## Architecture Pattern
 
-```
+```plaintext
 ┌─────────────────┐
 │  Claude Client  │
 └─────────────────┘
@@ -34,6 +34,7 @@ MCP Search Hub is designed to work seamlessly with official MCP servers from var
 ### 1. Core Search Hub Functionality
 
 MCP Search Hub maintains its core value propositions:
+
 - Intelligent query routing across multiple providers
 - Result merging and ranking
 - Cost optimization
@@ -44,26 +45,30 @@ MCP Search Hub maintains its core value propositions:
 For each provider, we evaluate two options:
 
 #### Option A: Use Official MCP Server (Preferred)
+
 When a provider offers an official MCP server:
+
 - Document how to install and configure it
 - Provide example configurations
 - Show how to use it alongside Search Hub
 
 #### Option B: Basic Integration
+
 When no official MCP server exists:
+
 - Maintain minimal integration for search queries
 - Focus on essential features only
 - Monitor for official MCP server releases
 
 ## Current Provider Status
 
-| Provider | Official MCP Server | Status | Notes |
-|----------|-------------------|---------|--------|
-| Firecrawl | ✅ Available | Documented | Use [firecrawl-mcp-server](https://github.com/mendableai/firecrawl-mcp-server) |
-| Perplexity | ❓ To be checked | Pending | Check official repos |
-| Exa | ❓ To be checked | Pending | Check official repos |
-| Linkup | ❓ To be checked | Pending | Check official repos |
-| Tavily | ❓ To be checked | Pending | Check official repos |
+| Provider   | Official MCP Server | Status     | Notes                                                                          |
+| ---------- | ------------------- | ---------- | ------------------------------------------------------------------------------ |
+| Firecrawl  | ✅ Available        | Documented | Use [firecrawl-mcp-server](https://github.com/mendableai/firecrawl-mcp-server) |
+| Perplexity | ❓ To be checked    | Pending    | Check official repos                                                           |
+| Exa        | ❓ To be checked    | Pending    | Check official repos                                                           |
+| Linkup     | ❓ To be checked    | Pending    | Check official repos                                                           |
+| Tavily     | ❓ To be checked    | Pending    | Check official repos                                                           |
 
 ## Configuration Examples
 
@@ -120,6 +125,7 @@ For users who want full capabilities:
 For users currently using full Firecrawl integration through Search Hub:
 
 1. Install the official Firecrawl MCP server:
+
    ```bash
    npm install -g firecrawl-mcp
    ```

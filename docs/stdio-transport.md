@@ -7,7 +7,7 @@ This document describes the implementation of STDIO transport for the MCP Search
 STDIO transport enables MCP clients to use the MCP Search Hub directly through standard input/output streams rather than a network connection. This is useful for:
 
 - Command-line tools and scripts
-- Direct integration with applications 
+- Direct integration with applications
 - Local development and testing
 - Environments where HTTP connectivity isn't available or desired
 
@@ -54,14 +54,14 @@ The shutdown handler has been enhanced to properly handle both transport types:
 
 ### Running with STDIO Transport
 
-#### Using environment variables:
+#### Using environment variables
 
 ```bash
 export TRANSPORT=stdio
 python -m mcp_search_hub.main
 ```
 
-#### Using command-line argument:
+#### Using command-line argument
 
 ```bash
 python -m mcp_search_hub.main --transport stdio

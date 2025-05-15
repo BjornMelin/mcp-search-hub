@@ -25,6 +25,7 @@ We decided to **embed all official provider MCP servers within MCP Search Hub** 
 ### Implementation
 
 Our approach creates a hybrid architecture:
+
 1. Provider MCP servers (Node.js or Python) run as subprocesses
 2. We use the MCP Python SDK to connect to them
 3. We expose all provider tools through our unified MCP Search Hub interface
@@ -34,26 +35,31 @@ Our approach creates a hybrid architecture:
 ### Advantages
 
 #### 1. Reduced Maintenance Burden
+
 - Provider maintains and updates their MCP server
 - We automatically get bug fixes and new features
 - No need to track API changes or update our implementation
 
 #### 2. Feature Completeness
+
 - Official MCP servers expose all available features
 - Direct API implementations might miss edge cases or new features
 - Providers ensure their MCP servers are comprehensive
 
 #### 3. Better Abstraction
+
 - MCP servers provide standardized interfaces designed for AI agents
 - Proper parameter validation and error handling built-in
 - Consistent patterns across different providers
 
 #### 4. Higher Reliability
+
 - Official servers are tested and maintained by the providers
 - Production-ready code with proper error handling
 - Regular updates and security patches
 
 #### 5. Future-Proof Design
+
 - When providers add new capabilities, their MCP server gets updated
 - We inherit these features without code changes
 - Supports the growing MCP ecosystem
@@ -61,11 +67,13 @@ Our approach creates a hybrid architecture:
 ### Trade-offs
 
 #### Disadvantages
+
 - Slight overhead from inter-process communication
 - Dependency on Node.js runtime for JavaScript-based servers
 - Additional complexity in process management
 
 #### Mitigated By
+
 - Modern systems handle IPC efficiently
 - Node.js is widely available and stable
 - Process management is well-encapsulated in our wrapper
@@ -73,14 +81,16 @@ Our approach creates a hybrid architecture:
 ### Cost-Benefit Analysis
 
 **Using Official MCP Servers**:
+
 - ✅ Less code to maintain
-- ✅ Always up-to-date with provider features  
+- ✅ Always up-to-date with provider features
 - ✅ Better tested and supported
 - ✅ Consistent with MCP ecosystem standards
 - ❌ Slight IPC overhead
 - ❌ Additional runtime dependencies
 
 **Implementing API Directly**:
+
 - ✅ Full control over implementation
 - ✅ Single language/runtime
 - ❌ Constant maintenance to keep up with API changes
@@ -99,19 +109,19 @@ graph TD
     C --> F[Exa MCP Wrapper]
     C --> G[Linkup MCP Wrapper]
     C --> H[Tavily MCP Wrapper]
-    
+
     D --> I[Firecrawl MCP Server]
     E --> J[Perplexity MCP Server]
     F --> K[Exa MCP Server]
     G --> L[Linkup MCP Server]
     H --> M[Tavily MCP Server]
-    
+
     I --> N[Firecrawl API]
     J --> O[Perplexity API]
     K --> P[Exa API]
     L --> Q[Linkup API]
     M --> R[Tavily API]
-    
+
     style B fill:#f9f,stroke:#333,stroke-width:4px
     style C fill:#bbf,stroke:#333,stroke-width:2px
     style I fill:#bfb,stroke:#333,stroke-width:2px
@@ -124,6 +134,7 @@ graph TD
 ### Implementation Details
 
 1. **Provider Wrappers** (e.g., `firecrawl_mcp.py`, `perplexity_mcp.py`):
+
    - Manage the lifecycle of provider MCP server processes
    - Handle installation verification and setup
    - Provide async interfaces using MCP Python SDK
@@ -131,6 +142,7 @@ graph TD
    - Support both Node.js and Python MCP servers
 
 2. **Tool Registration** (in `server.py`):
+
    - Dynamically registers all provider tools
    - Maintains consistent naming across providers
    - Handles parameter mapping and validation
@@ -145,6 +157,7 @@ graph TD
 ### Future Considerations
 
 This pattern is being applied to all providers:
+
 - [x] Firecrawl MCP server (completed)
 - [ ] Perplexity MCP server (in progress) - [ppl-ai/modelcontextprotocol](https://github.com/ppl-ai/modelcontextprotocol)
 - [ ] Exa MCP server (in progress) - [exa-labs/exa-mcp-server](https://github.com/exa-labs/exa-mcp-server)
