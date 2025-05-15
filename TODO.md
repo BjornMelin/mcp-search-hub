@@ -1,14 +1,14 @@
 # MCP Search Hub TODO List
 
-_Last updated: May 14, 2025_
+_Last updated: May 15, 2025_
 
 ## Core Functionality
 
-- [ ] Implement stdin/stdout transport option for command-line usage
+- [x] Implement stdin/stdout transport option for command-line usage
 
   - [x] Add transport parameter to main.py with choice between "streamable-http" and "stdio"
-  - [ ] Implement stdio transport handling in FastMCP server initialization
-  - [ ] Update shutdown handler for stdio transport
+  - [x] Implement stdio transport handling in FastMCP server initialization
+  - [x] Update shutdown handler for stdio transport
   - [x] Add CLI argument parser to support transport options and API keys
 
 - [ ] Add support for returning raw content from providers when requested

@@ -44,4 +44,5 @@ def get_settings() -> Settings:
         else None,
         port=int(os.getenv("PORT", "8000")),
         host=os.getenv("HOST", "0.0.0.0"),
+        transport=os.getenv("TRANSPORT", "streamable-http"),
     )
