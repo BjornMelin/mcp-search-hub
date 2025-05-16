@@ -167,11 +167,11 @@ For each provider integration, follow these steps:
   - [x] Support detection of mixed/hybrid content types
   - [ ] Consider machine learning-based classification (future enhancement)
 
-- [ ] Enhance router scoring algorithm
+- [x] Enhance router scoring algorithm
 
-  - [ ] Update provider-specific scoring with more nuanced weights
-  - [ ] Add support for historical performance-based scoring
-  - [ ] Implement confidence scores for routing decisions
+  - [x] Update provider-specific scoring with more nuanced weights
+  - [x] Add support for historical performance-based scoring
+  - [x] Implement confidence scores for routing decisions
 
 - [ ] Implement advanced routing patterns
   - [ ] Add multi-provider cascade routing (try secondary if primary fails)
