@@ -171,9 +171,14 @@ class SearchServer:
             features = self.analyzer.extract_features(query)
 
             # Select providers (use explicit selection if provided)
-            providers_to_use = query.providers or self.router.select_providers(
-                query, features, query.budget
-            )
+            if query.providers:
+                providers_to_use = query.providers
+            else:
+                routing_decision = self.router.select_providers(
+                    query, features, query.budget
+                )
+                providers_to_use = routing_decision.selected_providers
+                await ctx.info(f"Routing confidence: {routing_decision.confidence:.2f}")
 
             await ctx.info(f"Selected providers: {', '.join(providers_to_use)}")
 

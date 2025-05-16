@@ -1,4 +1,4 @@
-"""Tests for enhanced router with advanced scoring."""
+"""Tests for router with advanced scoring."""
 
 import pytest
 
@@ -7,7 +7,7 @@ from mcp_search_hub.models.router import (
     ProviderPerformanceMetrics,
     ScoringMode,
 )
-from mcp_search_hub.query_routing.enhanced_router import EnhancedQueryRouter
+from mcp_search_hub.query_routing.router import QueryRouter
 
 
 class MockProvider:
@@ -109,12 +109,12 @@ def performance_metrics():
     }
 
 
-class TestEnhancedQueryRouter:
-    """Test the enhanced query router."""
+class TestQueryRouter:
+    """Test the query router."""
 
     def test_academic_query_routing(self, mock_providers, performance_metrics):
         """Test routing for academic queries."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         query = SearchQuery(query="research papers on quantum computing")
         features = QueryFeatures(
@@ -146,7 +146,7 @@ class TestEnhancedQueryRouter:
 
     def test_news_query_routing(self, mock_providers, performance_metrics):
         """Test routing for news queries."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         query = SearchQuery(query="latest news on AI regulation")
         features = QueryFeatures(
@@ -174,7 +174,7 @@ class TestEnhancedQueryRouter:
 
     def test_business_query_routing(self, mock_providers, performance_metrics):
         """Test routing for business queries."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         query = SearchQuery(query="Tesla company financial performance Q4 2024")
         features = QueryFeatures(
@@ -194,7 +194,7 @@ class TestEnhancedQueryRouter:
 
     def test_technical_query_routing(self, mock_providers, performance_metrics):
         """Test routing for technical queries."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         query = SearchQuery(query="Python asyncio documentation examples")
         features = QueryFeatures(
@@ -214,7 +214,7 @@ class TestEnhancedQueryRouter:
 
     def test_web_content_query_routing(self, mock_providers, performance_metrics):
         """Test routing for web content extraction."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         query = SearchQuery(query="extract content from example.com/article")
         features = QueryFeatures(
@@ -263,7 +263,7 @@ class TestEnhancedQueryRouter:
             "provider2": MockProvider("provider2", {"content_types": ["general"]}),
         }
 
-        router = EnhancedQueryRouter(providers, good_metrics)
+        router = QueryRouter(providers, good_metrics)
 
         query = SearchQuery(query="test query")
         features = QueryFeatures(
@@ -292,7 +292,7 @@ class TestEnhancedQueryRouter:
 
     def test_confidence_calculation(self, mock_providers, performance_metrics):
         """Test confidence score calculation."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         query = SearchQuery(query="specific academic research query")
         features = QueryFeatures(
@@ -316,7 +316,7 @@ class TestEnhancedQueryRouter:
 
     def test_budget_aware_selection(self, mock_providers, performance_metrics):
         """Test provider selection with budget constraints."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         query = SearchQuery(query="budget constrained query")
         features = QueryFeatures(
@@ -358,7 +358,7 @@ class TestEnhancedQueryRouter:
 
     def test_provider_ranking(self, mock_providers, performance_metrics):
         """Test getting full provider ranking."""
-        router = EnhancedQueryRouter(mock_providers, performance_metrics)
+        router = QueryRouter(mock_providers, performance_metrics)
 
         features = QueryFeatures(
             content_type="academic",
@@ -385,7 +385,7 @@ class TestEnhancedQueryRouter:
 
     def test_query_with_no_clear_winner(self, mock_providers):
         """Test query where multiple providers have similar scores."""
-        router = EnhancedQueryRouter(mock_providers, {})
+        router = QueryRouter(mock_providers, {})
 
         query = SearchQuery(query="general information query")
         features = QueryFeatures(
@@ -409,7 +409,7 @@ class TestEnhancedQueryRouter:
 
     def test_empty_providers(self):
         """Test behavior with no providers."""
-        router = EnhancedQueryRouter({}, {})
+        router = QueryRouter({}, {})
 
         query = SearchQuery(query="test")
         features = QueryFeatures(
@@ -429,7 +429,7 @@ class TestEnhancedQueryRouter:
 
     def test_update_performance_metrics(self, mock_providers):
         """Test updating performance metrics."""
-        router = EnhancedQueryRouter(mock_providers, {})
+        router = QueryRouter(mock_providers, {})
 
         # Initially no metrics
         assert "exa" not in router.performance_metrics
