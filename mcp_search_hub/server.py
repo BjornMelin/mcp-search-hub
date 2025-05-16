@@ -12,6 +12,10 @@ from .config import get_settings
 from .models.base import HealthResponse, HealthStatus, MetricsResponse, ProviderStatus
 from .models.query import SearchQuery
 from .models.results import CombinedSearchResponse, SearchResponse
+from .models.router import (
+    CascadeExecutionPolicy,
+    TimeoutConfig,
+)
 from .providers.base import SearchProvider
 from .providers.exa_mcp import ExaProvider
 from .providers.firecrawl_mcp import FirecrawlProvider
@@ -19,6 +23,7 @@ from .providers.linkup_mcp import LinkupProvider
 from .providers.perplexity_mcp import PerplexityProvider
 from .providers.tavily_mcp import TavilyProvider
 from .query_routing.analyzer import QueryAnalyzer
+from .query_routing.cascade_router import CascadeRouter
 from .query_routing.router import QueryRouter
 from .result_processing.merger import ResultMerger
 from .utils.cache import QueryCache
@@ -74,6 +79,16 @@ class SearchServer:
         # Initialize components
         self.analyzer = QueryAnalyzer()
         self.router = QueryRouter(self.providers)
+
+        # Initialize cascade router with default configuration
+        timeout_config = TimeoutConfig()
+        cascade_policy = CascadeExecutionPolicy()
+        self.cascade_router = CascadeRouter(
+            providers=self.providers,
+            timeout_config=timeout_config,
+            execution_policy=cascade_policy,
+        )
+
         self.merger = ResultMerger()
         self.cache = QueryCache(ttl=get_settings().cache_ttl)
         self.metrics = MetricsTracker()
@@ -182,54 +197,97 @@ class SearchServer:
 
             await ctx.info(f"Selected providers: {', '.join(providers_to_use)}")
 
-            # Execute search with selected providers
-            provider_tasks = {}
-            for provider_name in providers_to_use:
-                if provider_name in self.providers:
-                    provider = self.providers[provider_name]
-                    provider_tasks[provider_name] = asyncio.create_task(
-                        provider.search(query)
-                    )
-
-            # Wait for all searches to complete with timeout
-            timeout_sec = query.timeout_ms / 1000
+            # Execute search with timeout
             try:
-                done, pending = await asyncio.wait(
-                    provider_tasks.values(), timeout=timeout_sec
+                # Determine execution mode based on query characteristics
+                use_cascade = self._should_use_cascade(
+                    query, features, providers_to_use
                 )
 
-                # Cancel any pending tasks
-                for task in pending:
-                    task.cancel()
+                if use_cascade:
+                    await ctx.info("Using cascade routing for enhanced reliability")
+                    # Execute providers in cascade mode
+                    execution_results = await self.cascade_router.execute_cascade(
+                        query=query,
+                        features=features,
+                        selected_providers=providers_to_use,
+                    )
 
-                # Collect results
-                provider_results = {}
-                successful_providers = set()
-                for provider_name, task in provider_tasks.items():
-                    if task in done and not task.exception():
-                        provider_results[provider_name] = task.result()
-                        successful_providers.add(provider_name)
-                    else:
-                        # Handle errors or timeouts
-                        if task.exception():
-                            await ctx.error(
-                                f"Provider {provider_name} error: {str(task.exception())}"
-                            )
-                            self.metrics.record_error()
+                    # Convert cascade results to provider results format
+                    provider_results = {}
+                    successful_providers = set()
+
+                    for provider_name, result in execution_results.items():
+                        if result.success and result.response:
+                            provider_results[provider_name] = result.response
+                            successful_providers.add(provider_name)
                         else:
-                            await ctx.warn(f"Provider {provider_name} timed out")
-                            self.metrics.record_error()
+                            # Create empty response for failed providers
+                            provider_results[provider_name] = SearchResponse(
+                                results=[],
+                                query=query.query,
+                                total_results=0,
+                                provider=provider_name,
+                                error=result.error or "Failed",
+                                timing_ms=result.duration_ms,
+                            )
 
-                        # Create empty response for failed providers
-                        provider_results[provider_name] = SearchResponse(
-                            results=[],
-                            query=query.query,
-                            total_results=0,
-                            provider=provider_name,
-                            error="Timeout or error",
-                        )
+                    # Log cascade execution details
+                    primary_success = any(
+                        r.is_primary and r.success for r in execution_results.values()
+                    )
+                    await ctx.info(
+                        f"Cascade result: primary_success={primary_success}, total_success={len(successful_providers)}"
+                    )
 
-                # Merge and rank results
+                else:
+                    # Execute all providers in parallel (original behavior)
+                    provider_tasks = {}
+                    for provider_name in providers_to_use:
+                        if provider_name in self.providers:
+                            provider = self.providers[provider_name]
+                            provider_tasks[provider_name] = asyncio.create_task(
+                                provider.search(query)
+                            )
+
+                    # Wait for all searches to complete with timeout
+                    timeout_sec = query.timeout_ms / 1000
+                    done, pending = await asyncio.wait(
+                        provider_tasks.values(), timeout=timeout_sec
+                    )
+
+                    # Cancel any pending tasks
+                    for task in pending:
+                        task.cancel()
+
+                    # Collect results
+                    provider_results = {}
+                    successful_providers = set()
+                    for provider_name, task in provider_tasks.items():
+                        if task in done and not task.exception():
+                            provider_results[provider_name] = task.result()
+                            successful_providers.add(provider_name)
+                        else:
+                            # Handle errors or timeouts
+                            if task.exception():
+                                await ctx.error(
+                                    f"Provider {provider_name} error: {str(task.exception())}"
+                                )
+                                self.metrics.record_error()
+                            else:
+                                await ctx.warn(f"Provider {provider_name} timed out")
+                                self.metrics.record_error()
+
+                            # Create empty response for failed providers
+                            provider_results[provider_name] = SearchResponse(
+                                results=[],
+                                query=query.query,
+                                total_results=0,
+                                provider=provider_name,
+                                error="Timeout or error",
+                            )
+
+                # Merge and rank results (common for both cascade and parallel)
                 combined_results = self.merger.merge_results(
                     provider_results,
                     max_results=query.max_results,
@@ -674,6 +732,29 @@ class SearchServer:
                         "options": {"extractDepth": extract_depth, **kwargs},
                     },
                 )
+
+    def _should_use_cascade(
+        self,
+        query: SearchQuery,
+        features,
+        providers: list[str],
+    ) -> bool:
+        """Determine whether to use cascade execution based on query characteristics."""
+        # Use cascade for:
+        # 1. Single provider queries (for reliability)
+        if len(providers) == 1:
+            return True
+
+        # 2. High-importance/complexity queries
+        if features.complexity > 0.7:
+            return True
+
+        # 3. Queries explicitly requesting high reliability
+        if query.advanced and query.advanced.get("use_cascade", False):
+            return True
+
+        # 4. Queries with web content extraction (often need fallbacks)
+        return features.content_type == "web_content"
 
     async def close(self):
         """Close all provider connections."""
