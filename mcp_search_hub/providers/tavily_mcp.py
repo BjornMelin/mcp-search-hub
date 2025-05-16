@@ -3,301 +3,303 @@ Tavily MCP wrapper provider that embeds the official tavily-mcp server.
 """
 
 import logging
-import os
-import subprocess
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-from ..models.base import HealthStatus
 from ..models.query import SearchQuery
-from ..models.results import SearchResponse, SearchResult
-from ..utils.errors import ProviderError
-from .base import SearchProvider
+from ..models.results import SearchResult
+from .base_mcp import BaseMCPProvider, ServerType
 
 logger = logging.getLogger(__name__)
 
 
-class TavilyMCPProvider:
-    """Wrapper for the Tavily MCP server using MCP Python SDK."""
+class TavilyMCPProvider(BaseMCPProvider):
+    """Wrapper for the Tavily MCP server using unified base class."""
 
     def __init__(self, api_key: str | None = None):
-        """Initialize the Tavily MCP provider with configuration."""
-        self.api_key = api_key or os.getenv("TAVILY_API_KEY")
-        if not self.api_key:
-            raise ValueError("Tavily API key is required")
-
-        self.session: ClientSession | None = None
-        self.server_params = StdioServerParameters(
-            command="npx",
-            args=["-y", "tavily-mcp@0.2.0"],
-            env={"TAVILY_API_KEY": self.api_key, **os.environ},
+        super().__init__(
+            name="tavily",
+            api_key=api_key,
+            env_var_name="TAVILY_API_KEY",
+            server_type=ServerType.NODE_JS,
+            args=["tavily-mcp@0.2.0"],
+            tool_name="tavily_search",
+            api_timeout=10000,
         )
 
-    async def _check_installation(self) -> bool:
-        """Check if the Tavily MCP server is installed."""
-        try:
-            # Check if the package is installed
-            result = subprocess.run(
-                ["npx", "-y", "tavily-mcp@0.2.0", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
+    def _prepare_search_params(self, query: SearchQuery) -> dict[str, Any]:
+        """Prepare parameters for Tavily search."""
+        params = {
+            "query": query.query,
+            "max_results": query.max_results,
+            "search_depth": "basic",  # Default search depth
+            "include_raw_content": query.raw_content,
+        }
 
-    async def _install_server(self) -> None:
-        """Install the Tavily MCP server."""
-        logger.info("Installing Tavily MCP server...")
-        try:
-            install_result = subprocess.run(
-                ["npm", "install", "-g", "tavily-mcp@0.2.0"],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
-            )
-            if install_result.returncode != 0:
-                raise ProviderError(
-                    f"Failed to install Tavily MCP server: {install_result.stderr}"
-                )
-            logger.info("Tavily MCP server installed successfully")
-        except subprocess.TimeoutExpired:
-            raise ProviderError("Installation timed out after 60 seconds")
-        except Exception as e:
-            raise ProviderError(f"Failed to install Tavily MCP server: {e}")
+        # Add advanced search options if present
+        if query.advanced:
+            # Tavily supports advanced search depth
+            if "search_depth" in query.advanced:
+                params["search_depth"] = query.advanced["search_depth"]
+            elif query.advanced.get("deep_search", False):
+                params["search_depth"] = "advanced"
 
-    async def initialize(self):
-        """Initialize the connection to Tavily MCP server."""
-        try:
-            # Check if the Tavily MCP server is installed
-            if not await self._check_installation():
-                await self._install_server()
+            # Domain filtering
+            if "include_domains" in query.advanced:
+                params["include_domains"] = query.advanced["include_domains"]
+            if "exclude_domains" in query.advanced:
+                params["exclude_domains"] = query.advanced["exclude_domains"]
 
-            # Connect to the server
-            read_stream, write_stream = await stdio_client(self.server_params)
-            self.session = await ClientSession(read_stream, write_stream).__aenter__()
-            logger.info("Connected to Tavily MCP server")
+            # Time range filtering
+            if "time_range" in query.advanced:
+                params["time_range"] = query.advanced["time_range"]
 
-            # Verify server is ready
-            server_info = await self.session.get_server_info()
-            logger.info(f"Tavily MCP server info: {server_info}")
+            # Topic filtering
+            if "topic" in query.advanced:
+                params["topic"] = query.advanced["topic"]
 
-        except Exception as e:
-            logger.error(f"Failed to initialize Tavily MCP provider: {e}")
-            raise ProviderError(f"Failed to initialize Tavily MCP provider: {e}")
+        return params
 
-    async def close(self):
-        """Close the connection to Tavily MCP server."""
-        if self.session:
-            await self.session.__aexit__(None, None, None)
-            self.session = None
-
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
-        """Call a tool on the Tavily MCP server."""
-        if not self.session:
-            await self.initialize()
+    def _process_search_results(
+        self, result: Any, query: SearchQuery
+    ) -> list[SearchResult]:
+        """Process Tavily search results into standardized format."""
+        search_results = []
 
         try:
-            return await self.session.call_tool(tool_name, arguments=arguments)
-        except Exception as e:
-            logger.error(f"Error calling tool {tool_name}: {e}")
-            raise ProviderError(f"Failed to call Tavily tool {tool_name}: {e}")
+            # Handle Tavily MCP server response format
+            if hasattr(result, "content") and result.content:
+                if isinstance(result.content, list):
+                    for item in result.content:
+                        if hasattr(item, "text") and item.text:
+                            # Parse the text content for search results
+                            text_data = item.text
 
-    async def list_tools(self) -> list[dict[str, Any]]:
-        """List available tools from the Tavily MCP server."""
-        if not self.session:
-            await self.initialize()
+                            # Tavily returns JSON-structured results
+                            if isinstance(text_data, dict) and "results" in text_data:
+                                for result_item in text_data["results"]:
+                                    # Extract content based on raw_content request
+                                    content = ""
+                                    if (
+                                        query.raw_content
+                                        and "raw_content" in result_item
+                                    ):
+                                        content = result_item["raw_content"]
+                                    else:
+                                        content = result_item.get(
+                                            "content", result_item.get("snippet", "")
+                                        )
 
-        try:
-            tools = await self.session.list_tools()
-            return [tool.model_dump() for tool in tools]
-        except Exception as e:
-            logger.error(f"Error listing tools: {e}")
-            raise ProviderError(f"Failed to list Tavily tools: {e}")
-
-
-class TavilyProvider(SearchProvider):
-    """Search provider that uses the Tavily MCP server for search and content extraction."""
-
-    name = "tavily"
-
-    def __init__(self, config: dict[str, Any] = None):
-        """Initialize the Tavily search provider."""
-        super().__init__()
-        config = config or {}
-        self.api_key = config.get("tavily_api_key", os.getenv("TAVILY_API_KEY"))
-        self.mcp_wrapper = TavilyMCPProvider(api_key=self.api_key)
-        self._initialized = False
-
-    async def _ensure_initialized(self) -> None:
-        """Ensure the MCP client is initialized."""
-        if not self._initialized:
-            await self.mcp_wrapper.initialize()
-            self._initialized = True
-
-    async def search(self, query: SearchQuery) -> SearchResponse:
-        """
-        Execute a search using the tavily-search tool.
-
-        This method provides search functionality through the Tavily MCP server.
-        """
-        await self._ensure_initialized()
-
-        try:
-            # Use tavily-search for search functionality
-            search_depth = "advanced" if query.advanced else "basic"
-
-            result = await self.mcp_wrapper.call_tool(
-                "tavily-search",
-                {
-                    "query": query.query,
-                    "options": {
-                        "searchDepth": search_depth,
-                        "maxResults": query.max_results,
-                        "includeRawContent": query.raw_content,
-                        "includeImages": False,
-                    },
-                },
-            )
-
-            # Parse the result and format it as search results
-            results = []
-
-            # Process the results based on the MCP response format
-            if isinstance(result, dict) and "content" in result:
-                content_items = result.get("content", [])
-                for item in content_items:
-                    if item.get("type") == "text" and item.get("text"):
-                        # Parse the text content
-                        try:
-                            import json
-
-                            search_data = json.loads(item.get("text"))
-
-                            if "results" in search_data:
-                                for idx, result_item in enumerate(
-                                    search_data["results"][: query.max_results]
-                                ):
-                                    search_result = SearchResult(
-                                        title=result_item.get("title", ""),
-                                        url=result_item.get("url", ""),
-                                        snippet=result_item.get("content", ""),
-                                        source="tavily",
-                                        score=1.0
-                                        - (idx * 0.05),  # Decreasing score by position
-                                        raw_content=result_item.get("raw_content", "")
-                                        if query.raw_content
-                                        else None,
-                                        metadata={
-                                            "domain": result_item.get("domain", ""),
-                                            "published_date": result_item.get(
-                                                "published_date", ""
-                                            ),
-                                        },
+                                    search_results.append(
+                                        SearchResult(
+                                            title=result_item.get("title", ""),
+                                            url=result_item.get("url", ""),
+                                            snippet=result_item.get("snippet", ""),
+                                            source=self.name,
+                                            score=float(
+                                                result_item.get("relevance_score", 1.0)
+                                            )
+                                            if result_item.get("relevance_score")
+                                            else 1.0,
+                                            raw_content=content,
+                                            metadata={
+                                                "domain": result_item.get("domain"),
+                                                "published_date": result_item.get(
+                                                    "published_date"
+                                                ),
+                                                "relevance_score": result_item.get(
+                                                    "relevance_score"
+                                                ),
+                                                "content_type": result_item.get(
+                                                    "content_type"
+                                                ),
+                                            },
+                                        )
                                     )
-                                    results.append(search_result)
-                        except (json.JSONDecodeError, ValueError):
-                            # If we can't parse JSON, use the raw text as a single result
-                            search_result = SearchResult(
-                                title=f"Tavily Search: {query.query[:50]}...",
-                                url="https://tavily.com",
-                                snippet=item.get("text", "")[:200] + "..."
-                                if len(item.get("text", "")) > 200
-                                else item.get("text", ""),
-                                source="tavily",
-                                score=1.0,
-                                raw_content=item.get("text", "")
-                                if query.raw_content
-                                else None,
-                                metadata={},
-                            )
-                            results.append(search_result)
+                            elif isinstance(text_data, str):
+                                # Try parsing as formatted text response
+                                import json
 
-            return SearchResponse(
-                results=results[: query.max_results],
-                query=query.query,
-                total_results=len(results),
-                provider="tavily",
-                timing_ms=0,  # MCP doesn't provide timing info
-            )
+                                try:
+                                    # Tavily might return JSON string
+                                    json_data = json.loads(text_data)
+                                    if (
+                                        isinstance(json_data, dict)
+                                        and "results" in json_data
+                                    ):
+                                        for result_item in json_data["results"]:
+                                            content = ""
+                                            if (
+                                                query.raw_content
+                                                and "raw_content" in result_item
+                                            ):
+                                                content = result_item["raw_content"]
+                                            else:
+                                                content = result_item.get(
+                                                    "content",
+                                                    result_item.get("snippet", ""),
+                                                )
+
+                                            search_results.append(
+                                                SearchResult(
+                                                    title=result_item.get("title", ""),
+                                                    url=result_item.get("url", ""),
+                                                    snippet=result_item.get(
+                                                        "snippet", ""
+                                                    ),
+                                                    source=self.name,
+                                                    score=float(
+                                                        result_item.get(
+                                                            "relevance_score", 1.0
+                                                        )
+                                                    )
+                                                    if result_item.get(
+                                                        "relevance_score"
+                                                    )
+                                                    else 1.0,
+                                                    raw_content=content,
+                                                    metadata={
+                                                        "domain": result_item.get(
+                                                            "domain"
+                                                        ),
+                                                        "published_date": result_item.get(
+                                                            "published_date"
+                                                        ),
+                                                        "relevance_score": result_item.get(
+                                                            "relevance_score"
+                                                        ),
+                                                        "content_type": result_item.get(
+                                                            "content_type"
+                                                        ),
+                                                    },
+                                                )
+                                            )
+                                except json.JSONDecodeError:
+                                    # Fall back to text parsing
+                                    lines = text_data.split("\n")
+                                    current_result = {}
+
+                                    for line in lines:
+                                        line = line.strip()
+                                        if line.startswith("Title:"):
+                                            if current_result:
+                                                search_results.append(
+                                                    SearchResult(
+                                                        title=current_result.get(
+                                                            "title", ""
+                                                        ),
+                                                        url=current_result.get(
+                                                            "url", ""
+                                                        ),
+                                                        snippet=current_result.get(
+                                                            "snippet", ""
+                                                        ),
+                                                        source=self.name,
+                                                        score=float(
+                                                            current_result.get(
+                                                                "metadata", {}
+                                                            ).get(
+                                                                "relevance_score", 1.0
+                                                            )
+                                                        )
+                                                        if current_result.get(
+                                                            "metadata", {}
+                                                        ).get("relevance_score")
+                                                        else 1.0,
+                                                        raw_content=current_result.get(
+                                                            "content", ""
+                                                        ),
+                                                        metadata=current_result.get(
+                                                            "metadata", {}
+                                                        ),
+                                                    )
+                                                )
+                                            current_result = {"title": line[6:].strip()}
+                                        elif line.startswith("URL:"):
+                                            current_result["url"] = line[4:].strip()
+                                        elif line.startswith("Content:"):
+                                            current_result["content"] = line[8:].strip()
+                                        elif line.startswith("Snippet:"):
+                                            current_result["snippet"] = line[8:].strip()
+                                        elif line.startswith("Domain:"):
+                                            current_result.setdefault("metadata", {})[
+                                                "domain"
+                                            ] = line[7:].strip()
+                                        elif line.startswith("Date:"):
+                                            current_result.setdefault("metadata", {})[
+                                                "published_date"
+                                            ] = line[5:].strip()
+                                        elif line.startswith("Score:"):
+                                            current_result.setdefault("metadata", {})[
+                                                "relevance_score"
+                                            ] = line[6:].strip()
+
+                                    # Add the last result
+                                    if current_result:
+                                        search_results.append(
+                                            SearchResult(
+                                                title=current_result.get("title", ""),
+                                                url=current_result.get("url", ""),
+                                                snippet=current_result.get(
+                                                    "snippet", ""
+                                                ),
+                                                source=self.name,
+                                                score=float(
+                                                    current_result.get(
+                                                        "metadata", {}
+                                                    ).get("relevance_score", 1.0)
+                                                )
+                                                if current_result.get(
+                                                    "metadata", {}
+                                                ).get("relevance_score")
+                                                else 1.0,
+                                                raw_content=current_result.get(
+                                                    "content", ""
+                                                ),
+                                                metadata=current_result.get(
+                                                    "metadata", {}
+                                                ),
+                                            )
+                                        )
 
         except Exception as e:
-            logger.error(f"Tavily search error: {e}")
-            # Return error response
-            return SearchResponse(
-                results=[],
-                query=query.query,
-                total_results=0,
-                provider="tavily",
-                error=str(e),
-            )
+            logger.error(f"Error processing Tavily search results: {str(e)}")
 
-    async def extract_content(self, url: str, **kwargs) -> dict[str, Any]:
-        """
-        Extract content from a URL using the tavily-extract tool.
-
-        Args:
-            url: The URL to extract content from
-            **kwargs: Additional options for extraction
-        """
-        await self._ensure_initialized()
-
-        options = {"extractDepth": "advanced", **kwargs}
-        return await self.mcp_wrapper.call_tool(
-            "tavily-extract",
-            {"urls": [url] if isinstance(url, str) else url, "options": options},
-        )
+        return search_results
 
     def get_capabilities(self) -> dict[str, Any]:
-        """Return Tavily capabilities."""
+        """Return Tavily provider capabilities."""
         return {
-            "content_types": ["general", "technical", "news", "academic"],
-            "features": {
-                "rag_optimized": True,
-                "content_extraction": True,
-                "advanced_search": True,
-            },
-            "quality_metrics": {
-                "rag_score": 0.88,
-                "extraction_quality": 0.92,
-            },
+            "name": self.name,
+            "supports_raw_content": True,
+            "supports_advanced_search": True,
+            "max_results_per_query": 20,
+            "features": [
+                "basic_search",
+                "advanced_search",
+                "domain_filtering",
+                "time_range_filtering",
+                "topic_categorization",
+                "content_extraction",
+                "news_search",
+                "relevance_scoring",
+            ],
         }
 
     def estimate_cost(self, query: SearchQuery) -> float:
-        """Estimate the cost of executing the query."""
-        # Tavily costs ~$0.01 per basic search
-        # ~$0.02 per advanced search
-        return 0.02 if query.advanced else 0.01
+        """Estimate the cost of a Tavily search query."""
+        # Tavily pricing model (approximate)
+        base_cost = 0.005  # Base cost per search
 
-    async def check_status(self) -> tuple[HealthStatus, str]:
-        """Check the status of the Tavily provider."""
-        try:
-            await self._ensure_initialized()
-            # Try to list tools to verify connection
-            tools = await self.mcp_wrapper.list_tools()
-            if tools:
-                return HealthStatus.OK, "Tavily provider is operational"
-            return (
-                HealthStatus.DEGRADED,
-                "No tools available from Tavily MCP server",
-            )
-        except Exception as e:
-            logger.error(f"Tavily health check failed: {e}")
-            return HealthStatus.FAILED, f"Health check failed: {str(e)}"
+        # Additional cost for advanced search
+        search_cost = base_cost
+        if query.advanced and query.advanced.get("search_depth") == "advanced":
+            search_cost = 0.015
 
-    async def cleanup(self):
-        """Clean up resources."""
-        await self.mcp_wrapper.close()
-        self._initialized = False
+        # Additional cost for more results
+        results_cost = query.max_results * 0.0002
 
-    async def __aenter__(self):
-        await self._ensure_initialized()
-        return self
+        # Additional cost for raw content
+        if query.raw_content:
+            results_cost *= 1.5
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.cleanup()
+        return search_cost + results_cost

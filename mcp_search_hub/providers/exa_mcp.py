@@ -3,268 +3,204 @@ Exa MCP wrapper provider that embeds the official exa-mcp-server.
 """
 
 import logging
-import os
-import subprocess
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-from ..models.base import HealthStatus
 from ..models.query import SearchQuery
-from ..models.results import SearchResponse, SearchResult
-from ..utils.errors import ProviderError
-from .base import SearchProvider
+from ..models.results import SearchResult
+from .base_mcp import BaseMCPProvider, ServerType
 
 logger = logging.getLogger(__name__)
 
 
-class ExaMCPProvider:
-    """Wrapper for the Exa MCP server using MCP Python SDK."""
+class ExaMCPProvider(BaseMCPProvider):
+    """Wrapper for the Exa MCP server using unified base class."""
 
     def __init__(self, api_key: str | None = None):
-        """Initialize the Exa MCP provider with configuration."""
-        self.api_key = api_key or os.getenv("EXA_API_KEY")
-        if not self.api_key:
-            raise ValueError("Exa API key is required")
-
-        self.session: ClientSession | None = None
-        self.server_params = StdioServerParameters(
-            command="npx",
-            args=["@modelcontextprotocol/server-exa"],
-            env={"EXA_API_KEY": self.api_key, **os.environ},
+        super().__init__(
+            name="exa",
+            api_key=api_key,
+            env_var_name="EXA_API_KEY",
+            server_type=ServerType.NODE_JS,
+            args=["exa-mcp-server"],
+            tool_name="web_search_exa",
+            api_timeout=15000,
         )
 
-    async def initialize(self):
-        """Initialize the connection to Exa MCP server."""
-        try:
-            # Check if the Exa MCP server is installed
-            result = subprocess.run(
-                ["npx", "@modelcontextprotocol/server-exa", "--version"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if result.returncode != 0:
-                # Install it if not present
-                logger.info("Installing Exa MCP server...")
-                install_result = subprocess.run(
-                    ["npm", "install", "-g", "@modelcontextprotocol/server-exa"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if install_result.returncode != 0:
-                    raise ProviderError(
-                        f"Failed to install Exa MCP server: {install_result.stderr}"
-                    )
-                logger.info("Exa MCP server installed successfully")
+    def _prepare_search_params(self, query: SearchQuery) -> dict[str, Any]:
+        """Prepare parameters for Exa search."""
+        params = {
+            "query": query.query,
+            "numResults": query.max_results,
+        }
 
-            # Connect to the server
-            read_stream, write_stream = await stdio_client(self.server_params)
-            self.session = await ClientSession(read_stream, write_stream).__aenter__()
-            logger.info("Connected to Exa MCP server")
+        # Add advanced search options if present
+        if query.advanced:
+            if "contents" in query.advanced:
+                params["contents"] = query.advanced["contents"]
+            if "startPublishedDate" in query.advanced:
+                params["startPublishedDate"] = query.advanced["startPublishedDate"]
+            if "highlights" in query.advanced:
+                params["highlights"] = query.advanced["highlights"]
 
-            # Verify server is ready
-            server_info = await self.session.get_server_info()
-            logger.info(f"Exa MCP server info: {server_info}")
+        return params
 
-        except Exception as e:
-            logger.error(f"Failed to initialize Exa MCP provider: {e}")
-            raise ProviderError(f"Failed to initialize Exa MCP provider: {e}")
-
-    async def close(self):
-        """Close the connection to Exa MCP server."""
-        if self.session:
-            await self.session.__aexit__(None, None, None)
-            self.session = None
-
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
-        """Call a tool on the Exa MCP server."""
-        if not self.session:
-            await self.initialize()
+    def _process_search_results(
+        self, result: Any, query: SearchQuery
+    ) -> list[SearchResult]:
+        """Process Exa search results into standardized format."""
+        search_results = []
 
         try:
-            return await self.session.call_tool(tool_name, arguments=arguments)
+            # Handle Exa MCP server response format
+            if hasattr(result, "content") and result.content:
+                if isinstance(result.content, list):
+                    for item in result.content:
+                        if hasattr(item, "text") and item.text:
+                            # Parse the text content for search results
+                            text_data = item.text
+
+                            # Exa returns a formatted string or JSON, parse accordingly
+                            if isinstance(text_data, str) and "results:" in text_data:
+                                # Parse formatted string response
+                                lines = text_data.split("\n")
+                                current_result = {}
+
+                                for line in lines:
+                                    line = line.strip()
+                                    if line.startswith("Title:"):
+                                        if current_result:
+                                            search_results.append(
+                                                SearchResult(
+                                                    title=current_result.get(
+                                                        "title", ""
+                                                    ),
+                                                    url=current_result.get("url", ""),
+                                                    snippet=current_result.get(
+                                                        "excerpt", ""
+                                                    ),
+                                                    source=self.name,
+                                                    score=float(
+                                                        current_result.get(
+                                                            "metadata", {}
+                                                        ).get("score", 1.0)
+                                                    )
+                                                    if current_result.get(
+                                                        "metadata", {}
+                                                    ).get("score")
+                                                    else 1.0,
+                                                    raw_content=current_result.get(
+                                                        "content"
+                                                    ),
+                                                    metadata=current_result.get(
+                                                        "metadata", {}
+                                                    ),
+                                                )
+                                            )
+                                        current_result = {"title": line[6:].strip()}
+                                    elif line.startswith("URL:"):
+                                        current_result["url"] = line[4:].strip()
+                                    elif line.startswith("Excerpt:"):
+                                        current_result["excerpt"] = line[8:].strip()
+                                        current_result["content"] = line[8:].strip()
+                                    elif line.startswith("Published Date:"):
+                                        current_result.setdefault("metadata", {})[
+                                            "publishedDate"
+                                        ] = line[14:].strip()
+                                    elif line.startswith("Author:"):
+                                        current_result.setdefault("metadata", {})[
+                                            "author"
+                                        ] = line[7:].strip()
+                                    elif line.startswith("Score:"):
+                                        current_result.setdefault("metadata", {})[
+                                            "score"
+                                        ] = line[6:].strip()
+
+                                # Add the last result
+                                if current_result:
+                                    search_results.append(
+                                        SearchResult(
+                                            title=current_result.get("title", ""),
+                                            url=current_result.get("url", ""),
+                                            snippet=current_result.get("excerpt", ""),
+                                            source=self.name,
+                                            score=float(
+                                                current_result.get("metadata", {}).get(
+                                                    "score", 1.0
+                                                )
+                                            )
+                                            if current_result.get("metadata", {}).get(
+                                                "score"
+                                            )
+                                            else 1.0,
+                                            raw_content=current_result.get("content"),
+                                            metadata=current_result.get("metadata", {}),
+                                        )
+                                    )
+
+                            elif isinstance(text_data, dict) and "results" in text_data:
+                                # Parse JSON response format
+                                for result_item in text_data["results"]:
+                                    search_results.append(
+                                        SearchResult(
+                                            title=result_item.get("title", ""),
+                                            url=result_item.get("url", ""),
+                                            snippet=result_item.get(
+                                                "excerpt", result_item.get("text", "")
+                                            ),
+                                            source=self.name,
+                                            score=float(result_item.get("score", 1.0))
+                                            if result_item.get("score")
+                                            else 1.0,
+                                            raw_content=result_item.get(
+                                                "text", result_item.get("excerpt", "")
+                                            ),
+                                            metadata={
+                                                "publishedDate": result_item.get(
+                                                    "publishedDate"
+                                                ),
+                                                "author": result_item.get("author"),
+                                                "score": result_item.get("score"),
+                                            },
+                                        )
+                                    )
+
         except Exception as e:
-            logger.error(f"Error calling tool {tool_name}: {e}")
-            raise ProviderError(f"Failed to call Exa tool {tool_name}: {e}")
+            logger.error(f"Error processing Exa search results: {str(e)}")
 
-    async def list_tools(self) -> list[dict[str, Any]]:
-        """List available tools from the Exa MCP server."""
-        if not self.session:
-            await self.initialize()
-
-        try:
-            tools = await self.session.list_tools()
-            return [tool.model_dump() for tool in tools]
-        except Exception as e:
-            logger.error(f"Error listing tools: {e}")
-            raise ProviderError(f"Failed to list Exa tools: {e}")
-
-
-class ExaProvider(SearchProvider):
-    """Search provider that uses the Exa MCP server for advanced search capabilities."""
-
-    name = "exa"
-
-    def __init__(self, config: dict[str, Any]):
-        """Initialize the Exa search provider."""
-        super().__init__()
-        self.api_key = config.get("exa_api_key", "")
-        self.mcp_wrapper = ExaMCPProvider(api_key=self.api_key)
-        self._initialized = False
-
-    async def _ensure_initialized(self) -> None:
-        """Ensure the MCP client is initialized."""
-        if not self._initialized:
-            await self.mcp_wrapper.initialize()
-            self._initialized = True
-
-    async def search(self, query: SearchQuery) -> SearchResponse:
-        """
-        Execute a search using the web_search_exa tool.
-
-        This method provides basic search functionality through the Exa MCP server.
-        """
-        await self._ensure_initialized()
-
-        try:
-            # Use web_search_exa for general search functionality
-            result = await self.mcp_wrapper.call_tool(
-                "web_search_exa", {"query": query.query, "limit": query.max_results}
-            )
-
-            # Parse the result and format it as search results
-            results = []
-            if isinstance(result, dict) and "results" in result:
-                raw_results = result["results"]
-                if isinstance(raw_results, list):
-                    for item in raw_results[: query.max_results]:
-                        search_result = SearchResult(
-                            title=item.get("title", ""),
-                            url=item.get("url", ""),
-                            snippet=item.get("snippet", ""),
-                            content=item.get("text", "") if query.raw_content else "",
-                            source="exa",
-                            score=item.get("score", 0.0),
-                            metadata={
-                                "published_date": item.get("publishedDate", ""),
-                                "author": item.get("author", ""),
-                            },
-                        )
-                        results.append(search_result)
-
-            return SearchResponse(
-                results=results,
-                query=query.query,
-                total_results=len(results),
-                provider="exa",
-                timing_ms=0,  # MCP doesn't provide timing info
-            )
-
-        except Exception as e:
-            logger.error(f"Exa search error: {e}")
-            # Return error response
-            return SearchResponse(
-                results=[],
-                query=query.query,
-                total_results=0,
-                provider="exa",
-                error=str(e),
-            )
-
-    async def research_papers(self, query: str, **kwargs) -> list[dict[str, Any]]:
-        """Search for research papers using Exa."""
-        await self._ensure_initialized()
-        return await self.mcp_wrapper.call_tool(
-            "research_paper_search", {"query": query, **kwargs}
-        )
-
-    async def company_research(self, query: str, **kwargs) -> list[dict[str, Any]]:
-        """Research companies using Exa."""
-        await self._ensure_initialized()
-        return await self.mcp_wrapper.call_tool(
-            "company_research", {"query": query, **kwargs}
-        )
-
-    async def competitor_finder(self, company: str, **kwargs) -> list[dict[str, Any]]:
-        """Find competitors for a company using Exa."""
-        await self._ensure_initialized()
-        return await self.mcp_wrapper.call_tool(
-            "competitor_finder", {"company": company, **kwargs}
-        )
-
-    async def linkedin_search(self, query: str, **kwargs) -> list[dict[str, Any]]:
-        """Search LinkedIn using Exa."""
-        await self._ensure_initialized()
-        return await self.mcp_wrapper.call_tool(
-            "linkedin_search", {"query": query, **kwargs}
-        )
-
-    async def wikipedia_search(self, query: str, **kwargs) -> list[dict[str, Any]]:
-        """Search Wikipedia using Exa."""
-        await self._ensure_initialized()
-        return await self.mcp_wrapper.call_tool(
-            "wikipedia_search_exa", {"query": query, **kwargs}
-        )
-
-    async def github_search(self, query: str, **kwargs) -> list[dict[str, Any]]:
-        """Search GitHub using Exa."""
-        await self._ensure_initialized()
-        return await self.mcp_wrapper.call_tool(
-            "github_search", {"query": query, **kwargs}
-        )
-
-    async def crawl(self, url: str, **kwargs) -> dict[str, Any]:
-        """Crawl a URL using Exa."""
-        await self._ensure_initialized()
-        return await self.mcp_wrapper.call_tool("crawling", {"url": url, **kwargs})
+        return search_results
 
     def get_capabilities(self) -> dict[str, Any]:
-        """Return Exa capabilities."""
+        """Return Exa provider capabilities."""
         return {
-            "content_types": [
-                "research_papers",
-                "companies",
-                "linkedin",
-                "wikipedia",
-                "github",
-                "general",
+            "name": self.name,
+            "supports_raw_content": True,
+            "supports_advanced_search": True,
+            "max_results_per_query": 10,
+            "features": [
+                "search_filters",
+                "date_range_filtering",
+                "content_extraction",
+                "semantic_search",
+                "highlights",
+                "research_paper_search",
+                "company_research",
+                "competitor_finder",
+                "linkedin_search",
+                "wikipedia_search",
+                "github_search",
             ],
-            "features": {
-                "semantic_search": True,
-                "specialized_search": True,
-                "real_time": True,
-                "crawling": True,
-            },
-            "quality_metrics": {"semantic_search_score": 0.92},
         }
 
     def estimate_cost(self, query: SearchQuery) -> float:
-        """Estimate the cost of executing the query."""
-        # Exa costs ~$0.02 per search
-        return 0.02
+        """Estimate the cost of an Exa search query."""
+        # Exa pricing model (approximate)
+        base_cost = 0.015  # Base cost per search
 
-    async def check_status(self) -> tuple[HealthStatus, str]:
-        """Check the status of the Exa provider."""
-        try:
-            await self._ensure_initialized()
-            # Try to list tools to verify connection
-            await self.mcp_wrapper.list_tools()
-            return HealthStatus.OK, "Exa provider is operational"
-        except Exception as e:
-            logger.error(f"Exa health check failed: {e}")
-            return HealthStatus.FAILED, f"Health check failed: {str(e)}"
+        # Additional cost for more results
+        results_cost = query.max_results * 0.0005
 
-    async def cleanup(self):
-        """Clean up resources."""
-        await self.mcp_wrapper.close()
-        self._initialized = False
+        # Additional cost for advanced features
+        if query.advanced:
+            results_cost *= 1.2
 
-    async def __aenter__(self):
-        await self._ensure_initialized()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.cleanup()
+        return base_cost + results_cost

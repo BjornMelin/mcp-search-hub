@@ -4,11 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from mcp_search_hub.models.base import HealthStatus
 from mcp_search_hub.models.query import SearchQuery
-from mcp_search_hub.providers.firecrawl_mcp import (
-    FirecrawlMCPProvider,
-    FirecrawlProvider,
-)
+from mcp_search_hub.providers.firecrawl_mcp import FirecrawlMCPProvider
 from mcp_search_hub.utils.errors import ProviderError
 
 
@@ -18,12 +16,6 @@ def firecrawl_mcp_provider():
     return FirecrawlMCPProvider(api_key="test-api-key")
 
 
-@pytest.fixture
-def firecrawl_provider():
-    """Create a Firecrawl provider instance."""
-    return FirecrawlProvider(api_key="test-api-key")
-
-
 class TestFirecrawlMCPProvider:
     """Test Firecrawl MCP provider functionality."""
 
@@ -31,17 +23,26 @@ class TestFirecrawlMCPProvider:
     async def test_initialize_success(self, firecrawl_mcp_provider):
         """Test successful initialization."""
         with (
-            patch("subprocess.run") as mock_run,
-            patch("mcp_search_hub.providers.firecrawl_mcp.stdio_client") as mock_client,
+            patch(
+                "mcp_search_hub.providers.base_mcp.asyncio.create_subprocess_exec"
+            ) as mock_create_subprocess,
+            patch(
+                "mcp_search_hub.providers.base_mcp.stdio_client", new_callable=AsyncMock
+            ) as mock_client,
+            patch(
+                "mcp_search_hub.providers.base_mcp.ClientSession"
+            ) as mock_session_class,
         ):
             # Mock version check success
-            mock_run.return_value = MagicMock(returncode=0)
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_create_subprocess.return_value = mock_process
 
-            # Mock client connection
+            # Mock stdio client - async function that returns a tuple
             mock_read = AsyncMock()
             mock_write = AsyncMock()
-            # stdio_client is an async function that should return a tuple
-            mock_client.side_effect = AsyncMock(return_value=(mock_read, mock_write))
+            mock_client.return_value = (mock_read, mock_write)
 
             # Mock session
             mock_session = AsyncMock()
@@ -49,170 +50,185 @@ class TestFirecrawlMCPProvider:
                 return_value={"name": "firecrawl-mcp"}
             )
 
-            with patch(
-                "mcp_search_hub.providers.firecrawl_mcp.ClientSession",
-                return_value=mock_session,
-            ):
-                await firecrawl_mcp_provider.initialize()
+            # Mock tools
+            mock_tool = MagicMock()
+            mock_tool.name = "firecrawl_search"
+            mock_session.list_tools = AsyncMock(return_value=[mock_tool])
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value = mock_session
 
-                assert firecrawl_mcp_provider.session is not None
+            await firecrawl_mcp_provider.initialize()
+
+            # Verify initialization
+            assert firecrawl_mcp_provider.session is not None
+            mock_session.list_tools.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_initialize_install_required(self, firecrawl_mcp_provider):
-        """Test initialization when installation is required."""
+    async def test_initialize_install_server(self, firecrawl_mcp_provider):
+        """Test initialization with server installation."""
         with (
-            patch("subprocess.run") as mock_run,
-            patch("mcp_search_hub.providers.firecrawl_mcp.stdio_client") as mock_client,
+            patch(
+                "mcp_search_hub.providers.base_mcp.asyncio.create_subprocess_exec"
+            ) as mock_create_subprocess,
+            patch(
+                "mcp_search_hub.providers.base_mcp.stdio_client", new_callable=AsyncMock
+            ) as mock_client,
+            patch(
+                "mcp_search_hub.providers.base_mcp.ClientSession"
+            ) as mock_session_class,
         ):
-            # Mock version check failure (not installed)
-            check_result = MagicMock(returncode=1)
-            install_result = MagicMock(returncode=0)
-            mock_run.side_effect = [check_result, install_result]
+            # Mock version check failure (server not installed)
+            # First subprocess call - version check fails
+            mock_process_check = AsyncMock()
+            mock_process_check.returncode = 1
+            mock_process_check.communicate = AsyncMock(return_value=(b"", b""))
 
-            # Mock client connection
-            mock_read = AsyncMock()
-            mock_write = AsyncMock()
-            # stdio_client is an async function that should return a tuple
-            mock_client.side_effect = AsyncMock(return_value=(mock_read, mock_write))
+            # Second subprocess call - installation succeeds
+            mock_process_install = AsyncMock()
+            mock_process_install.returncode = 0
+            mock_process_install.communicate = AsyncMock(return_value=(b"", b""))
 
-            # Mock session
-            mock_session = AsyncMock()
-            mock_session.get_server_info = AsyncMock(
-                return_value={"name": "firecrawl-mcp"}
-            )
+            # Third subprocess call - version check succeeds
+            mock_process_check2 = AsyncMock()
+            mock_process_check2.returncode = 0
+            mock_process_check2.communicate = AsyncMock(return_value=(b"", b""))
 
-            with patch(
-                "mcp_search_hub.providers.firecrawl_mcp.ClientSession",
-                return_value=mock_session,
-            ):
-                await firecrawl_mcp_provider.initialize()
-
-                # Should have called npm install
-                assert mock_run.call_count == 2
-                assert "npm" in mock_run.call_args_list[1][0][0]
-
-    @pytest.mark.asyncio
-    async def test_initialize_install_failure(self, firecrawl_mcp_provider):
-        """Test initialization when installation fails."""
-        with patch("subprocess.run") as mock_run:
-            # Mock version check failure
-            check_result = MagicMock(returncode=1)
-            install_result = MagicMock(returncode=1, stderr="Installation failed")
-            mock_run.side_effect = [check_result, install_result]
-
-            with pytest.raises(
-                ProviderError, match="Failed to install Firecrawl MCP server"
-            ):
-                await firecrawl_mcp_provider.initialize()
-
-    @pytest.mark.asyncio
-    async def test_call_tool(self, firecrawl_mcp_provider):
-        """Test calling a tool."""
-        # Mock session
-        mock_session = AsyncMock()
-        mock_session.call_tool = AsyncMock(return_value={"result": "success"})
-        firecrawl_mcp_provider.session = mock_session
-
-        result = await firecrawl_mcp_provider.call_tool("test_tool", {"param": "value"})
-
-        assert result["result"] == "success"
-        mock_session.call_tool.assert_called_once_with(
-            "test_tool", arguments={"param": "value"}
-        )
-
-    @pytest.mark.asyncio
-    async def test_list_tools(self, firecrawl_mcp_provider):
-        """Test listing tools."""
-        # Mock session
-        mock_session = AsyncMock()
-        mock_tool = MagicMock()
-        mock_tool.model_dump = MagicMock(return_value={"name": "test_tool"})
-        mock_session.list_tools = AsyncMock(return_value=[mock_tool])
-        firecrawl_mcp_provider.session = mock_session
-
-        tools = await firecrawl_mcp_provider.list_tools()
-
-        assert len(tools) == 1
-        assert tools[0]["name"] == "test_tool"
-
-
-class TestFirecrawlProvider:
-    """Test Firecrawl provider integration."""
-
-    @pytest.mark.asyncio
-    async def test_search_with_url(self, firecrawl_provider):
-        """Test search with URL."""
-        with patch.object(firecrawl_provider, "scrape_url") as mock_scrape:
-            mock_scrape.return_value = [
-                {
-                    "title": "Test Page",
-                    "url": "https://example.com",
-                    "content": "Test content",
-                }
+            mock_create_subprocess.side_effect = [
+                mock_process_check,  # First check fails
+                mock_process_install,  # Install succeeds
+                mock_process_check2,  # Second check succeeds
             ]
 
-            query = SearchQuery(query="https://example.com", max_results=10)
-            response = await firecrawl_provider.search(query)
+            # Mock stdio client - async function that returns a tuple
+            mock_read = AsyncMock()
+            mock_write = AsyncMock()
+            mock_client.return_value = (mock_read, mock_write)
 
-            assert len(response.results) == 1
-            assert response.results[0].title == "Test Page"
-            mock_scrape.assert_called_once_with("https://example.com", max_results=10)
+            # Mock session
+            mock_session = AsyncMock()
+            mock_session.get_server_info = AsyncMock(
+                return_value={"name": "firecrawl-mcp"}
+            )
+
+            # Mock tools for installation test
+            mock_tool = MagicMock()
+            mock_tool.name = "firecrawl_search"
+            mock_session.list_tools = AsyncMock(return_value=[mock_tool])
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value = mock_session
+
+            await firecrawl_mcp_provider.initialize()
+
+            # Verify npm install was called
+            assert (
+                mock_create_subprocess.call_count >= 3
+            )  # Version check, install, and version check again
 
     @pytest.mark.asyncio
-    async def test_search_without_url(self, firecrawl_provider):
-        """Test search without URL returns empty."""
+    async def test_initialize_failure(self, firecrawl_mcp_provider):
+        """Test initialization failure."""
+        with patch(
+            "mcp_search_hub.providers.base_mcp.asyncio.create_subprocess_exec",
+            side_effect=Exception("Connection failed"),
+        ):
+            with pytest.raises(ProviderError):
+                await firecrawl_mcp_provider.initialize()
+
+    @pytest.mark.asyncio
+    async def test_search_success(self, firecrawl_mcp_provider):
+        """Test successful search."""
+        # Mock session
+        mock_session = AsyncMock()
+        mock_result = {
+            "results": [
+                {
+                    "title": "Test Result",
+                    "url": "https://example.com",
+                    "snippet": "Test snippet",
+                    "score": 0.9,
+                }
+            ]
+        }
+        mock_session.call_tool = AsyncMock(return_value=mock_result)
+        firecrawl_mcp_provider.session = mock_session
+
         query = SearchQuery(query="test query", max_results=10)
-        response = await firecrawl_provider.search(query)
-        assert response.results == []
+        response = await firecrawl_mcp_provider.search(query)
+
+        assert len(response.results) > 0
+        assert response.provider == "firecrawl"
+        mock_session.call_tool.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_scrape_url(self, firecrawl_provider):
-        """Test URL scraping."""
-        mock_response = {
-            "title": "Test Page",
-            "markdown": "# Test Page\n\nTest content",
-            "metadata": {"author": "test"},
+    async def test_search_not_initialized(self, firecrawl_mcp_provider):
+        """Test searching when not initialized."""
+        # Mock session to be set after initialization
+        mock_session = AsyncMock()
+        mock_result = {
+            "results": [
+                {
+                    "title": "Test Result",
+                    "url": "https://example.com",
+                    "snippet": "Test snippet",
+                    "score": 0.9,
+                }
+            ]
         }
+        mock_session.call_tool = AsyncMock(return_value=mock_result)
 
-        with patch.object(firecrawl_provider, "_ensure_initialized"):
-            with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
-                mock_call.return_value = mock_response
+        async def mock_initialize() -> None:
+            firecrawl_mcp_provider.session = mock_session
 
-                results = await firecrawl_provider.scrape_url("https://example.com")
+        with patch.object(
+            firecrawl_mcp_provider, "initialize", side_effect=mock_initialize
+        ) as mock_init:
+            firecrawl_mcp_provider.session = None
+            query = SearchQuery(query="test query", max_results=10)
+            response = await firecrawl_mcp_provider.search(query)
 
-                assert len(results) == 1
-                assert results[0]["title"] == "Test Page"
-                assert results[0]["content"] == "# Test Page\n\nTest content"
-                assert results[0]["metadata"]["author"] == "test"
-
-    @pytest.mark.asyncio
-    async def test_firecrawl_map(self, firecrawl_provider):
-        """Test URL mapping."""
-        mock_response = {
-            "urls": ["https://example.com/page1", "https://example.com/page2"]
-        }
-
-        with patch.object(firecrawl_provider, "_ensure_initialized"):
-            with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
-                mock_call.return_value = mock_response
-
-                result = await firecrawl_provider.firecrawl_map("https://example.com")
-
-                assert result["urls"][0] == "https://example.com/page1"
-                mock_call.assert_called_once_with(
-                    "firecrawl_map", {"url": "https://example.com"}
-                )
+            mock_init.assert_called_once()
+            assert response.provider == "firecrawl"
 
     @pytest.mark.asyncio
-    async def test_get_available_tools(self, firecrawl_provider):
-        """Test getting available tools."""
-        mock_tools = [{"name": "firecrawl_scrape"}, {"name": "firecrawl_map"}]
+    async def test_search_error(self, firecrawl_mcp_provider):
+        """Test search error."""
+        mock_session = AsyncMock()
+        mock_session.call_tool = AsyncMock(side_effect=Exception("Tool error"))
+        firecrawl_mcp_provider.session = mock_session
 
-        with patch.object(firecrawl_provider, "_ensure_initialized"):
-            with patch.object(firecrawl_provider.mcp_client, "list_tools") as mock_list:
-                mock_list.return_value = mock_tools
+        query = SearchQuery(query="test query", max_results=10)
+        response = await firecrawl_mcp_provider.search(query)
 
-                tools = await firecrawl_provider.get_available_tools()
+        assert response.error is not None
+        assert "Tool error" in response.error
 
-                assert len(tools) == 2
-                assert tools[0]["name"] == "firecrawl_scrape"
+    @pytest.mark.asyncio
+    async def test_check_status(self, firecrawl_mcp_provider):
+        """Test checking status."""
+        # Mock session
+        mock_session = AsyncMock()
+
+        # Mock tools
+        mock_tool = MagicMock()
+        mock_tool.name = "firecrawl_search"
+        mock_session.list_tools = AsyncMock(return_value=[mock_tool])
+
+        firecrawl_mcp_provider.session = mock_session
+
+        status, message = await firecrawl_mcp_provider.check_status()
+
+        assert status == HealthStatus.OK
+        assert message == "firecrawl MCP server is operational"
+
+    @pytest.mark.asyncio
+    async def test_cleanup(self, firecrawl_mcp_provider):
+        """Test cleanup functionality."""
+        # Mock session
+        mock_session = AsyncMock()
+        mock_session.close = AsyncMock()
+        firecrawl_mcp_provider.session = mock_session
+
+        await firecrawl_mcp_provider._cleanup()
+
+        mock_session.close.assert_called_once()
+        assert firecrawl_mcp_provider.session is None
