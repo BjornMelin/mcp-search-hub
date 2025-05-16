@@ -4,6 +4,7 @@ httpx>=0.28.1
 uvicorn>=0.34.2
 python-dotenv>=1.1.0
 mcp>=1.9.0
+w3lib>=2.2.1
 
 # Test dependencies
 pytest>=8.0.0
