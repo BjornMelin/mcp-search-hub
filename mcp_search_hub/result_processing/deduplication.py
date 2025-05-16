@@ -1,5 +1,7 @@
 """Duplicate removal functions."""
 
+from w3lib.url import canonicalize_url
+
 from ..models.results import SearchResult
 
 
@@ -21,22 +23,41 @@ def remove_duplicates(results: list[SearchResult]) -> list[SearchResult]:
 
 def _normalize_url(url: str) -> str:
     """Normalize URL for comparison."""
-    # Remove trailing slashes
-    url = url.rstrip("/")
+    # Use w3lib's canonicalize_url for comprehensive normalization
+    # This handles percent encoding, query param sorting, and more
+    normalized = canonicalize_url(
+        url,
+        keep_blank_values=False,  # Remove empty query params
+        keep_fragments=False,  # Remove URL fragments
+    )
 
-    # Remove query parameters if they appear to be tracking parameters
-    if "?" in url:
-        base, params = url.split("?", 1)
+    # Additional domain-specific filtering
+    if "?" in normalized:
+        # Remove common tracking parameters that w3lib doesn't handle
+        tracking_params = [
+            "utm_",
+            "gclid",
+            "fbclid",
+            "ref=",
+            "source=",
+            "track=",
+            "campaign=",
+            "affiliate=",
+            "click_id=",
+            "session_id=",
+            "mc_",
+            "pk_",
+            "piwik_",
+        ]
+
+        base, params = normalized.split("?", 1)
         params_to_keep = []
 
         for param in params.split("&"):
-            # Skip common tracking parameters
-            if any(
-                tracker in param for tracker in ["utm_", "ref=", "source=", "track="]
-            ):
-                continue
-            params_to_keep.append(param)
+            # Skip tracking parameters beyond w3lib's normalization
+            if not any(tracker in param.lower() for tracker in tracking_params):
+                params_to_keep.append(param)
 
-        url = base + "?" + "&".join(params_to_keep) if params_to_keep else base
+        normalized = base + "?" + "&".join(params_to_keep) if params_to_keep else base
 
-    return url.lower()
+    return normalized
