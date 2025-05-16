@@ -1,7 +1,6 @@
 """Result merger and ranking."""
 
-from typing import Dict, List
-from ..models.results import SearchResult, SearchResponse
+from ..models.results import SearchResponse, SearchResult
 from .deduplication import remove_duplicates
 
 
@@ -10,10 +9,10 @@ class ResultMerger:
 
     def merge_results(
         self,
-        provider_results: Dict[str, SearchResponse],
+        provider_results: dict[str, SearchResponse],
         max_results: int = 10,
         raw_content: bool = False,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Merge results from multiple providers into a unified ranked list.
 
@@ -30,12 +29,12 @@ class ResultMerger:
         for provider, response in provider_results.items():
             all_results.extend(response.results)
 
+        # Handle raw content merging BEFORE deduplication to preserve metadata
+        if raw_content:
+            all_results = self._merge_raw_content(all_results)
+
         # Remove duplicates based on URL
         deduplicated = remove_duplicates(all_results)
-
-        # Handle raw content during deduplication
-        if raw_content:
-            deduplicated = self._merge_raw_content(deduplicated)
 
         # Rank combined results
         ranked_results = self._rank_results(deduplicated, provider_results)
@@ -43,7 +42,7 @@ class ResultMerger:
         # Limit to max_results
         return ranked_results[:max_results]
 
-    def _merge_raw_content(self, results: List[SearchResult]) -> List[SearchResult]:
+    def _merge_raw_content(self, results: list[SearchResult]) -> list[SearchResult]:
         """
         For duplicate URLs where some have raw_content and others don't,
         prefer the result with raw_content while preserving metadata.
@@ -62,15 +61,15 @@ class ResultMerger:
                 merged_results.append(group[0])
                 continue
 
-            # Find result with raw_content
-            result_with_content = None
-            for result in group:
-                if result.raw_content:
-                    result_with_content = result
-                    break
+            # Find results with raw_content
+            results_with_content = [result for result in group if result.raw_content]
 
-            if result_with_content:
-                # Use this result but merge metadata from others
+            if results_with_content:
+                # If multiple results have raw_content, choose the one with highest score
+                # and merge metadata from all
+                result_with_content = max(results_with_content, key=lambda x: x.score)
+
+                # Merge metadata from all results in the group
                 for result in group:
                     if result != result_with_content:
                         # Add non-overlapping metadata
@@ -86,8 +85,8 @@ class ResultMerger:
         return merged_results
 
     def _rank_results(
-        self, results: List[SearchResult], provider_results: Dict[str, SearchResponse]
-    ) -> List[SearchResult]:
+        self, results: list[SearchResult], provider_results: dict[str, SearchResponse]
+    ) -> list[SearchResult]:
         """Rank results based on provider quality and result scores."""
         # Provider quality weights
         provider_weights = {

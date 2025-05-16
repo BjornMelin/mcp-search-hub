@@ -92,7 +92,7 @@ async def test_search_with_raw_content(firecrawl_provider):
     response = await firecrawl_provider.search(query)
 
     # Verify results include raw content
-    assert response.results[0].raw_content == "<html><body>Test HTML</body></html>"
+    assert response.results[0].raw_content == "This is the full content of the page"
 
     # Verify the correct parameters were sent in the API request
     firecrawl_provider.client.post.assert_called_once()

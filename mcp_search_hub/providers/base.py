@@ -1,7 +1,7 @@
 """Base class for all search providers."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from ..models.base import HealthStatus
 from ..models.query import SearchQuery
@@ -16,19 +16,16 @@ class SearchProvider(ABC):
     @abstractmethod
     async def search(self, query: SearchQuery) -> SearchResponse:
         """Execute a search and return results."""
-        pass
 
     @abstractmethod
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return provider capabilities."""
-        pass
 
     @abstractmethod
     def estimate_cost(self, query: SearchQuery) -> float:
         """Estimate the cost of executing the query."""
-        pass
 
-    async def check_status(self) -> Tuple[HealthStatus, str]:
+    async def check_status(self) -> tuple[HealthStatus, str]:
         """
         Check the status of the provider.
 

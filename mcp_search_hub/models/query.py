@@ -1,7 +1,6 @@
 """Query models."""
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
 
 
 class SearchQuery(BaseModel):
@@ -14,15 +13,13 @@ class SearchQuery(BaseModel):
     max_results: int = Field(
         10, description="Maximum number of results to return", ge=1, le=100
     )
-    content_type: Optional[str] = Field(
+    content_type: str | None = Field(
         None, description="Optional explicit content type hint"
     )
-    providers: Optional[List[str]] = Field(
+    providers: list[str] | None = Field(
         None, description="Optional explicit provider selection"
     )
-    budget: Optional[float] = Field(
-        None, description="Optional budget constraint in USD"
-    )
+    budget: float | None = Field(None, description="Optional budget constraint in USD")
     timeout_ms: int = Field(
         5000, description="Timeout in milliseconds", ge=1000, le=30000
     )

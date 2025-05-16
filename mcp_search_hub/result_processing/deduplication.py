@@ -1,10 +1,9 @@
 """Duplicate removal functions."""
 
-from typing import List
 from ..models.results import SearchResult
 
 
-def remove_duplicates(results: List[SearchResult]) -> List[SearchResult]:
+def remove_duplicates(results: list[SearchResult]) -> list[SearchResult]:
     """Remove duplicate results based on URL."""
     unique_urls = set()
     unique_results = []

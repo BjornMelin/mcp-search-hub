@@ -5,7 +5,7 @@ Perplexity MCP wrapper provider that embeds the official perplexity-mcp server.
 import logging
 import os
 import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 class PerplexityMCPProvider:
     """Wrapper for the Perplexity MCP server using MCP Python SDK."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize the Perplexity MCP provider with configuration."""
         self.api_key = api_key or os.getenv("PERPLEXITY_API_KEY")
         if not self.api_key:
             raise ValueError("Perplexity API key is required")
 
-        self.session: Optional[ClientSession] = None
+        self.session: ClientSession | None = None
         self.server_params = StdioServerParameters(
             command="npx",
             args=["perplexity-mcp"],
@@ -43,6 +43,7 @@ class PerplexityMCPProvider:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -57,6 +58,7 @@ class PerplexityMCPProvider:
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,
             )
             if install_result.returncode != 0:
                 raise ProviderError(
@@ -94,7 +96,7 @@ class PerplexityMCPProvider:
             await self.session.__aexit__(None, None, None)
             self.session = None
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Call a tool on the Perplexity MCP server."""
         if not self.session:
             await self.initialize()
@@ -106,7 +108,7 @@ class PerplexityMCPProvider:
             logger.error(f"Error calling tool {tool_name}: {e}")
             raise ProviderError(f"Failed to call Perplexity tool {tool_name}: {e}")
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List available tools from the Perplexity MCP server."""
         if not self.session:
             await self.initialize()
@@ -124,7 +126,7 @@ class PerplexityProvider(SearchProvider):
 
     name = "perplexity"
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the Perplexity search provider."""
         super().__init__()
         self.api_key = config.get("perplexity_api_key", "")
@@ -220,7 +222,7 @@ class PerplexityProvider(SearchProvider):
                 error=str(e),
             )
 
-    async def perplexity_research(self, query: str, **kwargs) -> Dict[str, Any]:
+    async def perplexity_research(self, query: str, **kwargs) -> dict[str, Any]:
         """Perform deep research using Perplexity."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
@@ -228,7 +230,7 @@ class PerplexityProvider(SearchProvider):
             {"messages": [{"role": "user", "content": query}], **kwargs},
         )
 
-    async def perplexity_reason(self, query: str, **kwargs) -> Dict[str, Any]:
+    async def perplexity_reason(self, query: str, **kwargs) -> dict[str, Any]:
         """Perform reasoning tasks using Perplexity."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
@@ -236,7 +238,7 @@ class PerplexityProvider(SearchProvider):
             {"messages": [{"role": "user", "content": query}], **kwargs},
         )
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Perplexity capabilities."""
         return {
             "content_types": ["news", "current_events", "general", "technical"],
@@ -255,7 +257,7 @@ class PerplexityProvider(SearchProvider):
         # Perplexity costs ~$0.015 per query for basic, ~$0.03 for advanced
         return 0.03 if query.advanced else 0.015
 
-    async def check_status(self) -> Tuple[HealthStatus, str]:
+    async def check_status(self) -> tuple[HealthStatus, str]:
         """Check the status of the Perplexity provider."""
         try:
             await self._ensure_initialized()
@@ -263,11 +265,10 @@ class PerplexityProvider(SearchProvider):
             tools = await self.mcp_wrapper.list_tools()
             if tools:
                 return HealthStatus.OK, "Perplexity provider is operational"
-            else:
-                return (
-                    HealthStatus.FAILED,
-                    "No tools available from Perplexity MCP server",
-                )
+            return (
+                HealthStatus.FAILED,
+                "No tools available from Perplexity MCP server",
+            )
         except Exception as e:
             logger.error(f"Perplexity health check failed: {e}")
             return HealthStatus.FAILED, f"Health check failed: {str(e)}"

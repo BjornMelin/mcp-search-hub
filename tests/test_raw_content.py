@@ -177,5 +177,9 @@ def test_merger_with_raw_content(mock_linkup_response, mock_firecrawl_response):
     assert merged_results[0].raw_content is not None
 
     # Verify metadata from both sources was preserved
+    # The merger should keep metadata from Linkup and add non-overlapping metadata from Firecrawl
     assert "domain" in merged_results[0].metadata
+    # source_type should be added from firecrawl
     assert "source_type" in merged_results[0].metadata
+    assert merged_results[0].metadata["domain"] == "example.com"
+    assert merged_results[0].metadata["source_type"] == "search_result"

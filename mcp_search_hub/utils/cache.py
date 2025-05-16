@@ -1,7 +1,8 @@
 """Caching mechanisms."""
 
 import time
-from typing import Dict, Any, Optional, TypeVar
+from typing import Any, TypeVar
+
 from ..models.results import CombinedSearchResponse
 
 T = TypeVar("T")
@@ -17,10 +18,10 @@ class QueryCache:
         Args:
             ttl: Time-to-live in seconds (default: 1 hour)
         """
-        self.cache: Dict[str, Dict[str, Any]] = {}
+        self.cache: dict[str, dict[str, Any]] = {}
         self.ttl = ttl
 
-    def get(self, key: str) -> Optional[CombinedSearchResponse]:
+    def get(self, key: str) -> CombinedSearchResponse | None:
         """
         Get cached result for a key if available and not expired.
 
@@ -47,7 +48,7 @@ class QueryCache:
         """
         self.cache[key] = {"result": result, "timestamp": time.time()}
 
-    def clear(self, key: Optional[str] = None):
+    def clear(self, key: str | None = None):
         """
         Clear cache for a specific key or the entire cache.
 

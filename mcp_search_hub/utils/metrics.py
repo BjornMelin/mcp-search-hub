@@ -2,7 +2,6 @@
 
 import time
 from datetime import datetime
-from typing import Dict, Set
 
 from ..models.base import MetricsData
 
@@ -18,9 +17,9 @@ class MetricsTracker:
         self.total_response_time_ms = 0.0
         self.cache_hits = 0
         self.cache_misses = 0
-        self.provider_usage: Dict[str, int] = {}
+        self.provider_usage: dict[str, int] = {}
         self.errors = 0
-        self.request_durations: Dict[str, float] = {}
+        self.request_durations: dict[str, float] = {}
 
     def start_request(self, request_id: str) -> None:
         """Start timing a request."""
@@ -34,7 +33,7 @@ class MetricsTracker:
             duration_ms = (time.time() - start_time) * 1000
             self.total_response_time_ms += duration_ms
 
-    def record_query(self, providers_used: Set[str], from_cache: bool = False) -> None:
+    def record_query(self, providers_used: set[str], from_cache: bool = False) -> None:
         """Record a query execution."""
         self.total_queries += 1
 

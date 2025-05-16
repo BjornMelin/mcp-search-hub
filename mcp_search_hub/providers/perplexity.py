@@ -1,6 +1,6 @@
 """Perplexity search provider implementation."""
 
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -83,7 +83,7 @@ class PerplexityProvider(SearchProvider):
                 error=str(e),
             )
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Perplexity capabilities."""
         return {
             "content_types": ["news", "current_events", "general", "technical"],

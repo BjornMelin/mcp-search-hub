@@ -56,54 +56,88 @@ def mock_providers():
 @pytest.fixture
 def server(mock_providers):
     """Create a server with mock providers for testing."""
-    with patch("mcp_search_hub.server.get_settings") as mock_settings:
-        # Configure mock settings
-        settings = MagicMock()
-        settings.providers.linkup.enabled = True
-        settings.providers.exa.enabled = True
-        settings.providers.perplexity.enabled = True
-        settings.providers.tavily.enabled = True
-        settings.providers.firecrawl.enabled = True
-        mock_settings.return_value = settings
+    # Configure mock settings
+    settings = MagicMock()
+    settings.providers.linkup.enabled = True
+    settings.providers.exa.enabled = True
+    settings.providers.perplexity.enabled = True
+    settings.providers.tavily.enabled = True
+    settings.providers.firecrawl.enabled = True
 
-        # Create server with patch for providers
-        with patch.object(SearchServer, "__init__", return_value=None):
-            server = SearchServer()
-            server.providers = mock_providers
-            server.mcp = MagicMock()
-            server.metrics = MagicMock()
-            server.metrics.get_metrics.return_value = MagicMock()
-            server.metrics.get_start_time_iso.return_value = "2025-01-01T00:00:00Z"
+    # Create server with patch for providers
+    with patch.object(SearchServer, "__init__", return_value=None):
+        server = SearchServer()
+        server.providers = mock_providers
+        server.mcp = MagicMock()
 
+        # Track registered routes
+        server._health_check_func = None
+        server._metrics_func = None
+
+        # Mock decorator behavior
+        def mock_decorator(path, methods=None):
+            def decorator(func):
+                if path == "/health":
+                    server._health_check_func = func
+                elif path == "/metrics":
+                    server._metrics_func = func
+                return func
+
+            return decorator
+
+        server.mcp.custom_route = mock_decorator
+
+        server.metrics = MagicMock()
+        # Create a proper MetricsData mock
+        metrics_data = {
+            "request_count": {"total": 0, "by_provider": {}, "success": 0, "error": 0},
+            "latency": {"average": 0.0, "by_provider": {}},
+            "uptime": 0.0,
+            "provider_status": {},
+        }
+        server.metrics.get_metrics.return_value = metrics_data
+        server.metrics.get_start_time_iso.return_value = "2025-01-01T00:00:00Z"
+
+        # Patch get_settings specifically when running
+        with patch("mcp_search_hub.server.get_settings", return_value=settings):
             # Initialize custom routes registration
             server._register_custom_routes()
 
-            yield server
+        yield server
 
 
 @pytest.mark.asyncio
 async def test_health_check_all_ok(server):
     """Test health check with all providers operational."""
-    # Get the health check function registered with @mcp.custom_route
-    health_check_func = server.mcp.custom_route.call_args_list[0][0][1]
+    # Configure mock settings
+    settings = MagicMock()
+    settings.providers.linkup.enabled = True
+    settings.providers.exa.enabled = True
+    settings.providers.perplexity.enabled = True
+    settings.providers.tavily.enabled = True
+    settings.providers.firecrawl.enabled = True
 
-    # Mock request
-    request = MagicMock(spec=Request)
+    with patch("mcp_search_hub.server.get_settings", return_value=settings):
+        # Get the registered health check function
+        health_check_func = server._health_check_func
 
-    # Call health check function
-    response = await health_check_func(request)
+        # Mock request
+        request = MagicMock(spec=Request)
 
-    # Verify response
-    assert isinstance(response, JSONResponse)
-    data = json.loads(response.body.decode())
+        # Call health check function
+        response = await health_check_func(request)
 
-    assert data["status"] == HealthStatus.OK
-    assert "version" in data
-    assert len(data["providers"]) == 5  # All providers are included
+        # Verify response
+        assert isinstance(response, JSONResponse)
+        data = json.loads(response.body.decode())
 
-    # Check that all providers were checked
-    for provider in server.providers.values():
-        provider.check_status.assert_called_once()
+        assert data["status"] == HealthStatus.OK
+        assert "version" in data
+        assert len(data["providers"]) == 5  # All providers are included
+
+        # Check that all providers were checked
+        for provider in server.providers.values():
+            provider.check_status.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -115,25 +149,36 @@ async def test_health_check_degraded(server):
         "Provider failing",
     )
 
-    # Get the health check function registered with @mcp.custom_route
-    health_check_func = server.mcp.custom_route.call_args_list[0][0][1]
+    # Configure mock settings
+    settings = MagicMock()
+    settings.providers.linkup.enabled = True
+    settings.providers.exa.enabled = True
+    settings.providers.perplexity.enabled = True
+    settings.providers.tavily.enabled = True
+    settings.providers.firecrawl.enabled = True
 
-    # Mock request
-    request = MagicMock(spec=Request)
+    with patch("mcp_search_hub.server.get_settings", return_value=settings):
+        # Get the registered health check function
+        health_check_func = server._health_check_func
 
-    # Call health check function
-    response = await health_check_func(request)
+        # Mock request
+        request = MagicMock(spec=Request)
 
-    # Verify response
-    assert isinstance(response, JSONResponse)
-    data = json.loads(response.body.decode())
+        # Call health check function
+        response = await health_check_func(request)
 
-    assert data["status"] == HealthStatus.DEGRADED  # Overall status should be degraded
-    assert data["providers"]["linkup"]["status"] == HealthStatus.FAILED
-    assert data["providers"]["linkup"]["message"] == "Provider failing"
+        # Verify response
+        assert isinstance(response, JSONResponse)
+        data = json.loads(response.body.decode())
 
-    # Other providers should still be OK
-    assert data["providers"]["exa"]["status"] == HealthStatus.OK
+        assert (
+            data["status"] == HealthStatus.DEGRADED
+        )  # Overall status should be degraded
+        assert data["providers"]["linkup"]["status"] == HealthStatus.FAILED
+        assert data["providers"]["linkup"]["message"] == "Provider failing"
+
+        # Other providers should still be OK
+        assert data["providers"]["exa"]["status"] == HealthStatus.OK
 
 
 @pytest.mark.asyncio
@@ -142,29 +187,40 @@ async def test_health_check_provider_error(server):
     # Make one provider throw an exception
     server.providers["exa"].check_status.side_effect = Exception("Connection error")
 
-    # Get the health check function registered with @mcp.custom_route
-    health_check_func = server.mcp.custom_route.call_args_list[0][0][1]
+    # Configure mock settings
+    settings = MagicMock()
+    settings.providers.linkup.enabled = True
+    settings.providers.exa.enabled = True
+    settings.providers.perplexity.enabled = True
+    settings.providers.tavily.enabled = True
+    settings.providers.firecrawl.enabled = True
 
-    # Mock request
-    request = MagicMock(spec=Request)
+    with patch("mcp_search_hub.server.get_settings", return_value=settings):
+        # Get the registered health check function
+        health_check_func = server._health_check_func
 
-    # Call health check function
-    response = await health_check_func(request)
+        # Mock request
+        request = MagicMock(spec=Request)
 
-    # Verify response
-    assert isinstance(response, JSONResponse)
-    data = json.loads(response.body.decode())
+        # Call health check function
+        response = await health_check_func(request)
 
-    assert data["status"] == HealthStatus.DEGRADED  # Overall status should be degraded
-    assert data["providers"]["exa"]["status"] == HealthStatus.FAILED
-    assert "Check failed: Connection error" in data["providers"]["exa"]["message"]
+        # Verify response
+        assert isinstance(response, JSONResponse)
+        data = json.loads(response.body.decode())
+
+        assert (
+            data["status"] == HealthStatus.DEGRADED
+        )  # Overall status should be degraded
+        assert data["providers"]["exa"]["status"] == HealthStatus.FAILED
+        assert "Check failed: Connection error" in data["providers"]["exa"]["message"]
 
 
 @pytest.mark.asyncio
 async def test_metrics_endpoint(server):
     """Test the metrics endpoint."""
-    # Get the metrics function registered with @mcp.custom_route
-    metrics_func = server.mcp.custom_route.call_args_list[1][0][1]
+    # Get the registered metrics function
+    metrics_func = server._metrics_func
 
     # Mock request
     request = MagicMock(spec=Request)

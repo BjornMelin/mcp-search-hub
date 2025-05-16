@@ -1,6 +1,6 @@
 """Tavily search provider implementation."""
 
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -77,7 +77,7 @@ class TavilyProvider(SearchProvider):
                 error=str(e),
             )
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Tavily capabilities."""
         return {
             "content_types": ["general", "technical", "news"],
