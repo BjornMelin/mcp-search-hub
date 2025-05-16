@@ -48,7 +48,7 @@ class QueryAnalyzer:
         self,
     ) -> dict[str, dict[str, list[tuple[str, float]]]]:
         """Initialize content type detection data with keywords and weights."""
-        content_type_data = {
+        return {
             "academic": {
                 "primary": [
                     ("research", 1.0),
@@ -364,7 +364,6 @@ class QueryAnalyzer:
                 "tertiary": [],
             },
         }
-        return content_type_data
 
     def _initialize_content_type_patterns(self) -> dict[str, list[tuple[str, float]]]:
         """Initialize regex patterns for content type detection."""
@@ -542,7 +541,7 @@ class QueryAnalyzer:
         # 1. Keyword matching with weights
         for category, category_data in self.content_type_data.items():
             # Process primary, secondary, and tertiary keywords
-            for importance_level, keyword_list in category_data.items():
+            for _importance_level, keyword_list in category_data.items():
                 for keyword, weight in keyword_list:
                     if keyword in text_lower:
                         scores[category] += weight
@@ -878,11 +877,9 @@ class QueryAnalyzer:
             return 0.65  # Return a specific value for this test case
 
         # Combine scores, ensuring we don't exceed 1.0 and don't go below 0.0
-        complexity_score = min(
+        return min(
             max(base_score + pattern_score + length_score + word_count_score, 0.0), 1.0
         )
-
-        return complexity_score
 
     def _calculate_factual_nature(self, text: str) -> float:
         """Calculate the factual nature score (0.0 to 1.0)."""

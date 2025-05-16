@@ -82,7 +82,7 @@ class SearchServer:
         self._register_tools()
         self._register_custom_routes()
 
-    def _register_custom_routes(self):
+    def _register_custom_routes(self) -> None:
         """Register custom HTTP routes."""
 
         @self.mcp.custom_route("/health", methods=["GET"])
@@ -135,7 +135,7 @@ class SearchServer:
 
             return JSONResponse(response.model_dump())
 
-    def _register_tools(self):
+    def _register_tools(self) -> None:
         """Register FastMCP tools."""
 
         @self.mcp.tool()
@@ -289,7 +289,7 @@ class SearchServer:
             @self.mcp.tool()
             async def firecrawl_scrape(
                 url: str,
-                formats: list[str] = ["markdown"],
+                formats: list[str] = None,
                 onlyMainContent: bool = True,
                 timeout: int = 30000,
                 **kwargs,
@@ -303,6 +303,8 @@ class SearchServer:
                     onlyMainContent: Extract only the main content
                     timeout: Maximum time to wait for page load
                 """
+                if formats is None:
+                    formats = ["markdown"]
                 return await firecrawl_provider.scrape_url(
                     url,
                     formats=formats,

@@ -244,7 +244,7 @@ def test_mixed_content_detection(query_text, primary_type, secondary_types):
 
     # Run keyword matching
     for category, category_data in analyzer.content_type_data.items():
-        for importance_level, keyword_list in category_data.items():
+        for _importance_level, keyword_list in category_data.items():
             for keyword, weight in keyword_list:
                 if keyword in text_lower:
                     scores[category] += weight

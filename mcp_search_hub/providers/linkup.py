@@ -125,11 +125,7 @@ class LinkupProvider(SearchProvider):
             if domain in url:
                 return False
 
-        for ext in excluded_extensions:
-            if url.endswith(ext):
-                return False
-
-        return True
+        return all(not url.endswith(ext) for ext in excluded_extensions)
 
     async def _fetch_content(self, url: str) -> str:
         """Fetch content from a URL."""

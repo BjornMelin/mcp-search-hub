@@ -53,7 +53,7 @@ class LinkupMCPProvider:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-    async def _install_server(self):
+    async def _install_server(self) -> None:
         """Install the Linkup MCP server."""
         logger.info("Installing Linkup MCP server...")
         try:
@@ -106,8 +106,7 @@ class LinkupMCPProvider:
             await self.initialize()
 
         try:
-            result = await self.session.call_tool(tool_name, arguments=arguments)
-            return result
+            return await self.session.call_tool(tool_name, arguments=arguments)
         except Exception as e:
             logger.error(f"Error calling tool {tool_name}: {e}")
             raise ProviderError(f"Failed to call Linkup tool {tool_name}: {e}")
@@ -138,7 +137,7 @@ class LinkupProvider(SearchProvider):
         self.mcp_wrapper = LinkupMCPProvider(api_key=self.api_key)
         self._initialized = False
 
-    async def _ensure_initialized(self):
+    async def _ensure_initialized(self) -> None:
         """Ensure the MCP client is initialized."""
         if not self._initialized:
             await self.mcp_wrapper.initialize()

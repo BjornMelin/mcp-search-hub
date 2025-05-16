@@ -174,7 +174,7 @@ class TestFirecrawlProvider:
             "metadata": {"author": "test"},
         }
 
-        with patch.object(firecrawl_provider, "_ensure_initialized") as mock_init:
+        with patch.object(firecrawl_provider, "_ensure_initialized"):
             with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
                 mock_call.return_value = mock_response
 
@@ -192,7 +192,7 @@ class TestFirecrawlProvider:
             "urls": ["https://example.com/page1", "https://example.com/page2"]
         }
 
-        with patch.object(firecrawl_provider, "_ensure_initialized") as mock_init:
+        with patch.object(firecrawl_provider, "_ensure_initialized"):
             with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
                 mock_call.return_value = mock_response
 
@@ -208,7 +208,7 @@ class TestFirecrawlProvider:
         """Test getting available tools."""
         mock_tools = [{"name": "firecrawl_scrape"}, {"name": "firecrawl_map"}]
 
-        with patch.object(firecrawl_provider, "_ensure_initialized") as mock_init:
+        with patch.object(firecrawl_provider, "_ensure_initialized"):
             with patch.object(firecrawl_provider.mcp_client, "list_tools") as mock_list:
                 mock_list.return_value = mock_tools
 

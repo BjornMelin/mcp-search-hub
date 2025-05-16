@@ -224,20 +224,22 @@ class TestTavilyProvider:
             ]
         }
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value=mock_result
-            ) as mock_call:
-                result = await provider.search(query)
+            ) as mock_call,
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 1
-                assert result.results[0].title == "Test Result"
-                assert result.results[0].url == "https://example.com"
-                assert result.results[0].source == "tavily"
-                assert result.provider == "tavily"
-                assert result.total_results == 1
+            assert len(result.results) == 1
+            assert result.results[0].title == "Test Result"
+            assert result.results[0].url == "https://example.com"
+            assert result.results[0].source == "tavily"
+            assert result.provider == "tavily"
+            assert result.total_results == 1
 
-                mock_call.assert_called_once()
+            mock_call.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_search_with_advanced_query(self, provider):
@@ -254,15 +256,17 @@ class TestTavilyProvider:
             ]
         }
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value=mock_result
-            ) as mock_call:
-                await provider.search(query)
+            ) as mock_call,
+        ):
+            await provider.search(query)
 
-                # Check that the search_depth was set to "advanced"
-                call_args = mock_call.call_args[0][1]
-                assert call_args["options"]["searchDepth"] == "advanced"
+            # Check that the search_depth was set to "advanced"
+            call_args = mock_call.call_args[0][1]
+            assert call_args["options"]["searchDepth"] == "advanced"
 
     @pytest.mark.asyncio
     async def test_search_with_raw_content(self, provider):
@@ -279,34 +283,38 @@ class TestTavilyProvider:
             ]
         }
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value=mock_result
-            ) as mock_call:
-                result = await provider.search(query)
+            ) as mock_call,
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 1
-                assert result.results[0].raw_content == "Full content here"
+            assert len(result.results) == 1
+            assert result.results[0].raw_content == "Full content here"
 
-                # Check that includeRawContent was set to True
-                call_args = mock_call.call_args[0][1]
-                assert call_args["options"]["includeRawContent"] is True
+            # Check that includeRawContent was set to True
+            call_args = mock_call.call_args[0][1]
+            assert call_args["options"]["includeRawContent"] is True
 
     @pytest.mark.asyncio
     async def test_search_error(self, provider):
         """Test search error handling."""
         query = SearchQuery(query="test query")
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper,
                 "call_tool",
                 side_effect=Exception("Search failed"),
-            ):
-                result = await provider.search(query)
+            ),
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 0
-                assert result.error == "Search failed"
+            assert len(result.results) == 0
+            assert result.error == "Search failed"
 
     @pytest.mark.asyncio
     async def test_extract_content(self, provider):
@@ -318,19 +326,21 @@ class TestTavilyProvider:
             "content": [{"type": "text", "text": "Extracted content from the webpage"}]
         }
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value=mock_result
-            ) as mock_call:
-                result = await provider.extract_content(url)
+            ) as mock_call,
+        ):
+            result = await provider.extract_content(url)
 
-                assert result == mock_result
-                mock_call.assert_called_once()
+            assert result == mock_result
+            mock_call.assert_called_once()
 
-                # Check URL was passed correctly
-                call_args = mock_call.call_args[0][1]
-                assert call_args["urls"] == [url]
-                assert call_args["options"]["extractDepth"] == "advanced"
+            # Check URL was passed correctly
+            call_args = mock_call.call_args[0][1]
+            assert call_args["urls"] == [url]
+            assert call_args["options"]["extractDepth"] == "advanced"
 
     def test_get_capabilities(self, provider):
         """Test getting provider capabilities."""
@@ -359,16 +369,18 @@ class TestTavilyProvider:
     @pytest.mark.asyncio
     async def test_check_status_success(self, provider):
         """Test successful status check."""
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper,
                 "list_tools",
                 return_value=[{"name": "tavily-search"}],
-            ):
-                status, message = await provider.check_status()
+            ),
+        ):
+            status, message = await provider.check_status()
 
-                assert status.value == "ok"
-                assert "operational" in message
+            assert status.value == "ok"
+            assert "operational" in message
 
     @pytest.mark.asyncio
     async def test_check_status_failure(self, provider):

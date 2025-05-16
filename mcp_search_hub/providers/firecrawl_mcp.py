@@ -82,8 +82,7 @@ class FirecrawlMCPProvider:
             await self.initialize()
 
         try:
-            result = await self.session.call_tool(tool_name, arguments=arguments)
-            return result
+            return await self.session.call_tool(tool_name, arguments=arguments)
         except Exception as e:
             logger.error(f"Error calling tool {tool_name}: {e}")
             raise ProviderError(f"Failed to call Firecrawl tool {tool_name}: {e}")
@@ -119,7 +118,7 @@ class FirecrawlProvider(SearchProvider):
             "api_limits": {"rate_limit": 100, "max_results": 50},
         }
 
-    async def _ensure_initialized(self):
+    async def _ensure_initialized(self) -> None:
         """Ensure the MCP client is initialized."""
         if not self._initialized:
             await self.mcp_client.initialize()

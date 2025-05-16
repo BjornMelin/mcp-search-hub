@@ -37,9 +37,6 @@ def _normalize_url(url: str) -> str:
                 continue
             params_to_keep.append(param)
 
-        if params_to_keep:
-            url = base + "?" + "&".join(params_to_keep)
-        else:
-            url = base
+        url = base + "?" + "&".join(params_to_keep) if params_to_keep else base
 
     return url.lower()

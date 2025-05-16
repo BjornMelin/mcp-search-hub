@@ -222,20 +222,22 @@ class TestLinkupProvider:
             )
         ]
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value=mock_result
-            ) as mock_call:
-                result = await provider.search(query)
+            ) as mock_call,
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 2
-                assert result.results[0].title == "Test Result 1"
-                assert result.results[0].url == "https://example.com/1"
-                assert result.results[0].source == "linkup"
-                assert result.provider == "linkup"
-                assert result.total_results == 2
+            assert len(result.results) == 2
+            assert result.results[0].title == "Test Result 1"
+            assert result.results[0].url == "https://example.com/1"
+            assert result.results[0].source == "linkup"
+            assert result.provider == "linkup"
+            assert result.total_results == 2
 
-                mock_call.assert_called_once()
+            mock_call.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_search_success_text_result(self, provider):
@@ -245,15 +247,15 @@ class TestLinkupProvider:
         # Mock the MCP wrapper response with plain text
         mock_result = [MagicMock(text="Some search result content")]
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
-                provider.mcp_wrapper, "call_tool", return_value=mock_result
-            ):
-                result = await provider.search(query)
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(provider.mcp_wrapper, "call_tool", return_value=mock_result),
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 1
-                assert "Linkup Search" in result.results[0].title
-                assert result.results[0].snippet == "Some search result content"
+            assert len(result.results) == 1
+            assert "Linkup Search" in result.results[0].title
+            assert result.results[0].snippet == "Some search result content"
 
     @pytest.mark.asyncio
     async def test_search_with_raw_content(self, provider):
@@ -267,30 +269,32 @@ class TestLinkupProvider:
             )
         ]
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
-                provider.mcp_wrapper, "call_tool", return_value=mock_result
-            ):
-                result = await provider.search(query)
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(provider.mcp_wrapper, "call_tool", return_value=mock_result),
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 1
-                assert result.results[0].raw_content == "Full content here"
+            assert len(result.results) == 1
+            assert result.results[0].raw_content == "Full content here"
 
     @pytest.mark.asyncio
     async def test_search_error(self, provider):
         """Test search error handling."""
         query = SearchQuery(query="test query")
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper,
                 "call_tool",
                 side_effect=Exception("Search failed"),
-            ):
-                result = await provider.search(query)
+            ),
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 0
-                assert result.error == "Search failed"
+            assert len(result.results) == 0
+            assert result.error == "Search failed"
 
     def test_get_capabilities(self, provider):
         """Test getting provider capabilities."""
@@ -318,16 +322,18 @@ class TestLinkupProvider:
     @pytest.mark.asyncio
     async def test_check_status_success(self, provider):
         """Test successful status check."""
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper,
                 "list_tools",
                 return_value=[{"name": "search-web"}],
-            ):
-                status, message = await provider.check_status()
+            ),
+        ):
+            status, message = await provider.check_status()
 
-                assert status.value == "ok"
-                assert "operational" in message
+            assert status.value == "ok"
+            assert "operational" in message
 
     @pytest.mark.asyncio
     async def test_check_status_failure(self, provider):

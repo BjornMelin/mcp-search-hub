@@ -26,7 +26,7 @@ class ResultMerger:
         """
         # Collect all results
         all_results = []
-        for provider, response in provider_results.items():
+        for _provider, response in provider_results.items():
             all_results.extend(response.results)
 
         # Handle raw content merging BEFORE deduplication to preserve metadata
@@ -56,7 +56,7 @@ class ResultMerger:
 
         # Process groups with more than one result
         merged_results = []
-        for url, group in url_groups.items():
+        for _url, group in url_groups.items():
             if len(group) == 1:
                 merged_results.append(group[0])
                 continue

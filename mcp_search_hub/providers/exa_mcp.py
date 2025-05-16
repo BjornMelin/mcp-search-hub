@@ -85,8 +85,7 @@ class ExaMCPProvider:
             await self.initialize()
 
         try:
-            result = await self.session.call_tool(tool_name, arguments=arguments)
-            return result
+            return await self.session.call_tool(tool_name, arguments=arguments)
         except Exception as e:
             logger.error(f"Error calling tool {tool_name}: {e}")
             raise ProviderError(f"Failed to call Exa tool {tool_name}: {e}")
@@ -116,7 +115,7 @@ class ExaProvider(SearchProvider):
         self.mcp_wrapper = ExaMCPProvider(api_key=self.api_key)
         self._initialized = False
 
-    async def _ensure_initialized(self):
+    async def _ensure_initialized(self) -> None:
         """Ensure the MCP client is initialized."""
         if not self._initialized:
             await self.mcp_wrapper.initialize()

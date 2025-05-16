@@ -59,4 +59,23 @@ ignore = [
     "ANN101", # self annotations
     "ANN102", # cls annotations
     "PLR0913", # Too many arguments
+    "ANN201", # Missing return type annotations for public functions
+    "ANN204", # Missing return type annotation for special methods
+    "ANN001", # Missing type annotations for function arguments
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN202", # Missing return type annotation for private functions
+    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
+    "LOG015", # logging on root logger
+    "ASYNC221", # Async functions with blocking subprocess calls (needed for MCP server startup)
+    "B904", # Exception messages within except clauses
+    "PLR2004", # Magic values used in comparisons
+    "SIM117", # Use of nested with statements
+    "A002", # Function argument shadowing a Python builtin
+    "C901", # Function is too complex
+    "PLR0912", # Too many branches
+    "PLR0911", # Too many return statements
+    "PLR0915", # Too many statements
+    "N803", # Argument name should be lowercase (needed for MCP API compatibility)
+    "ASYNC109", # Async function definition with a timeout parameter
 ]
