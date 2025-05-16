@@ -4,6 +4,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from .results import SearchResponse
+
 
 class ScoringMode(str, Enum):
     """Scoring modes for combining multiple scores."""
@@ -62,4 +64,61 @@ class ProviderPerformanceMetrics(BaseModel):
     total_queries: int = Field(ge=0, description="Total number of queries processed")
     last_updated: str | None = Field(
         default=None, description="ISO datetime of last update"
+    )
+
+
+class TimeoutConfig(BaseModel):
+    """Configuration for dynamic timeout management."""
+
+    base_timeout_ms: int = Field(
+        default=10000, description="Base timeout in milliseconds"
+    )
+    min_timeout_ms: int = Field(
+        default=3000, description="Minimum allowed timeout in milliseconds"
+    )
+    max_timeout_ms: int = Field(
+        default=30000, description="Maximum allowed timeout in milliseconds"
+    )
+    complexity_factor: float = Field(
+        default=0.5, description="How much complexity affects timeout (0-1)"
+    )
+
+
+class CascadeExecutionPolicy(BaseModel):
+    """Policy configuration for cascade execution behavior."""
+
+    cascade_on_success: bool = Field(
+        default=False,
+        description="Continue cascade even after successful response",
+    )
+    min_successful_providers: int = Field(
+        default=1,
+        description="Minimum number of successful providers needed",
+    )
+    secondary_delay_ms: int = Field(
+        default=0,
+        description="Delay before executing secondary providers (milliseconds)",
+    )
+    circuit_breaker_max_failures: int = Field(
+        default=3,
+        description="Maximum failures before circuit breaker opens",
+    )
+    circuit_breaker_reset_timeout: float = Field(
+        default=30.0,
+        description="Timeout before circuit breaker resets (seconds)",
+    )
+
+
+class ProviderExecutionResult(BaseModel):
+    """Result of executing a single provider in cascade."""
+
+    provider_name: str
+    success: bool
+    response: SearchResponse | None = None
+    error: str | None = None
+    duration_ms: float
+    is_primary: bool = False
+    skipped: bool = Field(
+        default=False,
+        description="Whether provider was skipped due to circuit breaker",
     )
