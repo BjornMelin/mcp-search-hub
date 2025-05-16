@@ -21,6 +21,16 @@ class ProvidersConfig(BaseModel):
     firecrawl: ProviderConfig
 
 
+class RetryConfig(BaseModel):
+    """Configuration for exponential backoff retry."""
+
+    max_retries: int = 3
+    base_delay: float = 1.0  # Initial delay between retries in seconds
+    max_delay: float = 60.0  # Maximum delay between retries in seconds
+    exponential_base: float = 2.0  # Base for exponential backoff calculation
+    jitter: bool = True  # Whether to add randomization to retry delays
+
+
 class Settings(BaseModel):
     """Application settings."""
 
@@ -33,3 +43,4 @@ class Settings(BaseModel):
     transport: str = (
         "streamable-http"  # Default to HTTP, can be "stdio" for command-line use
     )
+    retry: RetryConfig = RetryConfig()  # Retry configuration with defaults

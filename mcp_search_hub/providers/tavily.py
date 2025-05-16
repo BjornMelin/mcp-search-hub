@@ -8,9 +8,10 @@ from ..config import get_settings
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
 from .base import SearchProvider
+from .retry_mixin import RetryMixin
 
 
-class TavilyProvider(SearchProvider):
+class TavilyProvider(SearchProvider, RetryMixin):
     """Tavily search provider implementation."""
 
     name = "tavily"
@@ -27,20 +28,25 @@ class TavilyProvider(SearchProvider):
         try:
             search_depth = "advanced" if query.advanced else "basic"
 
-            response = await self.client.post(
-                "https://api.tavily.com/search",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "api_key": self.api_key.get_secret_value(),
-                    "query": query.query,
-                    "search_depth": search_depth,
-                    "max_results": query.max_results,
-                    "include_raw_content": False,
-                    "include_images": False,
-                    "topic": "general",
-                },
-            )
-            response.raise_for_status()
+            @self.with_retry
+            async def make_request():
+                response = await self.client.post(
+                    "https://api.tavily.com/search",
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "api_key": self.api_key.get_secret_value(),
+                        "query": query.query,
+                        "search_depth": search_depth,
+                        "max_results": query.max_results,
+                        "include_raw_content": False,
+                        "include_images": False,
+                        "topic": "general",
+                    },
+                )
+                response.raise_for_status()
+                return response
+
+            response = await make_request()
             data = response.json()
 
             results = []

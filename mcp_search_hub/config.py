@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from pydantic import SecretStr
 
-from .models.config import ProviderConfig, ProvidersConfig, Settings
+from .models.config import ProviderConfig, ProvidersConfig, RetryConfig, Settings
 
 
 @lru_cache
@@ -47,4 +47,11 @@ def get_settings() -> Settings:
         port=int(os.getenv("PORT", "8000")),
         host=os.getenv("HOST", "0.0.0.0"),
         transport=os.getenv("TRANSPORT", "streamable-http"),
+        retry=RetryConfig(
+            max_retries=int(os.getenv("MAX_RETRIES", "3")),
+            base_delay=float(os.getenv("RETRY_BASE_DELAY", "1.0")),
+            max_delay=float(os.getenv("RETRY_MAX_DELAY", "60.0")),
+            exponential_base=float(os.getenv("RETRY_EXPONENTIAL_BASE", "2.0")),
+            jitter=os.getenv("RETRY_JITTER", "true").lower() == "true",
+        ),
     )

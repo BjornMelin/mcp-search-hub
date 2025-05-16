@@ -8,9 +8,10 @@ from ..config import get_settings
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
 from .base import SearchProvider
+from .retry_mixin import RetryMixin
 
 
-class LinkupProvider(SearchProvider):
+class LinkupProvider(SearchProvider, RetryMixin):
     """Linkup search provider implementation."""
 
     name = "linkup"
@@ -30,16 +31,24 @@ class LinkupProvider(SearchProvider):
             # If raw_content is requested, use different output type
             output_type = "detailed" if query.raw_content else "searchResults"
 
-            response = await self.client.post(
-                "https://api.linkup.ai/search",
-                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
-                json={
-                    "query": query.query,
-                    "depth": depth,
-                    "output_type": output_type,
-                },
-            )
-            response.raise_for_status()
+            # Use retry decorator for the API call
+            @self.with_retry
+            async def make_request():
+                response = await self.client.post(
+                    "https://api.linkup.ai/search",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key.get_secret_value()}"
+                    },
+                    json={
+                        "query": query.query,
+                        "depth": depth,
+                        "output_type": output_type,
+                    },
+                )
+                response.raise_for_status()
+                return response
+
+            response = await make_request()
             data = response.json()
 
             results = []
@@ -133,20 +142,41 @@ class LinkupProvider(SearchProvider):
             # Use Firecrawl scrape API to get content if API key is available
             firecrawl_api_key = get_settings().providers.firecrawl.api_key
             if firecrawl_api_key:
-                response = await self.client.post(
-                    "https://api.firecrawl.dev/scrape",
-                    headers={
-                        "Authorization": f"Bearer {firecrawl_api_key.get_secret_value()}"
-                    },
-                    json={"url": url, "formats": ["markdown"], "onlyMainContent": True},
-                    timeout=10.0,
-                )
-                if response.is_success:
+
+                @self.with_retry
+                async def fetch_with_firecrawl():
+                    response = await self.client.post(
+                        "https://api.firecrawl.dev/scrape",
+                        headers={
+                            "Authorization": f"Bearer {firecrawl_api_key.get_secret_value()}"
+                        },
+                        json={
+                            "url": url,
+                            "formats": ["markdown"],
+                            "onlyMainContent": True,
+                        },
+                        timeout=10.0,
+                    )
+                    response.raise_for_status()
+                    return response
+
+                try:
+                    response = await fetch_with_firecrawl()
                     data = response.json()
                     return data.get("markdown", "")
+                except Exception:
+                    pass  # Fall through to direct fetch
 
             # Fallback to direct HTTP request if Firecrawl is unavailable
-            response = await self.client.get(url, timeout=5.0, follow_redirects=True)
+            @self.with_retry
+            async def fetch_direct():
+                response = await self.client.get(
+                    url, timeout=5.0, follow_redirects=True
+                )
+                response.raise_for_status()
+                return response
+
+            response = await fetch_direct()
             if response.is_success:
                 content_type = response.headers.get("content-type", "")
                 if "text/html" in content_type:

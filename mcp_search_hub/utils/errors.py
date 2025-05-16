@@ -25,6 +25,10 @@ class RouterError(SearchError):
     """Exception raised when routing fails."""
 
 
+class ProviderTimeoutError(ProviderError):
+    """Exception raised when a provider times out."""
+
+
 def format_exception(e: Exception) -> dict[str, Any]:
     """Format an exception for structured logging."""
     return {

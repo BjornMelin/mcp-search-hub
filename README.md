@@ -9,7 +9,8 @@
 - Combines and ranks results for optimal relevance with intelligent deduplication
 - Implements cost control mechanisms and budget constraints
 - Provides caching for improved performance and reduced API costs
-- Handles errors and provider failures gracefully
+- Handles errors and provider failures gracefully with exponential backoff retry logic
+- Automatically retries transient errors (timeouts, rate limits, server errors) with configurable settings
 - Zero maintenance for provider updates - automatically leverages official MCP server enhancements
 - Easily deployable with Docker or as a standalone Python service
 - Supports both HTTP and STDIO transport methods
@@ -212,6 +213,13 @@ EXA_TIMEOUT=5000
 PERPLEXITY_TIMEOUT=5000
 TAVILY_TIMEOUT=5000
 FIRECRAWL_TIMEOUT=5000
+
+# Retry configuration for exponential backoff
+MAX_RETRIES=3               # Maximum number of retry attempts
+RETRY_BASE_DELAY=1.0        # Initial delay between retries in seconds
+RETRY_MAX_DELAY=60.0        # Maximum delay between retries in seconds
+RETRY_EXPONENTIAL_BASE=2.0  # Base for exponential backoff calculation
+RETRY_JITTER=true           # Whether to add randomization to retry delays
 ```
 
 ## Usage

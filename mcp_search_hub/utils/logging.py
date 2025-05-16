@@ -5,6 +5,20 @@ import sys
 from typing import Any
 
 
+def get_logger(name: str | None = None) -> logging.Logger:
+    """Get a logger instance.
+
+    Args:
+        name: Logger name (uses calling module name if None)
+
+    Returns:
+        Logger instance
+    """
+    if name is None:
+        name = "mcp_search_hub"
+    return logging.getLogger(name)
+
+
 def configure_logging(log_level: str = "INFO") -> logging.Logger:
     """
     Configure logging for the application.
