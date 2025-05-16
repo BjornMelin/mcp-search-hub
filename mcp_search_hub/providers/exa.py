@@ -1,6 +1,6 @@
 """Exa search provider implementation."""
 
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -73,7 +73,7 @@ class ExaProvider(SearchProvider):
                 error=str(e),
             )
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Exa capabilities."""
         return {
             "content_types": ["academic", "research", "general", "technical"],

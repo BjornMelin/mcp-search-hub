@@ -5,7 +5,7 @@ Tavily MCP wrapper provider that embeds the official tavily-mcp server.
 import logging
 import os
 import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 class TavilyMCPProvider:
     """Wrapper for the Tavily MCP server using MCP Python SDK."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize the Tavily MCP provider with configuration."""
         self.api_key = api_key or os.getenv("TAVILY_API_KEY")
         if not self.api_key:
             raise ValueError("Tavily API key is required")
 
-        self.session: Optional[ClientSession] = None
+        self.session: ClientSession | None = None
         self.server_params = StdioServerParameters(
             command="npx",
             args=["-y", "tavily-mcp@0.2.0"],
@@ -44,12 +44,13 @@ class TavilyMCPProvider:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-    async def _install_server(self):
+    async def _install_server(self) -> None:
         """Install the Tavily MCP server."""
         logger.info("Installing Tavily MCP server...")
         try:
@@ -58,6 +59,7 @@ class TavilyMCPProvider:
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,
             )
             if install_result.returncode != 0:
                 raise ProviderError(
@@ -95,19 +97,18 @@ class TavilyMCPProvider:
             await self.session.__aexit__(None, None, None)
             self.session = None
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Call a tool on the Tavily MCP server."""
         if not self.session:
             await self.initialize()
 
         try:
-            result = await self.session.call_tool(tool_name, arguments=arguments)
-            return result
+            return await self.session.call_tool(tool_name, arguments=arguments)
         except Exception as e:
             logger.error(f"Error calling tool {tool_name}: {e}")
             raise ProviderError(f"Failed to call Tavily tool {tool_name}: {e}")
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List available tools from the Tavily MCP server."""
         if not self.session:
             await self.initialize()
@@ -125,7 +126,7 @@ class TavilyProvider(SearchProvider):
 
     name = "tavily"
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         """Initialize the Tavily search provider."""
         super().__init__()
         config = config or {}
@@ -133,7 +134,7 @@ class TavilyProvider(SearchProvider):
         self.mcp_wrapper = TavilyMCPProvider(api_key=self.api_key)
         self._initialized = False
 
-    async def _ensure_initialized(self):
+    async def _ensure_initialized(self) -> None:
         """Ensure the MCP client is initialized."""
         if not self._initialized:
             await self.mcp_wrapper.initialize()
@@ -236,7 +237,7 @@ class TavilyProvider(SearchProvider):
                 error=str(e),
             )
 
-    async def extract_content(self, url: str, **kwargs) -> Dict[str, Any]:
+    async def extract_content(self, url: str, **kwargs) -> dict[str, Any]:
         """
         Extract content from a URL using the tavily-extract tool.
 
@@ -247,13 +248,12 @@ class TavilyProvider(SearchProvider):
         await self._ensure_initialized()
 
         options = {"extractDepth": "advanced", **kwargs}
-        result = await self.mcp_wrapper.call_tool(
+        return await self.mcp_wrapper.call_tool(
             "tavily-extract",
             {"urls": [url] if isinstance(url, str) else url, "options": options},
         )
-        return result
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Tavily capabilities."""
         return {
             "content_types": ["general", "technical", "news", "academic"],
@@ -274,7 +274,7 @@ class TavilyProvider(SearchProvider):
         # ~$0.02 per advanced search
         return 0.02 if query.advanced else 0.01
 
-    async def check_status(self) -> Tuple[HealthStatus, str]:
+    async def check_status(self) -> tuple[HealthStatus, str]:
         """Check the status of the Tavily provider."""
         try:
             await self._ensure_initialized()
@@ -282,11 +282,10 @@ class TavilyProvider(SearchProvider):
             tools = await self.mcp_wrapper.list_tools()
             if tools:
                 return HealthStatus.OK, "Tavily provider is operational"
-            else:
-                return (
-                    HealthStatus.DEGRADED,
-                    "No tools available from Tavily MCP server",
-                )
+            return (
+                HealthStatus.DEGRADED,
+                "No tools available from Tavily MCP server",
+            )
         except Exception as e:
             logger.error(f"Tavily health check failed: {e}")
             return HealthStatus.FAILED, f"Health check failed: {str(e)}"

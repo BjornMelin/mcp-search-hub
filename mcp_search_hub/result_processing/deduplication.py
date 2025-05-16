@@ -1,10 +1,9 @@
 """Duplicate removal functions."""
 
-from typing import List
 from ..models.results import SearchResult
 
 
-def remove_duplicates(results: List[SearchResult]) -> List[SearchResult]:
+def remove_duplicates(results: list[SearchResult]) -> list[SearchResult]:
     """Remove duplicate results based on URL."""
     unique_urls = set()
     unique_results = []
@@ -38,9 +37,6 @@ def _normalize_url(url: str) -> str:
                 continue
             params_to_keep.append(param)
 
-        if params_to_keep:
-            url = base + "?" + "&".join(params_to_keep)
-        else:
-            url = base
+        url = base + "?" + "&".join(params_to_keep) if params_to_keep else base
 
     return url.lower()

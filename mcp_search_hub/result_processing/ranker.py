@@ -1,12 +1,11 @@
 """Result ranking utilities."""
 
-from typing import Dict, List
 from ..models.results import SearchResult
 
 
 def rank_by_weighted_score(
-    results: List[SearchResult], source_weights: Dict[str, float]
-) -> List[SearchResult]:
+    results: list[SearchResult], source_weights: dict[str, float]
+) -> list[SearchResult]:
     """
     Rank results by applying source weights to scores.
 

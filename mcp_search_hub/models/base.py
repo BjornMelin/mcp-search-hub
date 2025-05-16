@@ -1,8 +1,8 @@
 """Base model definitions."""
 
 from enum import Enum
+
 from pydantic import BaseModel
-from typing import Dict, Optional
 
 
 class HealthStatus(str, Enum):
@@ -18,7 +18,7 @@ class ProviderStatus(BaseModel):
 
     name: str
     status: HealthStatus
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class HealthResponse(BaseModel):
@@ -26,7 +26,7 @@ class HealthResponse(BaseModel):
 
     status: HealthStatus
     version: str = "1.0.0"
-    providers: Dict[str, ProviderStatus]
+    providers: dict[str, ProviderStatus]
 
 
 class MetricsData(BaseModel):
@@ -37,7 +37,7 @@ class MetricsData(BaseModel):
     average_response_time_ms: float = 0
     cache_hits: int = 0
     cache_misses: int = 0
-    provider_usage: Dict[str, int] = {}
+    provider_usage: dict[str, int] = {}
     errors: int = 0
 
 

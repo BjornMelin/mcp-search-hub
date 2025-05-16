@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.providers.firecrawl_mcp import (
     FirecrawlMCPProvider,
     FirecrawlProvider,
@@ -39,7 +40,8 @@ class TestFirecrawlMCPProvider:
             # Mock client connection
             mock_read = AsyncMock()
             mock_write = AsyncMock()
-            mock_client.return_value = mock_read, mock_write
+            # stdio_client is an async function that should return a tuple
+            mock_client.side_effect = AsyncMock(return_value=(mock_read, mock_write))
 
             # Mock session
             mock_session = AsyncMock()
@@ -70,7 +72,8 @@ class TestFirecrawlMCPProvider:
             # Mock client connection
             mock_read = AsyncMock()
             mock_write = AsyncMock()
-            mock_client.return_value = mock_read, mock_write
+            # stdio_client is an async function that should return a tuple
+            mock_client.side_effect = AsyncMock(return_value=(mock_read, mock_write))
 
             # Mock session
             mock_session = AsyncMock()
@@ -148,17 +151,19 @@ class TestFirecrawlProvider:
                 }
             ]
 
-            results = await firecrawl_provider.search("https://example.com")
+            query = SearchQuery(query="https://example.com", max_results=10)
+            response = await firecrawl_provider.search(query)
 
-            assert len(results) == 1
-            assert results[0]["title"] == "Test Page"
-            mock_scrape.assert_called_once_with("https://example.com")
+            assert len(response.results) == 1
+            assert response.results[0].title == "Test Page"
+            mock_scrape.assert_called_once_with("https://example.com", max_results=10)
 
     @pytest.mark.asyncio
     async def test_search_without_url(self, firecrawl_provider):
         """Test search without URL returns empty."""
-        results = await firecrawl_provider.search("test query")
-        assert results == []
+        query = SearchQuery(query="test query", max_results=10)
+        response = await firecrawl_provider.search(query)
+        assert response.results == []
 
     @pytest.mark.asyncio
     async def test_scrape_url(self, firecrawl_provider):
@@ -169,15 +174,16 @@ class TestFirecrawlProvider:
             "metadata": {"author": "test"},
         }
 
-        with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
-            mock_call.return_value = mock_response
+        with patch.object(firecrawl_provider, "_ensure_initialized"):
+            with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
+                mock_call.return_value = mock_response
 
-            results = await firecrawl_provider.scrape_url("https://example.com")
+                results = await firecrawl_provider.scrape_url("https://example.com")
 
-            assert len(results) == 1
-            assert results[0]["title"] == "Test Page"
-            assert results[0]["content"] == "# Test Page\n\nTest content"
-            assert results[0]["metadata"]["author"] == "test"
+                assert len(results) == 1
+                assert results[0]["title"] == "Test Page"
+                assert results[0]["content"] == "# Test Page\n\nTest content"
+                assert results[0]["metadata"]["author"] == "test"
 
     @pytest.mark.asyncio
     async def test_firecrawl_map(self, firecrawl_provider):
@@ -186,25 +192,27 @@ class TestFirecrawlProvider:
             "urls": ["https://example.com/page1", "https://example.com/page2"]
         }
 
-        with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
-            mock_call.return_value = mock_response
+        with patch.object(firecrawl_provider, "_ensure_initialized"):
+            with patch.object(firecrawl_provider.mcp_client, "call_tool") as mock_call:
+                mock_call.return_value = mock_response
 
-            result = await firecrawl_provider.firecrawl_map("https://example.com")
+                result = await firecrawl_provider.firecrawl_map("https://example.com")
 
-            assert result["urls"][0] == "https://example.com/page1"
-            mock_call.assert_called_once_with(
-                "firecrawl_map", {"url": "https://example.com"}
-            )
+                assert result["urls"][0] == "https://example.com/page1"
+                mock_call.assert_called_once_with(
+                    "firecrawl_map", {"url": "https://example.com"}
+                )
 
     @pytest.mark.asyncio
     async def test_get_available_tools(self, firecrawl_provider):
         """Test getting available tools."""
         mock_tools = [{"name": "firecrawl_scrape"}, {"name": "firecrawl_map"}]
 
-        with patch.object(firecrawl_provider.mcp_client, "list_tools") as mock_list:
-            mock_list.return_value = mock_tools
+        with patch.object(firecrawl_provider, "_ensure_initialized"):
+            with patch.object(firecrawl_provider.mcp_client, "list_tools") as mock_list:
+                mock_list.return_value = mock_tools
 
-            tools = await firecrawl_provider.get_available_tools()
+                tools = await firecrawl_provider.get_available_tools()
 
-            assert len(tools) == 2
-            assert tools[0]["name"] == "firecrawl_scrape"
+                assert len(tools) == 2
+                assert tools[0]["name"] == "firecrawl_scrape"

@@ -1,7 +1,6 @@
 """Configuration models."""
 
 from pydantic import BaseModel, SecretStr
-from typing import Optional
 
 
 class ProviderConfig(BaseModel):
@@ -28,7 +27,7 @@ class Settings(BaseModel):
     providers: ProvidersConfig
     log_level: str = "INFO"
     cache_ttl: int = 3600  # Cache TTL in seconds
-    default_budget: Optional[float] = None
+    default_budget: float | None = None
     port: int = 8000
     host: str = "0.0.0.0"
     transport: str = (

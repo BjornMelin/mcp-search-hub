@@ -1,7 +1,5 @@
 """Query router for selecting appropriate search providers."""
 
-from typing import Dict, List
-
 from ..models.query import QueryFeatures, SearchQuery
 from ..providers.base import SearchProvider
 from .cost_optimizer import CostOptimizer
@@ -10,13 +8,13 @@ from .cost_optimizer import CostOptimizer
 class QueryRouter:
     """Routes queries to appropriate search providers."""
 
-    def __init__(self, providers: Dict[str, SearchProvider]):
+    def __init__(self, providers: dict[str, SearchProvider]):
         self.providers = providers
         self.cost_optimizer = CostOptimizer()
 
     def select_providers(
         self, query: SearchQuery, features: QueryFeatures, budget: float = None
-    ) -> List[str]:
+    ) -> list[str]:
         """Select the best provider(s) for a query based on its features."""
         scores = {}
 

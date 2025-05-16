@@ -1,11 +1,13 @@
 """Linkup search provider implementation."""
 
+from typing import Any
+
 import httpx
-from typing import Dict, Any
-from .base import SearchProvider
-from ..models.query import SearchQuery
-from ..models.results import SearchResult, SearchResponse
+
 from ..config import get_settings
+from ..models.query import SearchQuery
+from ..models.results import SearchResponse, SearchResult
+from .base import SearchProvider
 
 
 class LinkupProvider(SearchProvider):
@@ -87,7 +89,7 @@ class LinkupProvider(SearchProvider):
                 error=str(e),
             )
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Linkup capabilities."""
         return {
             "content_types": ["factual", "business", "news", "linkedin"],
@@ -123,11 +125,7 @@ class LinkupProvider(SearchProvider):
             if domain in url:
                 return False
 
-        for ext in excluded_extensions:
-            if url.endswith(ext):
-                return False
-
-        return True
+        return all(not url.endswith(ext) for ext in excluded_extensions)
 
     async def _fetch_content(self, url: str) -> str:
         """Fetch content from a URL."""

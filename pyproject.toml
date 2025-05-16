@@ -7,17 +7,75 @@ name = "mcp-search-hub"
 version = "0.1.0"
 description = "FastMCP 2.0 server integrating multiple search providers"
 authors = [{ name = "Bjorn Melin" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "fastmcp>=2.0.0",
-    "pydantic>=2.0.0",
-    "httpx>=0.24.0",
-    "uvicorn>=0.22.0",
-    "python-dotenv>=1.0.0",
+    "fastmcp>=2.3.4",
+    "pydantic>=2.11.0",
+    "httpx>=0.28.1",
+    "uvicorn>=0.34.2",
+    "python-dotenv>=1.1.0",
 ]
 
 [project.scripts]
 mcp-search-hub = "mcp_search_hub.main:main"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.8.0",
+]
+
 [tool.setuptools]
 packages = ["mcp_search_hub"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "C",    # flake8-comprehensions
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "SIM",  # flake8-simplify
+    "PIE",  # flake8-pie
+    "FLY",  # flynt
+    "PL",   # pylint
+    "RET",  # flake8-return
+    "ANN",  # flake8-annotations
+    "ASYNC", # flake8-async
+    "LOG",  # flake8-logging
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "ANN101", # self annotations
+    "ANN102", # cls annotations
+    "PLR0913", # Too many arguments
+    "ANN201", # Missing return type annotations for public functions
+    "ANN204", # Missing return type annotation for special methods
+    "ANN001", # Missing type annotations for function arguments
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN202", # Missing return type annotation for private functions
+    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
+    "LOG015", # logging on root logger
+    "ASYNC221", # Async functions with blocking subprocess calls (needed for MCP server startup)
+    "B904", # Exception messages within except clauses
+    "PLR2004", # Magic values used in comparisons
+    "SIM117", # Use of nested with statements
+    "A002", # Function argument shadowing a Python builtin
+    "C901", # Function is too complex
+    "PLR0912", # Too many branches
+    "PLR0911", # Too many return statements
+    "PLR0915", # Too many statements
+    "N803", # Argument name should be lowercase (needed for MCP API compatibility)
+    "ASYNC109", # Async function definition with a timeout parameter
+]

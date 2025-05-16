@@ -1,6 +1,6 @@
 """Firecrawl search provider implementation."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 from pydantic import BaseModel
@@ -17,8 +17,8 @@ class MapOptions(BaseModel):
 
     ignore_sitemap: bool = False
     include_subdomains: bool = False
-    limit: Optional[int] = None
-    search: Optional[str] = None
+    limit: int | None = None
+    search: str | None = None
     sitemap_only: bool = False
 
 
@@ -26,34 +26,34 @@ class CrawlOptions(BaseModel):
     """Options for website crawling."""
 
     limit: int = 10
-    max_depth: Optional[int] = None
-    include_paths: Optional[List[str]] = None
-    exclude_paths: Optional[List[str]] = None
+    max_depth: int | None = None
+    include_paths: list[str] | None = None
+    exclude_paths: list[str] | None = None
     allow_external_links: bool = False
-    scrape_options: Optional[Dict[str, Any]] = None
+    scrape_options: dict[str, Any] | None = None
 
 
 class ExtractOptions(BaseModel):
     """Options for structured data extraction."""
 
-    prompt: Optional[str] = None
-    schema: Optional[Dict[str, Any]] = None
-    system_prompt: Optional[str] = None
+    prompt: str | None = None
+    schema: dict[str, Any] | None = None
+    system_prompt: str | None = None
     enable_web_search: bool = False
 
 
 class DeepResearchOptions(BaseModel):
     """Options for deep research."""
 
-    max_depth: Optional[int] = None
-    max_urls: Optional[int] = None
-    time_limit: Optional[int] = None
+    max_depth: int | None = None
+    max_urls: int | None = None
+    time_limit: int | None = None
 
 
 class LLMsTxtOptions(BaseModel):
     """Options for LLMs.txt generation."""
 
-    max_urls: Optional[int] = None
+    max_urls: int | None = None
     show_full_text: bool = False
 
 
@@ -218,8 +218,8 @@ class FirecrawlProvider(SearchProvider):
         )
 
     async def firecrawl_map(
-        self, url: str, options: Optional[MapOptions] = None
-    ) -> Dict[str, Any]:
+        self, url: str, options: MapOptions | None = None
+    ) -> dict[str, Any]:
         """
         Discover URLs from a starting point.
 
@@ -258,8 +258,8 @@ class FirecrawlProvider(SearchProvider):
             return {"error": str(e), "success": False}
 
     async def firecrawl_crawl(
-        self, url: str, options: Optional[CrawlOptions] = None
-    ) -> Dict[str, Any]:
+        self, url: str, options: CrawlOptions | None = None
+    ) -> dict[str, Any]:
         """
         Start an asynchronous crawl of multiple pages from a starting URL.
 
@@ -304,7 +304,7 @@ class FirecrawlProvider(SearchProvider):
         except Exception as e:
             return {"error": str(e), "success": False}
 
-    async def firecrawl_check_crawl_status(self, crawl_id: str) -> Dict[str, Any]:
+    async def firecrawl_check_crawl_status(self, crawl_id: str) -> dict[str, Any]:
         """
         Check the status of a crawl job.
 
@@ -326,8 +326,8 @@ class FirecrawlProvider(SearchProvider):
             return {"error": str(e), "success": False}
 
     async def firecrawl_extract(
-        self, urls: List[str], options: Optional[ExtractOptions] = None
-    ) -> Dict[str, Any]:
+        self, urls: list[str], options: ExtractOptions | None = None
+    ) -> dict[str, Any]:
         """
         Extract structured information from web pages using LLM.
 
@@ -369,8 +369,8 @@ class FirecrawlProvider(SearchProvider):
             return {"error": str(e), "success": False}
 
     async def firecrawl_deep_research(
-        self, query: str, options: Optional[DeepResearchOptions] = None
-    ) -> Dict[str, Any]:
+        self, query: str, options: DeepResearchOptions | None = None
+    ) -> dict[str, Any]:
         """
         Conduct deep research on a query using web crawling, search, and AI analysis.
 
@@ -409,8 +409,8 @@ class FirecrawlProvider(SearchProvider):
             return {"error": str(e), "success": False}
 
     async def firecrawl_generate_llmstxt(
-        self, url: str, options: Optional[LLMsTxtOptions] = None
-    ) -> Dict[str, Any]:
+        self, url: str, options: LLMsTxtOptions | None = None
+    ) -> dict[str, Any]:
         """
         Generate standardized LLMs.txt file for a given URL, which provides
         context about how LLMs should interact with the website.
@@ -461,7 +461,7 @@ class FirecrawlProvider(SearchProvider):
         query_lower = query.lower()
         return any(keyword in query_lower for keyword in extraction_keywords)
 
-    def _extract_url_from_query(self, query: str) -> Optional[str]:
+    def _extract_url_from_query(self, query: str) -> str | None:
         """Try to extract a URL from the query."""
         # Improved URL extraction
         words = query.split()
@@ -482,12 +482,11 @@ class FirecrawlProvider(SearchProvider):
                 # Add https:// prefix if missing
                 if word.startswith("www."):
                     return "https://" + word
-                else:
-                    return "https://" + word
+                return "https://" + word
 
         return None
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Firecrawl capabilities."""
         return {
             "content_types": ["web_content", "extraction", "general"],
@@ -520,10 +519,9 @@ class FirecrawlProvider(SearchProvider):
 
         if deep_research_query:
             return 0.10
-        elif extraction_query:
+        if extraction_query:
             return 0.05
-        else:
-            return 0.02
+        return 0.02
 
     async def check_status(self) -> tuple[HealthStatus, str]:
         """Check the status of Firecrawl service."""
@@ -536,11 +534,10 @@ class FirecrawlProvider(SearchProvider):
 
             if response.status_code == 200:
                 return HealthStatus.OK, "Firecrawl API is operational"
-            else:
-                return (
-                    HealthStatus.DEGRADED,
-                    f"Firecrawl API returned status code {response.status_code}",
-                )
+            return (
+                HealthStatus.DEGRADED,
+                f"Firecrawl API returned status code {response.status_code}",
+            )
 
         except httpx.RequestError as e:
             return HealthStatus.FAILED, f"Connection to Firecrawl API failed: {str(e)}"

@@ -2,7 +2,7 @@
 
 import logging
 import sys
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 
 def configure_logging(log_level: str = "INFO") -> logging.Logger:
@@ -43,8 +43,8 @@ def configure_logging(log_level: str = "INFO") -> logging.Logger:
 
 def log_query(
     logger: logging.Logger,
-    query: Dict[str, Any],
-    features: Optional[Dict[str, Any]] = None,
+    query: dict[str, Any],
+    features: dict[str, Any] | None = None,
 ):
     """
     Log query information.
@@ -60,7 +60,7 @@ def log_query(
 
 
 def log_provider_selection(
-    logger: logging.Logger, providers: Dict[str, Any], selected: List[str]
+    logger: logging.Logger, providers: dict[str, Any], selected: list[str]
 ):
     """
     Log provider selection.
@@ -74,7 +74,7 @@ def log_provider_selection(
     logger.debug(f"Available providers: {', '.join(providers.keys())}")
 
 
-def log_results(logger: logging.Logger, results: Dict[str, Any]):
+def log_results(logger: logging.Logger, results: dict[str, Any]):
     """
     Log result information.
 

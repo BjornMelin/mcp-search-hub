@@ -8,7 +8,7 @@ from pydantic import SecretStr
 from .models.config import ProviderConfig, ProvidersConfig, Settings
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Get application settings, with environment variable overrides."""
     return Settings(

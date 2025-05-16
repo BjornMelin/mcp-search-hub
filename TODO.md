@@ -22,19 +22,21 @@ _Last updated: May 15, 2025 (all MCP server integrations and documentation compl
   - [x] Create metrics endpoint for tracking usage statistics
   - [x] Add provider status checks to health endpoint
 
-## Package and Version Updates
+## Package and Version Updates (COMPLETED - May 15, 2025)
 
-- [ ] Update project dependencies to latest compatible versions
+- [x] Update project dependencies to latest compatible versions
 
-  - [ ] Use uv to update fastmcp to latest version (2.3+)
-  - [ ] Update httpx to latest version (0.27+)
-  - [ ] Update pydantic to latest 2.x version
-  - [ ] Update other dependencies as needed
+  - [x] Use uv to update fastmcp to latest version (2.3.4)
+  - [x] Update httpx to latest version (0.28.1)
+  - [x] Update pydantic to latest 2.x version (2.11.0)
+  - [x] Update other dependencies as needed
 
-- [ ] Update pyproject.toml with specific version constraints
-  - [ ] Add dev dependencies section for testing tools
-  - [ ] Update Python version requirement to 3.10+ or 3.11+
-  - [ ] Configure ruff settings for linting and formatting
+- [x] Update pyproject.toml with specific version constraints
+  - [x] Add dev dependencies section for testing tools
+  - [x] Update Python version requirement to 3.11+
+  - [x] Configure ruff settings for linting and formatting
+  
+**Notes**: All tests passing after update. Fixed several test issues due to dependency updates including merger logic, health metrics mocking, and FirecrawlProvider implementation.
 
 ## Provider Integration Improvements
 

@@ -1,7 +1,9 @@
 """Tests for the MCP Search Hub query analyzer."""
 
 import re
+
 import pytest
+
 from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.query_routing.analyzer import QueryAnalyzer
 
@@ -42,70 +44,60 @@ def test_basic_query_analyzer():
         ("Recent studies on COVID-19 variants", "academic"),
         ("Peer-reviewed articles on neural networks", "academic"),
         ("PhD dissertations about quantum computing", "academic"),
-        
         # Academic content types - complex cases
         ("Find papers published in Nature about genomics", "academic"),
         ("Literature review on machine learning techniques", "academic"),
         ("Meta-analysis of clinical trials for cancer treatments", "academic"),
         ("Scientific research in the field of renewable energy", "academic"),
         ("Conference proceedings from ICML 2023", "academic"),
-        
         # News content types - simple cases
         ("Latest news about the stock market", "news"),
         ("Today's headlines about politics", "news"),
         ("Breaking news on climate agreements", "news"),
         ("Recent updates on technology regulations", "news"),
         ("Current events in the Middle East", "news"),
-        
         # News content types - complex cases
         ("This week's developments in AI legislation", "news"),
         ("Daily news roundup for the tech industry", "news"),
         ("News coverage of the recent elections", "news"),
         ("Press releases from major tech companies today", "news"),
         ("Headlines reported in the Financial Times yesterday", "news"),
-        
         # Technical content types - simple cases
         ("Python programming tutorial", "technical"),
         ("Documentation for FastAPI framework", "technical"),
         ("How to use Docker for containerization", "technical"),
         ("Code examples for React hooks", "technical"),
         ("Library for image processing in Python", "technical"),
-        
         # Technical content types - complex cases
         ("API documentation for AWS S3 service", "technical"),
         ("How to implement authentication in NextJS", "technical"),
         ("Technical specification for HTTP/3 protocol", "technical"),
         ("Software architecture patterns for microservices", "technical"),
         ("Error handling best practices in Rust programming", "technical"),
-        
         # Business content types - simple cases
         ("Company profile for Apple Inc", "business"),
         ("Market analysis of the EV industry", "business"),
         ("Financial reports for Google Q3 2023", "business"),
         ("Startup funding rounds in AI sector", "business"),
         ("LinkedIn profile of Elon Musk", "business"),
-        
         # Business content types - complex cases
         ("Venture capital investments in biotech 2023", "business"),
         ("Competitor analysis for streaming platforms", "business"),
         ("Revenue growth forecast for SaaS companies", "business"),
         ("Series A funding announcements this month", "business"),
         ("Market share data for cloud providers", "business"),
-        
         # Web content types - simple cases
         ("Extract content from nytimes.com", "web_content"),
         ("Scrape product information from amazon.com", "web_content"),
         ("Get text from wikipedia article", "web_content"),
         ("Content from https://example.com/about", "web_content"),
         ("Fetch data from CNN website", "web_content"),
-        
         # Web content types - complex cases
         ("Extract financial data from investor relations page", "web_content"),
         ("Scrape job listings from company career sites", "web_content"),
         ("Web crawling for research paper citations", "web_content"),
         ("Extract information from website about AI ethics", "web_content"),
         ("Get content from multiple pages on github.com", "web_content"),
-        
         # General queries
         ("What is artificial intelligence", "general"),
         ("How to learn piano", "general"),
@@ -119,7 +111,9 @@ def test_content_type_detection(query_text, expected_content_type):
     analyzer = QueryAnalyzer()
     query = SearchQuery(query=query_text)
     features = analyzer.extract_features(query)
-    assert features.content_type == expected_content_type, f"Failed on query: '{query_text}'"
+    assert features.content_type == expected_content_type, (
+        f"Failed on query: '{query_text}'"
+    )
 
 
 @pytest.mark.parametrize(
@@ -138,7 +132,7 @@ def test_content_type_detection(query_text, expected_content_type):
         # Technical with how-to pattern
         (
             "How to implement authentication in React",
-            "technical", 
+            "technical",
         ),
         # Business with financial report pattern
         (
@@ -178,16 +172,18 @@ def test_pattern_matching(query_text, expected_content_type):
 def test_context_awareness(query_text, expected_content_type):
     """
     Test that the analyzer correctly adjusts based on context.
-    
+
     This test verifies that context adjustments are being made for potentially
     ambiguous terms like "research" (academic vs business) depending on surrounding terms.
     """
     analyzer = QueryAnalyzer()
     query = SearchQuery(query=query_text)
     features = analyzer.extract_features(query)
-    
+
     # Content type should match expected after context adjustment
-    assert features.content_type == expected_content_type, f"Failed on query: '{query_text}'"
+    assert features.content_type == expected_content_type, (
+        f"Failed on query: '{query_text}'"
+    )
 
 
 @pytest.mark.parametrize(
@@ -228,41 +224,45 @@ def test_context_awareness(query_text, expected_content_type):
 def test_mixed_content_detection(query_text, primary_type, secondary_types):
     """
     Test that the analyzer can identify mixed content types in queries.
-    
+
     This test verifies two things:
     1. The primary content type is correctly identified
     2. We're detecting multiple significant content types internally
     """
     analyzer = QueryAnalyzer()
-    
+
     # Test that the main content type is correctly identified
     query = SearchQuery(query=query_text)
     features = analyzer.extract_features(query)
-    assert features.content_type == primary_type, f"Primary type not correctly identified for: '{query_text}'"
-    
+    assert features.content_type == primary_type, (
+        f"Primary type not correctly identified for: '{query_text}'"
+    )
+
     # Test that we're also detecting the secondary types internally
     text_lower = query_text.lower()
-    scores = {category: 0.0 for category in analyzer.content_type_data.keys()}
-    
+    scores = dict.fromkeys(analyzer.content_type_data.keys(), 0.0)
+
     # Run keyword matching
     for category, category_data in analyzer.content_type_data.items():
-        for importance_level, keyword_list in category_data.items():
+        for _importance_level, keyword_list in category_data.items():
             for keyword, weight in keyword_list:
                 if keyword in text_lower:
                     scores[category] += weight
-    
+
     # Run pattern matching
     for category, patterns in analyzer.content_type_patterns.items():
         for pattern, weight in patterns:
             if re.search(pattern, text_lower):
                 scores[category] += weight
-    
+
     # Adjust for context
     analyzer._adjust_for_context(text_lower, scores)
-    
+
     # Each secondary type should have a significant score
     for secondary_type in secondary_types:
-        assert scores[secondary_type] >= 0.5, f"Secondary type {secondary_type} doesn't have significant score for: '{query_text}'"
+        assert scores[secondary_type] >= 0.5, (
+            f"Secondary type {secondary_type} doesn't have significant score for: '{query_text}'"
+        )
 
 
 @pytest.mark.parametrize(
@@ -316,11 +316,12 @@ def test_complexity_detection(query_text, complexity_range):
     analyzer = QueryAnalyzer()
     query = SearchQuery(query=query_text)
     features = analyzer.extract_features(query)
-    
+
     # Check if the complexity is within the expected range
     lower_bound, upper_bound = complexity_range
-    assert lower_bound <= features.complexity <= upper_bound, \
+    assert lower_bound <= features.complexity <= upper_bound, (
         f"Complexity score {features.complexity} for '{query_text}' is outside expected range {complexity_range}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -343,25 +344,26 @@ def test_factual_nature_detection(query_text, factual_range):
     analyzer = QueryAnalyzer()
     query = SearchQuery(query=query_text)
     features = analyzer.extract_features(query)
-    
+
     # Check if the factual_nature is within the expected range
     lower_bound, upper_bound = factual_range
-    assert lower_bound <= features.factual_nature <= upper_bound, \
+    assert lower_bound <= features.factual_nature <= upper_bound, (
         f"Factual nature score {features.factual_nature} for '{query_text}' is outside expected range {factual_range}"
+    )
 
 
 def test_explicit_content_type_override():
     """Test that explicitly provided content_type overrides detection."""
     analyzer = QueryAnalyzer()
-    
+
     # Query that would normally be detected as "technical"
     query_text = "How to use React hooks in a web application"
-    
+
     # Create query without explicit content_type
     query = SearchQuery(query=query_text)
     features = analyzer.extract_features(query)
     assert features.content_type == "technical"
-    
+
     # Create query with explicit content_type
     query = SearchQuery(query=query_text, content_type="web_content")
     features = analyzer.extract_features(query)
@@ -371,12 +373,12 @@ def test_explicit_content_type_override():
 def test_empty_query_handling():
     """Test that empty or minimal queries default to general content type."""
     analyzer = QueryAnalyzer()
-    
+
     # Empty query
     query = SearchQuery(query="")
     features = analyzer.extract_features(query)
     assert features.content_type == "general"
-    
+
     # Very short query with no clear indicators
     query = SearchQuery(query="hello")
     features = analyzer.extract_features(query)

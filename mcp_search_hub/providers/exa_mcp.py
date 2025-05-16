@@ -5,7 +5,7 @@ Exa MCP wrapper provider that embeds the official exa-mcp-server.
 import logging
 import os
 import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 class ExaMCPProvider:
     """Wrapper for the Exa MCP server using MCP Python SDK."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize the Exa MCP provider with configuration."""
         self.api_key = api_key or os.getenv("EXA_API_KEY")
         if not self.api_key:
             raise ValueError("Exa API key is required")
 
-        self.session: Optional[ClientSession] = None
+        self.session: ClientSession | None = None
         self.server_params = StdioServerParameters(
             command="npx",
             args=["@modelcontextprotocol/server-exa"],
@@ -43,6 +43,7 @@ class ExaMCPProvider:
                 ["npx", "@modelcontextprotocol/server-exa", "--version"],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             if result.returncode != 0:
                 # Install it if not present
@@ -51,6 +52,7 @@ class ExaMCPProvider:
                     ["npm", "install", "-g", "@modelcontextprotocol/server-exa"],
                     capture_output=True,
                     text=True,
+                    check=False,
                 )
                 if install_result.returncode != 0:
                     raise ProviderError(
@@ -77,19 +79,18 @@ class ExaMCPProvider:
             await self.session.__aexit__(None, None, None)
             self.session = None
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Call a tool on the Exa MCP server."""
         if not self.session:
             await self.initialize()
 
         try:
-            result = await self.session.call_tool(tool_name, arguments=arguments)
-            return result
+            return await self.session.call_tool(tool_name, arguments=arguments)
         except Exception as e:
             logger.error(f"Error calling tool {tool_name}: {e}")
             raise ProviderError(f"Failed to call Exa tool {tool_name}: {e}")
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List available tools from the Exa MCP server."""
         if not self.session:
             await self.initialize()
@@ -107,14 +108,14 @@ class ExaProvider(SearchProvider):
 
     name = "exa"
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the Exa search provider."""
         super().__init__()
         self.api_key = config.get("exa_api_key", "")
         self.mcp_wrapper = ExaMCPProvider(api_key=self.api_key)
         self._initialized = False
 
-    async def _ensure_initialized(self):
+    async def _ensure_initialized(self) -> None:
         """Ensure the MCP client is initialized."""
         if not self._initialized:
             await self.mcp_wrapper.initialize()
@@ -173,54 +174,54 @@ class ExaProvider(SearchProvider):
                 error=str(e),
             )
 
-    async def research_papers(self, query: str, **kwargs) -> List[Dict[str, Any]]:
+    async def research_papers(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """Search for research papers using Exa."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "research_paper_search", {"query": query, **kwargs}
         )
 
-    async def company_research(self, query: str, **kwargs) -> List[Dict[str, Any]]:
+    async def company_research(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """Research companies using Exa."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "company_research", {"query": query, **kwargs}
         )
 
-    async def competitor_finder(self, company: str, **kwargs) -> List[Dict[str, Any]]:
+    async def competitor_finder(self, company: str, **kwargs) -> list[dict[str, Any]]:
         """Find competitors for a company using Exa."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "competitor_finder", {"company": company, **kwargs}
         )
 
-    async def linkedin_search(self, query: str, **kwargs) -> List[Dict[str, Any]]:
+    async def linkedin_search(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """Search LinkedIn using Exa."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "linkedin_search", {"query": query, **kwargs}
         )
 
-    async def wikipedia_search(self, query: str, **kwargs) -> List[Dict[str, Any]]:
+    async def wikipedia_search(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """Search Wikipedia using Exa."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "wikipedia_search_exa", {"query": query, **kwargs}
         )
 
-    async def github_search(self, query: str, **kwargs) -> List[Dict[str, Any]]:
+    async def github_search(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """Search GitHub using Exa."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool(
             "github_search", {"query": query, **kwargs}
         )
 
-    async def crawl(self, url: str, **kwargs) -> Dict[str, Any]:
+    async def crawl(self, url: str, **kwargs) -> dict[str, Any]:
         """Crawl a URL using Exa."""
         await self._ensure_initialized()
         return await self.mcp_wrapper.call_tool("crawling", {"url": url, **kwargs})
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return Exa capabilities."""
         return {
             "content_types": [
@@ -245,7 +246,7 @@ class ExaProvider(SearchProvider):
         # Exa costs ~$0.02 per search
         return 0.02
 
-    async def check_status(self) -> Tuple[HealthStatus, str]:
+    async def check_status(self) -> tuple[HealthStatus, str]:
         """Check the status of the Exa provider."""
         try:
             await self._ensure_initialized()

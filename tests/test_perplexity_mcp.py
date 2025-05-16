@@ -230,20 +230,22 @@ class TestPerplexityProvider:
             "citations": ["1", "2"],
         }
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value=mock_response
-            ) as mock_call:
-                result = await provider.search(query)
+            ) as mock_call,
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 2
-                assert result.results[0].title == "Test Result 1"
-                assert result.results[0].url == "https://example.com/1"
-                assert result.results[0].source == "perplexity"
-                assert result.provider == "perplexity"
-                assert result.total_results == 2
+            assert len(result.results) == 2
+            assert result.results[0].title == "Test Result 1"
+            assert result.results[0].url == "https://example.com/1"
+            assert result.results[0].source == "perplexity"
+            assert result.provider == "perplexity"
+            assert result.total_results == 2
 
-                mock_call.assert_called_once()
+            mock_call.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_search_with_content_only(self, provider):
@@ -256,62 +258,68 @@ class TestPerplexityProvider:
             "citations": ["1", "2"],
         }
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
-                provider.mcp_wrapper, "call_tool", return_value=mock_response
-            ):
-                result = await provider.search(query)
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(provider.mcp_wrapper, "call_tool", return_value=mock_response),
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 1
-                assert "Perplexity Answer" in result.results[0].title
-                # Note: SearchResult doesn't have a content attribute, it uses snippet
-                assert result.results[0].snippet == "Test answer content"
+            assert len(result.results) == 1
+            assert "Perplexity Answer" in result.results[0].title
+            # Note: SearchResult doesn't have a content attribute, it uses snippet
+            assert result.results[0].snippet == "Test answer content"
 
     @pytest.mark.asyncio
     async def test_search_error(self, provider):
         """Test search error handling."""
         query = SearchQuery(query="test query")
 
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper,
                 "call_tool",
                 side_effect=Exception("Search failed"),
-            ):
-                result = await provider.search(query)
+            ),
+        ):
+            result = await provider.search(query)
 
-                assert len(result.results) == 0
-                assert result.error == "Search failed"
+            assert len(result.results) == 0
+            assert result.error == "Search failed"
 
     @pytest.mark.asyncio
     async def test_perplexity_research(self, provider):
         """Test perplexity research method."""
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value={"result": "research"}
-            ) as mock_call:
-                result = await provider.perplexity_research("test topic")
+            ) as mock_call,
+        ):
+            result = await provider.perplexity_research("test topic")
 
-                assert result == {"result": "research"}
-                mock_call.assert_called_with(
-                    "perplexity_research",
-                    {"messages": [{"role": "user", "content": "test topic"}]},
-                )
+            assert result == {"result": "research"}
+            mock_call.assert_called_with(
+                "perplexity_research",
+                {"messages": [{"role": "user", "content": "test topic"}]},
+            )
 
     @pytest.mark.asyncio
     async def test_perplexity_reason(self, provider):
         """Test perplexity reasoning method."""
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper, "call_tool", return_value={"result": "reasoning"}
-            ) as mock_call:
-                result = await provider.perplexity_reason("test reasoning")
+            ) as mock_call,
+        ):
+            result = await provider.perplexity_reason("test reasoning")
 
-                assert result == {"result": "reasoning"}
-                mock_call.assert_called_with(
-                    "perplexity_reason",
-                    {"messages": [{"role": "user", "content": "test reasoning"}]},
-                )
+            assert result == {"result": "reasoning"}
+            mock_call.assert_called_with(
+                "perplexity_reason",
+                {"messages": [{"role": "user", "content": "test reasoning"}]},
+            )
 
     def test_get_capabilities(self, provider):
         """Test getting provider capabilities."""
@@ -338,16 +346,18 @@ class TestPerplexityProvider:
     @pytest.mark.asyncio
     async def test_check_status_success(self, provider):
         """Test successful status check."""
-        with patch.object(provider, "_ensure_initialized"):
-            with patch.object(
+        with (
+            patch.object(provider, "_ensure_initialized"),
+            patch.object(
                 provider.mcp_wrapper,
                 "list_tools",
                 return_value=[{"name": "perplexity_ask"}],
-            ):
-                status, message = await provider.check_status()
+            ),
+        ):
+            status, message = await provider.check_status()
 
-                assert status.value == "ok"
-                assert "operational" in message
+            assert status.value == "ok"
+            assert "operational" in message
 
     @pytest.mark.asyncio
     async def test_check_status_failure(self, provider):

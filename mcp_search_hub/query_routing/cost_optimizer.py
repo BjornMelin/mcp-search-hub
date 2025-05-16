@@ -1,7 +1,5 @@
 """Cost optimization strategies."""
 
-from typing import Dict, List
-
 from ..models.query import SearchQuery
 from ..providers.base import SearchProvider
 
@@ -12,10 +10,10 @@ class CostOptimizer:
     def optimize_selection(
         self,
         query: SearchQuery,
-        providers: Dict[str, SearchProvider],
-        scores: Dict[str, float],
+        providers: dict[str, SearchProvider],
+        scores: dict[str, float],
         budget: float,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Select providers while considering budget constraints.
 

@@ -125,7 +125,7 @@ class TestExaMCPProvider:
         mock_session = AsyncMock()
         mock_session.call_tool = AsyncMock(return_value={"result": "test"})
 
-        async def mock_initialize():
+        async def mock_initialize() -> None:
             exa_mcp_provider.session = mock_session
 
         with patch.object(

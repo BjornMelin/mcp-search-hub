@@ -3,7 +3,6 @@
 import asyncio
 import time
 import uuid
-from typing import Dict
 
 from fastmcp import Context, FastMCP
 from starlette.requests import Request
@@ -42,7 +41,7 @@ class SearchServer:
 
         # Initialize providers
         settings = get_settings()
-        self.providers: Dict[str, SearchProvider] = {
+        self.providers: dict[str, SearchProvider] = {
             "linkup": LinkupProvider(
                 {
                     "linkup_api_key": (
@@ -83,7 +82,7 @@ class SearchServer:
         self._register_tools()
         self._register_custom_routes()
 
-    def _register_custom_routes(self):
+    def _register_custom_routes(self) -> None:
         """Register custom HTTP routes."""
 
         @self.mcp.custom_route("/health", methods=["GET"])
@@ -95,7 +94,7 @@ class SearchServer:
             # Check each provider
             provider_tasks = []
             for name, provider in self.providers.items():
-                if get_settings().providers.__getattribute__(name).enabled:
+                if getattr(get_settings().providers, name).enabled:
                     provider_tasks.append(
                         (name, asyncio.create_task(provider.check_status()))
                     )
@@ -136,7 +135,7 @@ class SearchServer:
 
             return JSONResponse(response.model_dump())
 
-    def _register_tools(self):
+    def _register_tools(self) -> None:
         """Register FastMCP tools."""
 
         @self.mcp.tool()
@@ -235,7 +234,7 @@ class SearchServer:
                 # Calculate costs
                 total_cost = sum(
                     self.providers[name].estimate_cost(query)
-                    for name in provider_results.keys()
+                    for name in provider_results
                 )
 
                 # Create response
@@ -274,7 +273,7 @@ class SearchServer:
                 )
 
         @self.mcp.tool()
-        def get_provider_info() -> Dict[str, Dict]:
+        def get_provider_info() -> dict[str, dict]:
             """Get information about available search providers."""
             provider_info = {}
 
@@ -290,11 +289,11 @@ class SearchServer:
             @self.mcp.tool()
             async def firecrawl_scrape(
                 url: str,
-                formats: list[str] = ["markdown"],
+                formats: list[str] = None,
                 onlyMainContent: bool = True,
                 timeout: int = 30000,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Scrape a single webpage with Firecrawl.
 
@@ -304,6 +303,8 @@ class SearchServer:
                     onlyMainContent: Extract only the main content
                     timeout: Maximum time to wait for page load
                 """
+                if formats is None:
+                    formats = ["markdown"]
                 return await firecrawl_provider.scrape_url(
                     url,
                     formats=formats,
@@ -318,7 +319,7 @@ class SearchServer:
                 search: str = None,
                 ignoreSubdomains: bool = False,
                 limit: int = None,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Discover URLs from a starting point using sitemap and crawling.
 
@@ -335,7 +336,7 @@ class SearchServer:
             @self.mcp.tool()
             async def firecrawl_crawl(
                 url: str, limit: int = 10, maxDepth: int = 3, **options
-            ) -> Dict:
+            ) -> dict:
                 """
                 Start an asynchronous crawl of multiple pages.
 
@@ -349,7 +350,7 @@ class SearchServer:
                 )
 
             @self.mcp.tool()
-            async def firecrawl_check_crawl_status(id: str) -> Dict:
+            async def firecrawl_check_crawl_status(id: str) -> dict:
                 """
                 Check the status of a crawl job.
 
@@ -359,7 +360,7 @@ class SearchServer:
                 return await firecrawl_provider.firecrawl_check_crawl_status(id)
 
             @self.mcp.tool()
-            async def firecrawl_search(query: str, limit: int = 5, **options) -> Dict:
+            async def firecrawl_search(query: str, limit: int = 5, **options) -> dict:
                 """
                 Search the web with Firecrawl.
 
@@ -374,7 +375,7 @@ class SearchServer:
             @self.mcp.tool()
             async def firecrawl_extract(
                 urls: list[str], prompt: str, systemPrompt: str = None
-            ) -> Dict:
+            ) -> dict:
                 """
                 Extract structured information from web pages using LLM.
 
@@ -390,7 +391,7 @@ class SearchServer:
             @self.mcp.tool()
             async def firecrawl_deep_research(
                 query: str, maxDepth: int = 3, maxUrls: int = 100, timeLimit: int = 300
-            ) -> Dict:
+            ) -> dict:
                 """
                 Conduct deep research on a query using web crawling and AI analysis.
 
@@ -407,7 +408,7 @@ class SearchServer:
             @self.mcp.tool()
             async def firecrawl_generate_llmstxt(
                 url: str, maxUrls: int = 10, showFullText: bool = False
-            ) -> Dict:
+            ) -> dict:
                 """
                 Generate standardized LLMs.txt file for a URL.
 
@@ -430,7 +431,7 @@ class SearchServer:
                 limit: int = 10,
                 type: str = "neural",
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Search the web using Exa's semantic search engine.
 
@@ -449,7 +450,7 @@ class SearchServer:
                 query: str,
                 limit: int = 10,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Search for research papers using Exa.
 
@@ -463,7 +464,7 @@ class SearchServer:
             async def exa_company_research(
                 query: str,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Research companies using Exa.
 
@@ -476,7 +477,7 @@ class SearchServer:
             async def exa_competitor_finder(
                 company: str,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Find competitors for a company using Exa.
 
@@ -490,7 +491,7 @@ class SearchServer:
                 query: str,
                 limit: int = 10,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Search LinkedIn using Exa.
 
@@ -505,7 +506,7 @@ class SearchServer:
                 query: str,
                 limit: int = 10,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Search Wikipedia using Exa.
 
@@ -520,7 +521,7 @@ class SearchServer:
                 query: str,
                 limit: int = 10,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Search GitHub using Exa.
 
@@ -534,7 +535,7 @@ class SearchServer:
             async def exa_crawl(
                 url: str,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Crawl a URL using Exa.
 
@@ -552,7 +553,7 @@ class SearchServer:
                 query: str,
                 search_focus: str = "web",
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Ask Perplexity a question with web search capabilities.
 
@@ -573,7 +574,7 @@ class SearchServer:
             async def perplexity_research(
                 query: str,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Conduct deep research on a topic using Perplexity.
 
@@ -586,7 +587,7 @@ class SearchServer:
             async def perplexity_reason(
                 query: str,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Perform reasoning tasks using Perplexity.
 
@@ -604,7 +605,7 @@ class SearchServer:
                 query: str,
                 depth: str = "standard",
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Search the web using Linkup for real-time information and premium content.
 
@@ -616,7 +617,7 @@ class SearchServer:
                     "search-web",
                     {"query": query, "depth": depth, **kwargs},
                 )
-        
+
         # Register Tavily tools
         tavily_provider = self.providers.get("tavily")
         if tavily_provider and isinstance(tavily_provider, TavilyProvider):
@@ -627,7 +628,7 @@ class SearchServer:
                 search_depth: str = "basic",
                 max_results: int = 5,
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Search the web using Tavily's AI-optimized search.
 
@@ -643,8 +644,8 @@ class SearchServer:
                         "options": {
                             "searchDepth": search_depth,
                             "maxResults": max_results,
-                            **kwargs
-                        }
+                            **kwargs,
+                        },
                     },
                 )
 
@@ -653,7 +654,7 @@ class SearchServer:
                 url: str,
                 extract_depth: str = "advanced",
                 **kwargs,
-            ) -> Dict:
+            ) -> dict:
                 """
                 Extract and analyze content from a URL using Tavily.
 
@@ -665,10 +666,7 @@ class SearchServer:
                     "tavily-extract",
                     {
                         "urls": [url],
-                        "options": {
-                            "extractDepth": extract_depth,
-                            **kwargs
-                        }
+                        "options": {"extractDepth": extract_depth, **kwargs},
                     },
                 )
 
