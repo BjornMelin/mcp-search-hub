@@ -180,9 +180,9 @@ For each provider integration, follow these steps:
 
 ## Result Processing Improvements
 
-- [ ] Enhance deduplication with URL normalization
+- [x] Enhance deduplication with URL normalization
 
-  - [ ] Add smart URL normalization for better deduplication
+  - [x] Add smart URL normalization for better deduplication
   - [ ] Implement fuzzy matching for near-duplicate detection
   - [ ] Add content-based similarity detection
 
