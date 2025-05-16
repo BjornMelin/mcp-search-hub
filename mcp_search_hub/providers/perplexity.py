@@ -8,9 +8,10 @@ from ..config import get_settings
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
 from .base import SearchProvider
+from .retry_mixin import RetryMixin
 
 
-class PerplexityProvider(SearchProvider):
+class PerplexityProvider(SearchProvider, RetryMixin):
     """Perplexity search provider implementation."""
 
     name = "perplexity"
@@ -25,26 +26,34 @@ class PerplexityProvider(SearchProvider):
     async def search(self, query: SearchQuery) -> SearchResponse:
         """Execute a search using Perplexity API."""
         try:
-            response = await self.client.post(
-                "https://api.perplexity.ai/ask",
-                headers={
-                    "Authorization": f"Bearer {self.api_key.get_secret_value()}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are a search assistant. Provide web search results only, not summaries or answers.",
-                        },
-                        {"role": "user", "content": query.query},
-                    ],
-                    "model": "sonar-online",
-                    "include_sources": True,
-                    "search_focus": "search_focus" if query.advanced else "balanced",
-                },
-            )
-            response.raise_for_status()
+
+            @self.with_retry
+            async def make_request():
+                response = await self.client.post(
+                    "https://api.perplexity.ai/ask",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key.get_secret_value()}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "You are a search assistant. Provide web search results only, not summaries or answers.",
+                            },
+                            {"role": "user", "content": query.query},
+                        ],
+                        "model": "sonar-online",
+                        "include_sources": True,
+                        "search_focus": "search_focus"
+                        if query.advanced
+                        else "balanced",
+                    },
+                )
+                response.raise_for_status()
+                return response
+
+            response = await make_request()
             data = response.json()
 
             results = []

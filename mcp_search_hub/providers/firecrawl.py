@@ -10,6 +10,7 @@ from ..models.base import HealthStatus
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
 from .base import SearchProvider
+from .retry_mixin import RetryMixin
 
 
 class MapOptions(BaseModel):
@@ -57,7 +58,7 @@ class LLMsTxtOptions(BaseModel):
     show_full_text: bool = False
 
 
-class FirecrawlProvider(SearchProvider):
+class FirecrawlProvider(SearchProvider, RetryMixin):
     """Firecrawl search provider implementation."""
 
     name = "firecrawl"
@@ -68,6 +69,28 @@ class FirecrawlProvider(SearchProvider):
             timeout=get_settings().providers.firecrawl.timeout,
             limits=httpx.Limits(max_connections=10),
         )
+
+    async def _make_post_request(self, url: str, **kwargs):
+        """Make a POST request with retry logic."""
+
+        @self.with_retry
+        async def request():
+            response = await self.client.post(url, **kwargs)
+            response.raise_for_status()
+            return response
+
+        return await request()
+
+    async def _make_get_request(self, url: str, **kwargs):
+        """Make a GET request with retry logic."""
+
+        @self.with_retry
+        async def request():
+            response = await self.client.get(url, **kwargs)
+            response.raise_for_status()
+            return response
+
+        return await request()
 
     async def search(self, query: SearchQuery) -> SearchResponse:
         """Execute a search using Firecrawl API."""
@@ -91,12 +114,11 @@ class FirecrawlProvider(SearchProvider):
                     "onlyMainContent": True,
                 }
 
-            response = await self.client.post(
+            response = await self._make_post_request(
                 "https://api.firecrawl.dev/v1/search",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=search_options,
             )
-            response.raise_for_status()
             data = response.json()
 
             results = []
@@ -152,7 +174,7 @@ class FirecrawlProvider(SearchProvider):
 
         if not url:
             # If no URL found, try to search for it
-            search_response = await self.client.post(
+            search_response = await self._make_post_request(
                 "https://api.firecrawl.dev/v1/search",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json={"query": query.query, "limit": 1},
@@ -171,7 +193,7 @@ class FirecrawlProvider(SearchProvider):
             )
 
         # Now scrape the content
-        scrape_response = await self.client.post(
+        scrape_response = await self._make_post_request(
             "https://api.firecrawl.dev/v1/scrape",
             headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
             json={"url": url, "formats": ["markdown"], "onlyMainContent": True},
@@ -246,12 +268,11 @@ class FirecrawlProvider(SearchProvider):
             if options.search:
                 map_params["search"] = options.search
 
-            response = await self.client.post(
+            response = await self._make_post_request(
                 "https://api.firecrawl.dev/v1/map",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=map_params,
             )
-            response.raise_for_status()
             return response.json()
 
         except Exception as e:
@@ -293,12 +314,11 @@ class FirecrawlProvider(SearchProvider):
             if options.scrape_options:
                 crawl_params["scrapeOptions"] = options.scrape_options
 
-            response = await self.client.post(
+            response = await self._make_post_request(
                 "https://api.firecrawl.dev/v1/crawl",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=crawl_params,
             )
-            response.raise_for_status()
             return response.json()
 
         except Exception as e:
@@ -315,11 +335,10 @@ class FirecrawlProvider(SearchProvider):
             Dictionary containing crawl job status and results if complete
         """
         try:
-            response = await self.client.get(
+            response = await self._make_get_request(
                 f"https://api.firecrawl.dev/v1/crawl/{crawl_id}",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
             )
-            response.raise_for_status()
             return response.json()
 
         except Exception as e:
@@ -357,12 +376,11 @@ class FirecrawlProvider(SearchProvider):
             if options.enable_web_search:
                 extract_params["enableWebSearch"] = options.enable_web_search
 
-            response = await self.client.post(
+            response = await self._make_post_request(
                 "https://api.firecrawl.dev/v1/extract",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=extract_params,
             )
-            response.raise_for_status()
             return response.json()
 
         except Exception as e:
@@ -397,12 +415,11 @@ class FirecrawlProvider(SearchProvider):
             if options.time_limit:
                 research_params["timeLimit"] = options.time_limit
 
-            response = await self.client.post(
+            response = await self._make_post_request(
                 "https://api.firecrawl.dev/v1/deep-research",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=research_params,
             )
-            response.raise_for_status()
             return response.json()
 
         except Exception as e:
@@ -435,12 +452,11 @@ class FirecrawlProvider(SearchProvider):
             if options.show_full_text:
                 llmstxt_params["showFullText"] = options.show_full_text
 
-            response = await self.client.post(
+            response = await self._make_post_request(
                 "https://api.firecrawl.dev/v1/generate-llmstxt",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=llmstxt_params,
             )
-            response.raise_for_status()
             return response.json()
 
         except Exception as e:
@@ -527,7 +543,7 @@ class FirecrawlProvider(SearchProvider):
         """Check the status of Firecrawl service."""
         try:
             # Make a simple API call to check if Firecrawl is responsive
-            response = await self.client.get(
+            response = await self._make_get_request(
                 "https://api.firecrawl.dev/v1/status",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
             )

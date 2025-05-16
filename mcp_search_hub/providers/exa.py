@@ -8,9 +8,10 @@ from ..config import get_settings
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
 from .base import SearchProvider
+from .retry_mixin import RetryMixin
 
 
-class ExaProvider(SearchProvider):
+class ExaProvider(SearchProvider, RetryMixin):
     """Exa search provider implementation."""
 
     name = "exa"
@@ -25,18 +26,26 @@ class ExaProvider(SearchProvider):
     async def search(self, query: SearchQuery) -> SearchResponse:
         """Execute a search using Exa API."""
         try:
-            response = await self.client.post(
-                "https://api.exa.ai/search",
-                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
-                json={
-                    "query": query.query,
-                    "numResults": min(
-                        query.max_results * 2, 20
-                    ),  # Request extra for filtering
-                    "useAutoprompt": query.advanced,
-                },
-            )
-            response.raise_for_status()
+
+            @self.with_retry
+            async def make_request():
+                response = await self.client.post(
+                    "https://api.exa.ai/search",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key.get_secret_value()}"
+                    },
+                    json={
+                        "query": query.query,
+                        "numResults": min(
+                            query.max_results * 2, 20
+                        ),  # Request extra for filtering
+                        "useAutoprompt": query.advanced,
+                    },
+                )
+                response.raise_for_status()
+                return response
+
+            response = await make_request()
             data = response.json()
 
             results = []
