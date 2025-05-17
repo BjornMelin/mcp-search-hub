@@ -202,9 +202,9 @@ router.add_strategy("custom_cascade", cascade_strategy)
 - Test custom scorer registration
 - Verify circuit breaker integration
 
-### 2. Backward Compatibility
+### 2. Complete Migration
 
-The unified router maintains compatibility with existing provider interfaces and result formats. No changes are needed to:
+The legacy routers have been fully removed in favor of the unified router. The unified router maintains compatibility with existing provider interfaces and result formats. No changes are needed to:
 - Provider implementations
 - Result processing
 - Cache management

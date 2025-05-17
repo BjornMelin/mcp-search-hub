@@ -97,7 +97,10 @@ ruff check --select I --fix .
 3. **Query Routing**
 
    - `QueryAnalyzer`: Extracts features from queries to determine content type and complexity
-   - `QueryRouter`: Selects providers based on query features and budget constraints
+   - `UnifiedRouter`: Unified routing system that replaces the legacy QueryRouter and CascadeRouter
+     - Supports pluggable execution strategies (parallel, cascade)
+     - Integrates circuit breaker pattern for provider protection
+     - Dynamic timeout management based on query complexity
    - `CostOptimizer`: Optimizes provider selection for cost efficiency
 
 4. **Result Processing**
@@ -114,8 +117,8 @@ ruff check --select I --fix .
 
 1. Client sends search query to the FastMCP server
 2. QueryAnalyzer extracts features from the query
-3. QueryRouter selects appropriate providers
-4. Selected providers execute search via their embedded MCP servers
+3. UnifiedRouter selects providers and execution strategy based on query characteristics
+4. Selected providers execute search via their embedded MCP servers using the chosen strategy
 5. MCP wrappers handle communication with provider MCP servers
 6. Results are combined, ranked, and deduplicated
 7. Final combined results are returned to the client

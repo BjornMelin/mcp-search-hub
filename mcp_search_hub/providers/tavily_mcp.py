@@ -67,199 +67,193 @@ class TavilyMCPProvider(BaseMCPProvider):
 
         try:
             # Handle Tavily MCP server response format
-            if hasattr(result, "content") and result.content:
-                if isinstance(result.content, list):
-                    for item in result.content:
-                        if hasattr(item, "text") and item.text:
-                            # Parse the text content for search results
-                            text_data = item.text
+            if (
+                hasattr(result, "content")
+                and result.content
+                and isinstance(result.content, list)
+            ):
+                for item in result.content:
+                    if hasattr(item, "text") and item.text:
+                        # Parse the text content for search results
+                        text_data = item.text
 
-                            # Tavily returns JSON-structured results
-                            if isinstance(text_data, dict) and "results" in text_data:
-                                for result_item in text_data["results"]:
-                                    # Extract content based on raw_content request
-                                    content = ""
-                                    if (
-                                        query.raw_content
-                                        and "raw_content" in result_item
-                                    ):
-                                        content = result_item["raw_content"]
-                                    else:
-                                        content = result_item.get(
-                                            "content", result_item.get("snippet", "")
-                                        )
-
-                                    search_results.append(
-                                        SearchResult(
-                                            title=result_item.get("title", ""),
-                                            url=result_item.get("url", ""),
-                                            snippet=result_item.get("snippet", ""),
-                                            source=self.name,
-                                            score=float(
-                                                result_item.get("relevance_score", 1.0)
-                                            )
-                                            if result_item.get("relevance_score")
-                                            else 1.0,
-                                            raw_content=content,
-                                            metadata={
-                                                "domain": result_item.get("domain"),
-                                                "published_date": result_item.get(
-                                                    "published_date"
-                                                ),
-                                                "relevance_score": result_item.get(
-                                                    "relevance_score"
-                                                ),
-                                                "content_type": result_item.get(
-                                                    "content_type"
-                                                ),
-                                            },
-                                        )
+                        # Tavily returns JSON-structured results
+                        if isinstance(text_data, dict) and "results" in text_data:
+                            for result_item in text_data["results"]:
+                                # Extract content based on raw_content request
+                                content = ""
+                                if query.raw_content and "raw_content" in result_item:
+                                    content = result_item["raw_content"]
+                                else:
+                                    content = result_item.get(
+                                        "content", result_item.get("snippet", "")
                                     )
-                            elif isinstance(text_data, str):
-                                # Try parsing as formatted text response
-                                import json
 
-                                try:
-                                    # Tavily might return JSON string
-                                    json_data = json.loads(text_data)
-                                    if (
-                                        isinstance(json_data, dict)
-                                        and "results" in json_data
-                                    ):
-                                        for result_item in json_data["results"]:
-                                            content = ""
-                                            if (
-                                                query.raw_content
-                                                and "raw_content" in result_item
-                                            ):
-                                                content = result_item["raw_content"]
-                                            else:
-                                                content = result_item.get(
-                                                    "content",
-                                                    result_item.get("snippet", ""),
+                                search_results.append(
+                                    SearchResult(
+                                        title=result_item.get("title", ""),
+                                        url=result_item.get("url", ""),
+                                        snippet=result_item.get("snippet", ""),
+                                        source=self.name,
+                                        score=float(
+                                            result_item.get("relevance_score", 1.0)
+                                        )
+                                        if result_item.get("relevance_score")
+                                        else 1.0,
+                                        raw_content=content,
+                                        metadata={
+                                            "domain": result_item.get("domain"),
+                                            "published_date": result_item.get(
+                                                "published_date"
+                                            ),
+                                            "relevance_score": result_item.get(
+                                                "relevance_score"
+                                            ),
+                                            "content_type": result_item.get(
+                                                "content_type"
+                                            ),
+                                        },
+                                    )
+                                )
+                        elif isinstance(text_data, str):
+                            # Try parsing as formatted text response
+                            import json
+
+                            try:
+                                # Tavily might return JSON string
+                                json_data = json.loads(text_data)
+                                if (
+                                    isinstance(json_data, dict)
+                                    and "results" in json_data
+                                ):
+                                    for result_item in json_data["results"]:
+                                        content = ""
+                                        if (
+                                            query.raw_content
+                                            and "raw_content" in result_item
+                                        ):
+                                            content = result_item["raw_content"]
+                                        else:
+                                            content = result_item.get(
+                                                "content",
+                                                result_item.get("snippet", ""),
+                                            )
+
+                                        search_results.append(
+                                            SearchResult(
+                                                title=result_item.get("title", ""),
+                                                url=result_item.get("url", ""),
+                                                snippet=result_item.get("snippet", ""),
+                                                source=self.name,
+                                                score=float(
+                                                    result_item.get(
+                                                        "relevance_score", 1.0
+                                                    )
                                                 )
+                                                if result_item.get("relevance_score")
+                                                else 1.0,
+                                                raw_content=content,
+                                                metadata={
+                                                    "domain": result_item.get("domain"),
+                                                    "published_date": result_item.get(
+                                                        "published_date"
+                                                    ),
+                                                    "relevance_score": result_item.get(
+                                                        "relevance_score"
+                                                    ),
+                                                    "content_type": result_item.get(
+                                                        "content_type"
+                                                    ),
+                                                },
+                                            )
+                                        )
+                            except json.JSONDecodeError:
+                                # Fall back to text parsing
+                                lines = text_data.split("\n")
+                                current_result = {}
 
+                                for line in lines:
+                                    stripped_line = line.strip()
+                                    if stripped_line.startswith("Title:"):
+                                        if current_result:
                                             search_results.append(
                                                 SearchResult(
-                                                    title=result_item.get("title", ""),
-                                                    url=result_item.get("url", ""),
-                                                    snippet=result_item.get(
+                                                    title=current_result.get(
+                                                        "title", ""
+                                                    ),
+                                                    url=current_result.get("url", ""),
+                                                    snippet=current_result.get(
                                                         "snippet", ""
                                                     ),
                                                     source=self.name,
                                                     score=float(
-                                                        result_item.get(
-                                                            "relevance_score", 1.0
-                                                        )
-                                                    )
-                                                    if result_item.get(
-                                                        "relevance_score"
-                                                    )
-                                                    else 1.0,
-                                                    raw_content=content,
-                                                    metadata={
-                                                        "domain": result_item.get(
-                                                            "domain"
-                                                        ),
-                                                        "published_date": result_item.get(
-                                                            "published_date"
-                                                        ),
-                                                        "relevance_score": result_item.get(
-                                                            "relevance_score"
-                                                        ),
-                                                        "content_type": result_item.get(
-                                                            "content_type"
-                                                        ),
-                                                    },
-                                                )
-                                            )
-                                except json.JSONDecodeError:
-                                    # Fall back to text parsing
-                                    lines = text_data.split("\n")
-                                    current_result = {}
-
-                                    for line in lines:
-                                        line = line.strip()
-                                        if line.startswith("Title:"):
-                                            if current_result:
-                                                search_results.append(
-                                                    SearchResult(
-                                                        title=current_result.get(
-                                                            "title", ""
-                                                        ),
-                                                        url=current_result.get(
-                                                            "url", ""
-                                                        ),
-                                                        snippet=current_result.get(
-                                                            "snippet", ""
-                                                        ),
-                                                        source=self.name,
-                                                        score=float(
-                                                            current_result.get(
-                                                                "metadata", {}
-                                                            ).get(
-                                                                "relevance_score", 1.0
-                                                            )
-                                                        )
-                                                        if current_result.get(
+                                                        current_result.get(
                                                             "metadata", {}
-                                                        ).get("relevance_score")
-                                                        else 1.0,
-                                                        raw_content=current_result.get(
-                                                            "content", ""
-                                                        ),
-                                                        metadata=current_result.get(
-                                                            "metadata", {}
-                                                        ),
+                                                        ).get("relevance_score", 1.0)
                                                     )
-                                                )
-                                            current_result = {"title": line[6:].strip()}
-                                        elif line.startswith("URL:"):
-                                            current_result["url"] = line[4:].strip()
-                                        elif line.startswith("Content:"):
-                                            current_result["content"] = line[8:].strip()
-                                        elif line.startswith("Snippet:"):
-                                            current_result["snippet"] = line[8:].strip()
-                                        elif line.startswith("Domain:"):
-                                            current_result.setdefault("metadata", {})[
-                                                "domain"
-                                            ] = line[7:].strip()
-                                        elif line.startswith("Date:"):
-                                            current_result.setdefault("metadata", {})[
-                                                "published_date"
-                                            ] = line[5:].strip()
-                                        elif line.startswith("Score:"):
-                                            current_result.setdefault("metadata", {})[
-                                                "relevance_score"
-                                            ] = line[6:].strip()
-
-                                    # Add the last result
-                                    if current_result:
-                                        search_results.append(
-                                            SearchResult(
-                                                title=current_result.get("title", ""),
-                                                url=current_result.get("url", ""),
-                                                snippet=current_result.get(
-                                                    "snippet", ""
-                                                ),
-                                                source=self.name,
-                                                score=float(
-                                                    current_result.get(
+                                                    if current_result.get(
                                                         "metadata", {}
-                                                    ).get("relevance_score", 1.0)
+                                                    ).get("relevance_score")
+                                                    else 1.0,
+                                                    raw_content=current_result.get(
+                                                        "content", ""
+                                                    ),
+                                                    metadata=current_result.get(
+                                                        "metadata", {}
+                                                    ),
                                                 )
-                                                if current_result.get(
-                                                    "metadata", {}
-                                                ).get("relevance_score")
-                                                else 1.0,
-                                                raw_content=current_result.get(
-                                                    "content", ""
-                                                ),
-                                                metadata=current_result.get(
-                                                    "metadata", {}
-                                                ),
                                             )
+                                        current_result = {
+                                            "title": stripped_line[6:].strip()
+                                        }
+                                    elif stripped_line.startswith("URL:"):
+                                        current_result["url"] = stripped_line[
+                                            4:
+                                        ].strip()
+                                    elif stripped_line.startswith("Content:"):
+                                        current_result["content"] = stripped_line[
+                                            8:
+                                        ].strip()
+                                    elif stripped_line.startswith("Snippet:"):
+                                        current_result["snippet"] = stripped_line[
+                                            8:
+                                        ].strip()
+                                    elif stripped_line.startswith("Domain:"):
+                                        current_result.setdefault("metadata", {})[
+                                            "domain"
+                                        ] = stripped_line[7:].strip()
+                                    elif stripped_line.startswith("Date:"):
+                                        current_result.setdefault("metadata", {})[
+                                            "published_date"
+                                        ] = stripped_line[5:].strip()
+                                    elif stripped_line.startswith("Score:"):
+                                        current_result.setdefault("metadata", {})[
+                                            "relevance_score"
+                                        ] = stripped_line[6:].strip()
+
+                                # Add the last result
+                                if current_result:
+                                    search_results.append(
+                                        SearchResult(
+                                            title=current_result.get("title", ""),
+                                            url=current_result.get("url", ""),
+                                            snippet=current_result.get("snippet", ""),
+                                            source=self.name,
+                                            score=float(
+                                                current_result.get("metadata", {}).get(
+                                                    "relevance_score", 1.0
+                                                )
+                                            )
+                                            if current_result.get("metadata", {}).get(
+                                                "relevance_score"
+                                            )
+                                            else 1.0,
+                                            raw_content=current_result.get(
+                                                "content", ""
+                                            ),
+                                            metadata=current_result.get("metadata", {}),
                                         )
+                                    )
 
         except Exception as e:
             logger.error(f"Error processing Tavily search results: {str(e)}")

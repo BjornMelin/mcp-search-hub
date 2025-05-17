@@ -69,113 +69,116 @@ class LinkupMCPProvider(BaseMCPProvider, RetryMixin):
                 return search_results
 
             # Handle Linkup MCP server response format
-            if hasattr(result, "content") and result.content:
-                if isinstance(result.content, list):
-                    for item in result.content:
-                        if hasattr(item, "text") and item.text:
-                            # Parse the text content for search results
-                            text_data = item.text
+            if (
+                hasattr(result, "content")
+                and result.content
+                and isinstance(result.content, list)
+            ):
+                for item in result.content:
+                    if hasattr(item, "text") and item.text:
+                        # Parse the text content for search results
+                        text_data = item.text
 
-                            # Linkup returns JSON-like structure in text
-                            if isinstance(text_data, dict):
-                                if "results" in text_data:
-                                    for result_item in text_data["results"]:
+                        # Linkup returns JSON-like structure in text
+                        if isinstance(text_data, dict):
+                            if "results" in text_data:
+                                for result_item in text_data["results"]:
+                                    search_results.append(
+                                        SearchResult(
+                                            title=result_item.get("title", ""),
+                                            url=result_item.get("url", ""),
+                                            snippet=result_item.get(
+                                                "snippet",
+                                                result_item.get("description", ""),
+                                            ),
+                                            source=self.name,
+                                            score=float(result_item.get("score", 1.0)),
+                                            raw_content=result_item.get(
+                                                "content",
+                                                result_item.get("description", ""),
+                                            ),
+                                            metadata={
+                                                "source": result_item.get("source"),
+                                                "published_date": result_item.get(
+                                                    "published_date"
+                                                ),
+                                                "relevance_score": result_item.get(
+                                                    "score"
+                                                ),
+                                            },
+                                        )
+                                    )
+                        elif isinstance(text_data, str):
+                            # Try parsing as formatted text (similar to Exa)
+                            lines = text_data.split("\n")
+                            current_result = {}
+
+                            for line in lines:
+                                stripped_line = line.strip()
+                                if stripped_line.startswith("Title:"):
+                                    if current_result:
                                         search_results.append(
                                             SearchResult(
-                                                title=result_item.get("title", ""),
-                                                url=result_item.get("url", ""),
-                                                snippet=result_item.get(
-                                                    "snippet",
-                                                    result_item.get("description", ""),
+                                                title=current_result.get("title", ""),
+                                                url=current_result.get("url", ""),
+                                                snippet=current_result.get(
+                                                    "snippet", ""
                                                 ),
                                                 source=self.name,
                                                 score=float(
-                                                    result_item.get("score", 1.0)
-                                                ),
-                                                raw_content=result_item.get(
-                                                    "content",
-                                                    result_item.get("description", ""),
-                                                ),
-                                                metadata={
-                                                    "source": result_item.get("source"),
-                                                    "published_date": result_item.get(
-                                                        "published_date"
-                                                    ),
-                                                    "relevance_score": result_item.get(
-                                                        "score"
-                                                    ),
-                                                },
-                                            )
-                                        )
-                            elif isinstance(text_data, str):
-                                # Try parsing as formatted text (similar to Exa)
-                                lines = text_data.split("\n")
-                                current_result = {}
-
-                                for line in lines:
-                                    line = line.strip()
-                                    if line.startswith("Title:"):
-                                        if current_result:
-                                            search_results.append(
-                                                SearchResult(
-                                                    title=current_result.get(
-                                                        "title", ""
-                                                    ),
-                                                    url=current_result.get("url", ""),
-                                                    snippet=current_result.get(
-                                                        "snippet", ""
-                                                    ),
-                                                    source=self.name,
-                                                    score=float(
-                                                        current_result.get(
-                                                            "metadata", {}
-                                                        ).get("score", 1.0)
-                                                    ),
-                                                    raw_content=current_result.get(
-                                                        "content", ""
-                                                    ),
-                                                    metadata=current_result.get(
+                                                    current_result.get(
                                                         "metadata", {}
-                                                    ),
-                                                )
+                                                    ).get("score", 1.0)
+                                                ),
+                                                raw_content=current_result.get(
+                                                    "content", ""
+                                                ),
+                                                metadata=current_result.get(
+                                                    "metadata", {}
+                                                ),
                                             )
-                                        current_result = {"title": line[6:].strip()}
-                                    elif line.startswith("URL:"):
-                                        current_result["url"] = line[4:].strip()
-                                    elif line.startswith("Content:") or line.startswith(
-                                        "Description:"
-                                    ):
-                                        current_result["content"] = line[8:].strip()
-                                    elif line.startswith("Snippet:"):
-                                        current_result["snippet"] = line[8:].strip()
-                                    elif line.startswith("Source:"):
-                                        current_result.setdefault("metadata", {})[
-                                            "source"
-                                        ] = line[7:].strip()
-                                    elif line.startswith("Date:"):
-                                        current_result.setdefault("metadata", {})[
-                                            "published_date"
-                                        ] = line[5:].strip()
-
-                                # Add the last result
-                                if current_result:
-                                    search_results.append(
-                                        SearchResult(
-                                            title=current_result.get("title", ""),
-                                            url=current_result.get("url", ""),
-                                            snippet=current_result.get("snippet", ""),
-                                            source=self.name,
-                                            score=float(
-                                                current_result.get("metadata", {}).get(
-                                                    "score", 1.0
-                                                )
-                                            ),
-                                            raw_content=current_result.get(
-                                                "content", ""
-                                            ),
-                                            metadata=current_result.get("metadata", {}),
                                         )
+                                    current_result = {
+                                        "title": stripped_line[6:].strip()
+                                    }
+                                elif stripped_line.startswith("URL:"):
+                                    current_result["url"] = stripped_line[4:].strip()
+                                elif stripped_line.startswith(
+                                    ("Content:", "Description:")
+                                ):
+                                    current_result["content"] = stripped_line[
+                                        8:
+                                    ].strip()
+                                elif stripped_line.startswith("Snippet:"):
+                                    current_result["snippet"] = stripped_line[
+                                        8:
+                                    ].strip()
+                                elif stripped_line.startswith("Source:"):
+                                    current_result.setdefault("metadata", {})[
+                                        "source"
+                                    ] = stripped_line[7:].strip()
+                                elif stripped_line.startswith("Date:"):
+                                    current_result.setdefault("metadata", {})[
+                                        "published_date"
+                                    ] = stripped_line[5:].strip()
+
+                            # Add the last result
+                            if current_result:
+                                search_results.append(
+                                    SearchResult(
+                                        title=current_result.get("title", ""),
+                                        url=current_result.get("url", ""),
+                                        snippet=current_result.get("snippet", ""),
+                                        source=self.name,
+                                        score=float(
+                                            current_result.get("metadata", {}).get(
+                                                "score", 1.0
+                                            )
+                                        ),
+                                        raw_content=current_result.get("content", ""),
+                                        metadata=current_result.get("metadata", {}),
                                     )
+                                )
 
         except Exception as e:
             logger.error(f"Error processing Linkup search results: {str(e)}")

@@ -93,7 +93,8 @@ class UnifiedRouter:
         """Initialize circuit breakers for each provider."""
         for provider_name in self.providers:
             self._circuit_breakers[provider_name] = CircuitBreaker(
-                max_failures=3, reset_timeout=30.0  # Default values
+                max_failures=3,
+                reset_timeout=30.0,  # Default values
             )
 
     async def route_and_execute(
@@ -476,7 +477,9 @@ class ParallelExecutionStrategy(ExecutionStrategy):
     ) -> float:
         """Calculate dynamic timeout for parallel execution."""
         base_timeout = timeout_config.base_timeout_ms / 1000
-        complexity_factor = 1.0 + (features.complexity * timeout_config.complexity_factor)
+        complexity_factor = 1.0 + (
+            features.complexity * timeout_config.complexity_factor
+        )
 
         # Apply time sensitivity adjustment
         if features.time_sensitivity > 0.7:
@@ -632,7 +635,9 @@ class CascadeExecutionStrategy(ExecutionStrategy):
         base_timeout = timeout_config.base_timeout_ms / 1000
 
         # Adjust timeout based on complexity
-        complexity_factor = 1.0 + (features.complexity * timeout_config.complexity_factor)
+        complexity_factor = 1.0 + (
+            features.complexity * timeout_config.complexity_factor
+        )
 
         # Adjust for question queries (typically need more processing)
         if features.contains_question:

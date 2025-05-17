@@ -199,7 +199,9 @@ class SearchServer:
                     query, features, query.budget
                 )
                 providers_to_use = query.providers
-                await ctx.info(f"Using explicit providers: {', '.join(providers_to_use)}")
+                await ctx.info(
+                    f"Using explicit providers: {', '.join(providers_to_use)}"
+                )
             else:
                 # Auto-select providers
                 routing_decision = self.router.select_providers(
@@ -258,7 +260,7 @@ class SearchServer:
 
                 # Create response
                 response = CombinedSearchResponse(
-                    results=combined_results[:query.max_results],
+                    results=combined_results[: query.max_results],
                     total_results=len(combined_results),
                     query=query.query,
                     providers_used=list(successful_providers),
