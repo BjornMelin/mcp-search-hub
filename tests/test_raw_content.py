@@ -60,15 +60,15 @@ async def test_linkup_provider_with_raw_content(mock_linkup_response):
     provider = MagicMock(spec=LinkupMCPProvider)
     provider.name = "linkup"
     provider.search.return_value = mock_linkup_response
-    
+
     # Test with raw_content=True
     query = SearchQuery(
         query="test query",
         raw_content=True,
     )
-    
+
     result = await provider.search(query)
-    
+
     # Verify results
     assert len(result.results) == 1
     assert result.results[0].raw_content == "This is the raw content from Linkup"
@@ -81,15 +81,15 @@ async def test_firecrawl_provider_with_raw_content(mock_firecrawl_response):
     provider = MagicMock(spec=FirecrawlMCPProvider)
     provider.name = "firecrawl"
     provider.search.return_value = mock_firecrawl_response
-    
+
     # Test with raw_content=True
     query = SearchQuery(
         query="test query",
         raw_content=True,
     )
-    
+
     result = await provider.search(query)
-    
+
     # Verify results
     assert len(result.results) == 1
     assert result.results[0].raw_content == "This is the raw content from Firecrawl"
@@ -119,7 +119,9 @@ def test_merger_with_raw_content(mock_linkup_response, mock_firecrawl_response):
     assert firecrawl_result.raw_content == "This is the raw content from Firecrawl"
 
 
-def test_merger_without_raw_content_merge(mock_linkup_response, mock_firecrawl_response):
+def test_merger_without_raw_content_merge(
+    mock_linkup_response, mock_firecrawl_response
+):
     """Test that ResultMerger doesn't apply raw content merging when raw_content=False."""
     merger = ResultMerger()
 

@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MCP Search Hub is an intelligent multi-provider search aggregation server built on FastMCP 2.0. It embeds official MCP servers from five search providers (Linkup, Exa, Perplexity, Tavily, and Firecrawl) within a unified interface, intelligently routes queries to the most appropriate provider(s), and combines/ranks results for optimal relevance.
 
-### Architectural Approach: Embedded MCP Servers
+### Architectural Approach: Embedded MCP Servers with Generic Implementation
 
-We embed official provider MCP servers within MCP Search Hub rather than implementing features ourselves. All providers are now successfully integrated:
+We embed official provider MCP servers within MCP Search Hub and use a generic implementation pattern to eliminate code duplication. All providers are now successfully integrated:
 
 - **Firecrawl**: Embedded [firecrawl-mcp-server](https://github.com/mendableai/firecrawl-mcp-server)
 - **Perplexity**: Embedded [perplexity-mcp](https://github.com/ppl-ai/modelcontextprotocol)
@@ -16,7 +16,13 @@ We embed official provider MCP servers within MCP Search Hub rather than impleme
 - **Linkup**: Embedded [python-mcp-server](https://github.com/LinkupPlatform/python-mcp-server)
 - **Tavily**: Embedded [tavily-mcp](https://github.com/tavily-ai/tavily-mcp)
 
-This approach ensures we get the latest features directly from the providers while maintaining a unified interface.
+All providers now use `GenericMCPProvider` base class which:
+- Handles installation, initialization, and cleanup uniformly
+- Uses configuration-driven provider settings from `provider_config.py`
+- Provides common parameter preparation and result processing
+- Eliminates hundreds of lines of duplicated code
+
+This approach ensures we get the latest features directly from the providers while maintaining a unified interface and maximally simplified codebase.
 
 ## Development Commands
 
@@ -125,18 +131,19 @@ ruff check --select I --fix .
 
 ### MCP Server Integration Pattern
 
-When implementing MCP server wrappers:
+When adding a new provider with MCP server:
 
-1. Create a new wrapper module (e.g., `providers/perplexity_mcp.py`)
-2. Implement the MCP wrapper class with:
-   - Installation check (`_check_installation`)
-   - Installation method (`_install_server`)
-   - Server connection (`initialize`)
-   - Tool invocation proxy (`invoke_tool`)
-   - Cleanup handling
-3. Update `server.py` to dynamically register provider tools
-4. Add comprehensive tests
-5. Update documentation
+1. Add provider configuration to `providers/provider_config.py`
+2. Create a minimal wrapper in `providers/<provider>_mcp.py` that inherits from `GenericMCPProvider`
+3. The generic base handles all standard functionality:
+   - Installation check and execution
+   - Server connection and initialization
+   - Parameter preparation and result processing
+   - Tool invocation and cleanup
+4. Only override methods if the provider requires special handling
+5. Update `server.py` to register the new provider (tools are registered dynamically)
+6. Add comprehensive tests
+7. Update documentation
 
 ## Configuration
 
