@@ -1,12 +1,13 @@
 # MCP Search Hub TODO List
 
-_Last updated: May 16, 2025 (after successfully implementing cascade routing with circuit breaker pattern)_
+Last updated: May 16, 2025 (after successfully implementing cascade routing with circuit breaker pattern)
 
 ## Current Priorities
 
 ### Priority Refactoring Tasks (High Impact)
 
 #### 1. Provider Implementation Consolidation ⭐⭐⭐ [COMPLETED - 2025-05-16]
+
 - [x] Create a unified `BaseMCPProvider` class to eliminate duplication in MCP server implementations
   - [x] Extract common subprocess management code from provider-specific classes
   - [x] Create a unified provider initialization system (Node.js vs Python detection)
@@ -15,7 +16,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
 - [x] Refactor provider modules to extend the base class and only implement provider-specific behavior
   - [x] Exa provider refactored to use BaseMCPProvider - all tests passing
   - [x] Firecrawl provider refactored to use BaseMCPProvider - all tests passing
-  - [x] Linkup provider refactored to use BaseMCPProvider - all tests passing 
+  - [x] Linkup provider refactored to use BaseMCPProvider - all tests passing
   - [x] Perplexity provider refactored to use BaseMCPProvider - all tests passing
   - [x] Tavily provider refactored to use BaseMCPProvider - implementation updated
 - [x] Removed backward compatibility wrappers completely
@@ -23,6 +24,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
   - [x] Directly use MCPProvider classes throughout the codebase
 
 #### 2. Routing System Simplification ⭐⭐⭐ [COMPLETED - 2025-05-16]
+
 - [x] Unify routing system to integrate cascade and parallel execution in a single coherent framework
   - [x] Consolidate `QueryRouter` and `CascadeRouter` into a single router with multiple execution strategies
   - [x] Create a unified provider execution interface with strategy pattern
@@ -43,6 +45,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
 - [x] Updated documentation to reflect complete replacement
 
 #### 3. Middleware Architecture Implementation ⭐⭐
+
 - [ ] Implement middleware architecture to centralize cross-cutting concerns
   - [ ] Create a middleware framework with pre/post request hooks
   - [ ] Refactor authentication/API key handling into middleware
@@ -51,6 +54,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
   - [ ] Convert retry logic to middleware-based approach
 
 #### 4. Automated OpenAPI Documentation ⭐⭐
+
 - [ ] Generate OpenAPI documentation for the Search Hub API
   - [ ] Document all search API routes and schemas
   - [ ] Add interactive API testing via Swagger UI
@@ -59,6 +63,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
 ### Feature Enhancement Tasks
 
 #### 5. Result Processing Improvements ⭐⭐
+
 - [ ] Implement fuzzy matching for near-duplicate detection
 - [ ] Add content-based similarity detection
 - [ ] Improve result ranking
@@ -71,6 +76,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
   - [ ] Extract and normalize dates from varied formats
 
 #### 6. Caching System Enhancement ⭐⭐
+
 - [ ] Enhance caching system
   - [ ] Implement tiered caching strategy with different TTLs
   - [ ] Add cache invalidation hooks
@@ -79,6 +85,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
   - [ ] Add query fingerprinting for semantically similar cache hits
 
 #### 7. Provider Management Enhancements ⭐
+
 - [ ] Implement provider-specific rate limiters
 - [ ] Add budget-tracking for API usage costs
 - [ ] Create usage reporting for quota management
@@ -86,6 +93,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
 - [ ] Create provider health monitoring dashboard
 
 #### 8. Testing and Quality Improvements ⭐
+
 - [ ] Create router test scenarios for both parallel and cascade modes
 - [ ] Add integration tests
   - [ ] Create end-to-end test suite with mocked responses
@@ -93,12 +101,14 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
   - [ ] Implement CI pipeline for automated testing
 
 #### 9. ML-Enhanced Features ⭐
+
 - [ ] Implement machine learning-based content classification
 - [ ] Develop ML-powered query rewriting for improved results
 - [ ] Add automatic A/B testing of routing strategies
 - [ ] Implement ML-driven automatic query partitioning for multi-provider execution
 
 #### 10. Deployment & Operations ⭐
+
 - [ ] Update Docker configuration
   - [ ] Use multi-stage build for smaller images
   - [ ] Add proper health checks to Docker configuration
@@ -117,6 +127,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
 ### Code Quality Improvement Tasks
 
 #### 11. Code Organization and Standards ⭐
+
 - [ ] Apply consistent architectural patterns across all modules
 - [ ] Standardize error handling and exception patterns
 - [ ] Implement consistent service interfaces for all components
@@ -124,6 +135,7 @@ _Last updated: May 16, 2025 (after successfully implementing cascade routing wit
 - [ ] Create architecture decision records (ADRs) for design choices
 
 #### 12. Performance Optimization ⭐
+
 - [ ] Conduct performance profiling and optimize bottlenecks
 - [ ] Implement async context manager pattern consistently
 - [ ] Optimize parallel execution with more efficient task management
@@ -145,6 +157,7 @@ These tasks will further improve the architecture while adding valuable function
 ## Completed Tasks (Historical Record)
 
 ### Core Functionality
+
 - [x] Implement stdin/stdout transport option for command-line usage
   - [x] Add transport parameter to main.py with choice between "streamable-http" and "stdio"
   - [x] Implement stdio transport handling in FastMCP server initialization
@@ -160,6 +173,7 @@ These tasks will further improve the architecture while adding valuable function
   - [x] Add provider status checks to health endpoint
 
 ### Package and Version Updates (Completed - May 15, 2025)
+
 - [x] Update project dependencies to latest compatible versions
   - [x] Use uv to update fastmcp to latest version (2.3.4)
   - [x] Update httpx to latest version (0.28.1)
@@ -171,6 +185,7 @@ These tasks will further improve the architecture while adding valuable function
   - [x] Configure ruff settings for linting and formatting
 
 ### Provider Integration Improvements (Completed - May 15, 2025)
+
 - [x] Successfully integrate all 5 provider MCP servers:
   - [x] Firecrawl MCP server integration
   - [x] Exa MCP server integration
@@ -179,6 +194,7 @@ These tasks will further improve the architecture while adding valuable function
   - [x] Tavily MCP server integration
 
 ### Query Routing Enhancements
+
 - [x] Improve content type detection
   - [x] Add more sophisticated keyword detection
   - [x] Use regex patterns for better matching
@@ -196,10 +212,12 @@ These tasks will further improve the architecture while adding valuable function
   - [x] Implement circuit breaker pattern for provider protection
 
 ### Result Processing Improvements
+
 - [x] Enhance deduplication with URL normalization
   - [x] Add smart URL normalization for better deduplication
 
 ### Performance & Reliability
+
 - [x] Implement exponential backoff retry logic for all API calls
   - [x] Add customizable retry configurations with environment variables
   - [x] Implement proper exception handling across providers
@@ -209,6 +227,7 @@ These tasks will further improve the architecture while adding valuable function
   - [x] Added comprehensive test suite for retry functionality
 
 ### Testing & Documentation
+
 - [x] Create comprehensive unit tests
   - [x] Add provider-specific unit tests (Firecrawl, Exa, Perplexity, Linkup, Tavily)
   - [x] Implement query analyzer test suite
@@ -220,6 +239,7 @@ These tasks will further improve the architecture while adding valuable function
   - [x] Create REFERENCES.md with comprehensive documentation links for all providers
 
 ### MCP Client Integration
+
 - [x] Create client setup instructions for various MCP clients
   - [x] Add Claude Desktop configuration guide
   - [x] Create Claude Code integration instructions

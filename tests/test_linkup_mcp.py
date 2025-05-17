@@ -3,6 +3,7 @@
 import pytest
 
 from mcp_search_hub.providers.linkup_mcp import LinkupMCPProvider
+
 from .test_base_mcp import TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuery
 
 
@@ -16,7 +17,6 @@ class TestLinkupMCPProvider(TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuer
     @pytest.fixture(autouse=True)
     def setup(self):
         """Pytest fixture setup."""
-        pass
 
     def get_advanced_options(self):
         """Get Linkup-specific advanced options."""

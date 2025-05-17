@@ -1,8 +1,12 @@
 """Tests for Perplexity MCP provider integration."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
+from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.providers.perplexity_mcp import PerplexityMCPProvider
+
 from .test_base_mcp import TestBaseMCPProvider
 
 
@@ -16,14 +20,13 @@ class TestPerplexityMCPProvider(TestBaseMCPProvider):
     @pytest.fixture(autouse=True)
     def setup(self):
         """Pytest fixture setup."""
-        pass
 
     async def test_search_params_format(self):
         """Test that Perplexity formats search params correctly."""
         provider = self.get_provider()
         provider.initialized = True
         provider.session = MagicMock()
-        
+
         # Mock tool invocation
         mock_result = AsyncMock()
         mock_result.content = [

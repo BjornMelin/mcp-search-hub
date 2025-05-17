@@ -3,7 +3,12 @@
 import pytest
 
 from mcp_search_hub.providers.tavily_mcp import TavilyMCPProvider
-from .test_base_mcp import TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuery, TestBaseMCPProviderRawContent
+
+from .test_base_mcp import (
+    TestBaseMCPProvider,
+    TestBaseMCPProviderAdvancedQuery,
+    TestBaseMCPProviderRawContent,
+)
 
 
 class TestTavilyMCPProvider(TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuery, TestBaseMCPProviderRawContent):
@@ -16,7 +21,6 @@ class TestTavilyMCPProvider(TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuer
     @pytest.fixture(autouse=True)
     def setup(self):
         """Pytest fixture setup."""
-        pass
 
     def get_advanced_options(self):
         """Get Tavily-specific advanced options."""

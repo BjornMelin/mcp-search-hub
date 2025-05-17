@@ -1,10 +1,10 @@
 """Base test class for MCP providers."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from mcp_search_hub.models.query import SearchQuery
-from mcp_search_hub.providers.generic_mcp import GenericMCPProvider
 
 
 class BaseMCPProviderTestMixin:
@@ -148,7 +148,7 @@ class AdvancedQueryTestMixin:
             max_results=5,
             advanced=advanced_options
         )
-        
+
         results = await provider.search(query)
 
         # Verify results
@@ -168,7 +168,6 @@ class AdvancedQueryTestMixin:
 
     def verify_advanced_params(self, params):
         """Verify provider-specific advanced parameters. Override in subclasses."""
-        pass
 
 
 class RawContentTestMixin:
@@ -202,7 +201,7 @@ class RawContentTestMixin:
             max_results=5,
             raw_content=True
         )
-        
+
         results = await provider.search(query)
 
         assert len(results) == 1
@@ -216,4 +215,3 @@ class RawContentTestMixin:
 
     def verify_raw_content_params(self, params):
         """Verify provider-specific raw content parameters. Override in subclasses."""
-        pass

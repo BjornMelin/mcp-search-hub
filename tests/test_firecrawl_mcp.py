@@ -3,6 +3,7 @@
 import pytest
 
 from mcp_search_hub.providers.firecrawl_mcp import FirecrawlMCPProvider
+
 from .test_base_mcp import TestBaseMCPProvider, TestBaseMCPProviderRawContent
 
 
@@ -16,7 +17,6 @@ class TestFirecrawlMCPProvider(TestBaseMCPProvider, TestBaseMCPProviderRawConten
     @pytest.fixture(autouse=True)
     def setup(self):
         """Pytest fixture setup."""
-        pass
 
     def verify_raw_content_params(self, params):
         """Verify Firecrawl-specific raw content parameters."""

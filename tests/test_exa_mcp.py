@@ -105,7 +105,7 @@ class TestExaMCPProvider:
                 "contents": "text"
             }
         )
-        
+
         results = await provider.search(query)
 
         assert len(results) == 1
