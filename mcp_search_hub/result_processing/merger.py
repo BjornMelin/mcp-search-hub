@@ -10,20 +10,20 @@ from .deduplication import remove_duplicates
 
 class ResultMerger:
     """Merges and ranks results from multiple providers."""
-    
+
     # Provider quality weights for ranking
     DEFAULT_WEIGHTS = {
-        "linkup": 1.0,      # Excellent for real-time and factual accuracy
-        "exa": 0.95,        # Strong academic and research focus
+        "linkup": 1.0,  # Excellent for real-time and factual accuracy
+        "exa": 0.95,  # Strong academic and research focus
         "perplexity": 0.9,  # Good for comprehensive searches
-        "tavily": 0.85,     # Good general search with relevance scoring
-        "firecrawl": 0.8,   # Specialized for content extraction
+        "tavily": 0.85,  # Good general search with relevance scoring
+        "firecrawl": 0.8,  # Specialized for content extraction
     }
 
     def __init__(self, provider_weights: dict[str, float] | None = None):
         """
         Initialize the result merger.
-        
+
         Args:
             provider_weights: Optional custom weight mapping for providers
         """
@@ -112,11 +112,13 @@ class ResultMerger:
         return merged_results
 
     def _rank_results(
-        self, results: list[SearchResult], provider_results: dict[str, SearchResponse | list[SearchResult]]
+        self,
+        results: list[SearchResult],
+        provider_results: dict[str, SearchResponse | list[SearchResult]],
     ) -> list[SearchResult]:
         """
         Rank results based on provider quality and result scores.
-        
+
         Uses a multi-factor ranking algorithm:
         1. Provider quality weight
         2. Original result score
@@ -154,11 +156,13 @@ class ResultMerger:
         )
 
     def rank_by_weighted_score(
-        self, results: list[SearchResult], custom_weights: dict[str, float] | None = None
+        self,
+        results: list[SearchResult],
+        custom_weights: dict[str, float] | None = None,
     ) -> list[SearchResult]:
         """
         Simple ranking by applying source weights to scores.
-        
+
         This method is provided for compatibility and simple use cases.
         The main merge_results method provides more sophisticated ranking.
 
@@ -170,7 +174,7 @@ class ResultMerger:
             Ranked list of results
         """
         weights = custom_weights or self.provider_weights
-        
+
         for result in results:
             weight = weights.get(result.source, 0.5)
             result.metadata["weighted_score"] = result.score * weight

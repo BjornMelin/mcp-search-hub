@@ -69,7 +69,7 @@ Learn more about this decision in our [Architecture Decisions](docs/architecture
 
 ### Prerequisites
 
-- Python 3.10+ (required for FastMCP 2.0 compatibility)
+- Python 3.11+ (required for FastMCP 2.0 compatibility)
 - API keys for the search providers you plan to use
 - Docker (optional, for containerized deployment)
 - MCP client that supports HTTP or STDIO transport
