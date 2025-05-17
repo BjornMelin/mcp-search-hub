@@ -8,6 +8,7 @@ import signal
 
 from .config import get_settings
 from .server import SearchServer
+from .utils.logging import configure_logging
 
 
 async def shutdown(server: SearchServer):
@@ -97,6 +98,10 @@ def main():
 
     # Get settings (now incorporating any command-line arguments)
     settings = get_settings()
+
+    # Configure logging early based on settings
+    configure_logging(settings.log_level)
+
     server = SearchServer()
 
     # Setup signal handlers for graceful shutdown
