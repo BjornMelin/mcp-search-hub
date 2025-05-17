@@ -1,4 +1,8 @@
-"""Result merger and ranking."""
+"""Result merger and ranking.
+
+This module handles all result processing including merging,
+deduplication, ranking, and consensus scoring.
+"""
 
 from ..models.results import SearchResponse, SearchResult
 from .deduplication import remove_duplicates
@@ -6,10 +10,28 @@ from .deduplication import remove_duplicates
 
 class ResultMerger:
     """Merges and ranks results from multiple providers."""
+    
+    # Provider quality weights for ranking
+    DEFAULT_WEIGHTS = {
+        "linkup": 1.0,      # Excellent for real-time and factual accuracy
+        "exa": 0.95,        # Strong academic and research focus
+        "perplexity": 0.9,  # Good for comprehensive searches
+        "tavily": 0.85,     # Good general search with relevance scoring
+        "firecrawl": 0.8,   # Specialized for content extraction
+    }
+
+    def __init__(self, provider_weights: dict[str, float] | None = None):
+        """
+        Initialize the result merger.
+        
+        Args:
+            provider_weights: Optional custom weight mapping for providers
+        """
+        self.provider_weights = provider_weights or self.DEFAULT_WEIGHTS
 
     def merge_results(
         self,
-        provider_results: dict[str, SearchResponse],
+        provider_results: dict[str, SearchResponse | list[SearchResult]],
         max_results: int = 10,
         raw_content: bool = False,
     ) -> list[SearchResult]:
@@ -18,6 +40,7 @@ class ResultMerger:
 
         Args:
             provider_results: Dictionary mapping provider names to their results
+                             Can accept either SearchResponse or list[SearchResult]
             max_results: Maximum number of results to return
             raw_content: Whether raw content was requested in the original query
 
@@ -27,7 +50,11 @@ class ResultMerger:
         # Collect all results
         all_results = []
         for _provider, response in provider_results.items():
-            all_results.extend(response.results)
+            if isinstance(response, SearchResponse):
+                all_results.extend(response.results)
+            else:
+                # Direct list of SearchResult
+                all_results.extend(response)
 
         # Handle raw content merging BEFORE deduplication to preserve metadata
         if raw_content:
@@ -85,18 +112,16 @@ class ResultMerger:
         return merged_results
 
     def _rank_results(
-        self, results: list[SearchResult], provider_results: dict[str, SearchResponse]
+        self, results: list[SearchResult], provider_results: dict[str, SearchResponse | list[SearchResult]]
     ) -> list[SearchResult]:
-        """Rank results based on provider quality and result scores."""
-        # Provider quality weights
-        provider_weights = {
-            "linkup": 1.0,  # Excellent factual accuracy
-            "exa": 0.95,  # Strong academic focus
-            "perplexity": 0.9,  # Good for current events
-            "tavily": 0.85,  # Good general search
-            "firecrawl": 0.8,  # Specialized for content extraction
-        }
-
+        """
+        Rank results based on provider quality and result scores.
+        
+        Uses a multi-factor ranking algorithm:
+        1. Provider quality weight
+        2. Original result score
+        3. Consensus boost (results appearing in multiple providers)
+        """
         # Apply consensus boost for results appearing in multiple providers
         url_counts = {}
         for result in results:
@@ -108,7 +133,7 @@ class ResultMerger:
 
         # Calculate combined scores
         for result in results:
-            provider_weight = provider_weights.get(result.source, 0.8)
+            provider_weight = self.provider_weights.get(result.source, 0.8)
             result_score = result.score
 
             # Apply consensus boost
@@ -120,8 +145,36 @@ class ResultMerger:
 
             # Store in metadata for debugging
             result.metadata["combined_score"] = combined_score
+            result.metadata["provider_weight"] = provider_weight
+            result.metadata["consensus_factor"] = consensus_factor
 
         # Sort by combined score
         return sorted(
             results, key=lambda x: x.metadata.get("combined_score", 0.0), reverse=True
+        )
+
+    def rank_by_weighted_score(
+        self, results: list[SearchResult], custom_weights: dict[str, float] | None = None
+    ) -> list[SearchResult]:
+        """
+        Simple ranking by applying source weights to scores.
+        
+        This method is provided for compatibility and simple use cases.
+        The main merge_results method provides more sophisticated ranking.
+
+        Args:
+            results: List of search results to rank
+            custom_weights: Optional custom weight mapping (uses instance weights if None)
+
+        Returns:
+            Ranked list of results
+        """
+        weights = custom_weights or self.provider_weights
+        
+        for result in results:
+            weight = weights.get(result.source, 0.5)
+            result.metadata["weighted_score"] = result.score * weight
+
+        return sorted(
+            results, key=lambda x: x.metadata.get("weighted_score", 0.0), reverse=True
         )

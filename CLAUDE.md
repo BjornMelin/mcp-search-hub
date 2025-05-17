@@ -111,9 +111,11 @@ ruff check --select I --fix .
 
 4. **Result Processing**
 
-   - `ResultMerger`: Combines results from multiple providers
-   - `Ranker`: Ranks and sorts results for relevance
-   - `Deduplication`: Removes duplicate results
+   - `ResultMerger`: Combines, deduplicates, and ranks results from multiple providers
+     - Multi-factor ranking algorithm (provider quality, result score, consensus boost)
+     - Raw content merging that preserves metadata
+     - Configurable provider weights
+   - `Deduplication`: Removes duplicate results based on normalized URLs
 
 5. **Utilities**
    - `QueryCache`: Caches search results for improved performance
