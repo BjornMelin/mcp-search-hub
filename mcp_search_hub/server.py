@@ -1,8 +1,10 @@
-"""FastMCP search server implementation."""
+"""FastMCP search server implementation using unified router."""
 
 import asyncio
+import logging
 import time
 import uuid
+from typing import Any
 
 from fastmcp import Context, FastMCP
 from starlette.requests import Request
@@ -12,26 +14,20 @@ from .config import get_settings
 from .models.base import HealthResponse, HealthStatus, MetricsResponse, ProviderStatus
 from .models.query import SearchQuery
 from .models.results import CombinedSearchResponse, SearchResponse
-from .models.router import (
-    CascadeExecutionPolicy,
-    TimeoutConfig,
-)
+from .models.router import TimeoutConfig
 from .providers.base import SearchProvider
-from .providers.exa_mcp import ExaProvider
-from .providers.firecrawl_mcp import FirecrawlProvider
-from .providers.linkup_mcp import LinkupProvider
-from .providers.perplexity_mcp import PerplexityProvider
-from .providers.tavily_mcp import TavilyProvider
+from .providers.provider_config import PROVIDER_CONFIGS
 from .query_routing.analyzer import QueryAnalyzer
-from .query_routing.cascade_router import CascadeRouter
-from .query_routing.router import QueryRouter
+from .query_routing.unified_router import UnifiedRouter
 from .result_processing.merger import ResultMerger
 from .utils.cache import QueryCache
 from .utils.metrics import MetricsTracker
 
+logger = logging.getLogger(__name__)
+
 
 class SearchServer:
-    """FastMCP search server implementation."""
+    """FastMCP search server implementation with unified routing."""
 
     def __init__(self):
         # Initialize FastMCP server
@@ -44,49 +40,18 @@ class SearchServer:
             log_level=get_settings().log_level,
         )
 
-        # Initialize providers
-        settings = get_settings()
-        self.providers: dict[str, SearchProvider] = {
-            "linkup": LinkupProvider(
-                {
-                    "linkup_api_key": (
-                        settings.providers.linkup.api_key.get_secret_value()
-                        if settings.providers.linkup.api_key
-                        else None
-                    )
-                }
-            ),
-            "exa": ExaProvider(
-                {"exa_api_key": settings.providers.exa.api_key.get_secret_value()}
-            ),
-            "perplexity": PerplexityProvider(
-                {
-                    "perplexity_api_key": settings.providers.perplexity.api_key.get_secret_value()
-                }
-            ),
-            "tavily": TavilyProvider(
-                {
-                    "tavily_api_key": (
-                        settings.providers.tavily.api_key.get_secret_value()
-                        if settings.providers.tavily.api_key
-                        else None
-                    )
-                }
-            ),
-            "firecrawl": FirecrawlProvider(),
-        }
+        # Initialize providers dynamically from configuration
+        self.providers = self._initialize_providers()
+        logger.info(f"Initialized providers: {list(self.providers.keys())}")
 
         # Initialize components
         self.analyzer = QueryAnalyzer()
-        self.router = QueryRouter(self.providers)
 
-        # Initialize cascade router with default configuration
+        # Initialize UNIFIED router with timeout configuration
         timeout_config = TimeoutConfig()
-        cascade_policy = CascadeExecutionPolicy()
-        self.cascade_router = CascadeRouter(
+        self.router = UnifiedRouter(
             providers=self.providers,
             timeout_config=timeout_config,
-            execution_policy=cascade_policy,
         )
 
         self.merger = ResultMerger()
@@ -97,675 +62,387 @@ class SearchServer:
         self._register_tools()
         self._register_custom_routes()
 
-    def _register_custom_routes(self) -> None:
-        """Register custom HTTP routes."""
+        # Provider tools will be registered when the server starts
+        self._provider_tools_registered = False
 
-        @self.mcp.custom_route("/health", methods=["GET"])
-        async def health_check(request: Request) -> JSONResponse:
-            """Health check endpoint."""
-            providers_status = {}
-            overall_status = HealthStatus.OK
+    def _initialize_providers(self) -> dict[str, SearchProvider]:
+        """Initialize providers from configuration."""
+        settings = get_settings()
+        providers = {}
 
-            # Check each provider
-            provider_tasks = []
-            for name, provider in self.providers.items():
-                if getattr(get_settings().providers, name).enabled:
-                    provider_tasks.append(
-                        (name, asyncio.create_task(provider.check_status()))
-                    )
+        for provider_name in PROVIDER_CONFIGS:
+            # Get provider settings
+            provider_settings = getattr(settings.providers, provider_name, None)
+            if not provider_settings:
+                logger.warning(f"No settings found for provider {provider_name}")
+                continue
 
-            # Wait for all provider checks
-            for name, task in provider_tasks:
-                try:
-                    status, message = await task
-                    providers_status[name] = ProviderStatus(
-                        name=name, status=status, message=message
-                    )
+            # Skip disabled providers
+            if not provider_settings.enabled:
+                logger.info(f"Provider {provider_name} is disabled")
+                continue
 
-                    # Update overall status based on provider status
-                    if status == HealthStatus.FAILED:
-                        overall_status = HealthStatus.DEGRADED
-                except Exception as e:
-                    providers_status[name] = ProviderStatus(
-                        name=name,
-                        status=HealthStatus.FAILED,
-                        message=f"Check failed: {str(e)}",
-                    )
-                    overall_status = HealthStatus.DEGRADED
+            # Get API key
+            api_key = None
+            if hasattr(provider_settings, "api_key") and provider_settings.api_key:
+                api_key = provider_settings.api_key.get_secret_value()
 
-            # Return health response
-            response = HealthResponse(
-                status=overall_status, version="1.0.0", providers=providers_status
-            )
-
-            return JSONResponse(response.model_dump())
-
-        @self.mcp.custom_route("/metrics", methods=["GET"])
-        async def metrics(request: Request) -> JSONResponse:
-            """Metrics endpoint."""
-            metrics_data = self.metrics.get_metrics()
-            response = MetricsResponse(
-                metrics=metrics_data, since=self.metrics.get_start_time_iso()
-            )
-
-            return JSONResponse(response.model_dump())
-
-    def _register_tools(self) -> None:
-        """Register FastMCP tools."""
-
-        @self.mcp.tool()
-        async def search(query: SearchQuery, ctx: Context) -> CombinedSearchResponse:
-            """
-            Search across multiple providers with automatic selection.
-
-            The system automatically selects the best provider(s) for your query based on
-            content type, complexity, and other factors.
-            """
-            # Generate a unique request ID and record metrics
-            request_id = str(uuid.uuid4())
-            self.metrics.start_request(request_id)
-
-            start_time = time.time()
-
-            # Check cache
-            cache_key = f"{query.query}:{query.advanced}:{query.max_results}:{query.raw_content}"
-            cached_result = self.cache.get(cache_key)
-            if (
-                cached_result and not query.providers
-            ):  # Skip cache if explicit providers
-                await ctx.info("Retrieved results from cache")
-                # Record cache hit
-                self.metrics.record_query(
-                    set(cached_result.providers_used), from_cache=True
-                )
-                self.metrics.end_request(request_id)
-                return cached_result
-
-            # Extract features
-            await ctx.info("Analyzing query")
-            features = self.analyzer.extract_features(query)
-
-            # Select providers (use explicit selection if provided)
-            if query.providers:
-                providers_to_use = query.providers
-            else:
-                routing_decision = self.router.select_providers(
-                    query, features, query.budget
-                )
-                providers_to_use = routing_decision.selected_providers
-                await ctx.info(f"Routing confidence: {routing_decision.confidence:.2f}")
-
-            await ctx.info(f"Selected providers: {', '.join(providers_to_use)}")
-
-            # Execute search with timeout
+            # Create provider instance
             try:
-                # Determine execution mode based on query characteristics
-                use_cascade = self._should_use_cascade(
-                    query, features, providers_to_use
-                )
+                # Import provider class dynamically
+                module_name = f"mcp_search_hub.providers.{provider_name}_mcp"
+                # Convert provider name to CamelCase for class names
+                class_name = ''.join(word.capitalize() for word in provider_name.split('_')) + 'MCPProvider'
+                module = __import__(module_name, fromlist=[class_name])
+                provider_class = getattr(module, class_name, None)
 
-                if use_cascade:
-                    await ctx.info("Using cascade routing for enhanced reliability")
-                    # Execute providers in cascade mode
-                    execution_results = await self.cascade_router.execute_cascade(
-                        query=query,
-                        features=features,
-                        selected_providers=providers_to_use,
+                if not provider_class:
+                    logger.warning(f"Provider class not found for {provider_name}")
+                    continue
+
+                providers[provider_name] = provider_class(api_key=api_key)
+                logger.info(f"Successfully initialized provider: {provider_name}")
+
+            except ImportError as e:
+                logger.error(f"Failed to import provider {provider_name}: {e}")
+            except Exception as e:
+                logger.error(f"Failed to initialize provider {provider_name}: {e}")
+
+        return providers
+
+    def _register_tools(self):
+        """Register search tools with FastMCP server."""
+
+        @self.mcp.tool(
+            name="search",
+            description="Search across multiple providers with intelligent routing",
+        )
+        async def search(
+            query: str,
+            ctx: Context,
+            max_results: int = 10,
+            raw_content: bool = False,
+            advanced: dict[str, Any] | None = None,
+        ) -> SearchResponse:
+            """Execute a search query across multiple providers."""
+            request_id = str(uuid.uuid4())
+            ctx.info(f"Processing search request {request_id}: {query}")
+
+            # Build search query object
+            search_query = SearchQuery(
+                query=query,
+                max_results=max_results,
+                raw_content=raw_content,
+                advanced=advanced,
+            )
+
+            # Use search_with_routing which handles caching internally
+            response = await self.search_with_routing(search_query, request_id, ctx)
+            return SearchResponse(
+                results=response.results,
+                metadata=response.metadata
+            )
+
+        # Dynamically register provider-specific tools (deferred to server start)
+
+    async def _register_provider_tools(self):
+        """Register provider-specific tools dynamically."""
+        # Initialize all providers
+        init_tasks = []
+        for provider_name, provider in self.providers.items():
+            try:
+                init_tasks.append(provider.initialize())
+            except Exception as e:
+                logger.error(f"Failed to create initialization task for {provider_name}: {e}")
+
+        # Wait for all initializations
+        init_results = await asyncio.gather(*init_tasks, return_exceptions=True)
+
+        # Log any initialization errors
+        for provider_name, result in zip(self.providers.keys(), init_results, strict=False):
+            if isinstance(result, Exception):
+                logger.error(f"Failed to initialize {provider_name}: {result}")
+
+        # Register tools for successfully initialized providers
+        for provider_name, provider in self.providers.items():
+            if not provider.initialized:
+                logger.warning(f"Skipping tool registration for uninitialized provider: {provider_name}")
+                continue
+
+            try:
+                # Get provider's tools
+                tools = await provider.list_tools()
+
+                for tool in tools:
+                    # Create a tool wrapper that routes to the provider
+                    tool_name = f"{provider_name}_{tool.name}"
+                    tool_description = f"{tool.description} (via {provider_name})"
+
+                    # Register the tool with FastMCP
+                    self._register_single_provider_tool(
+                        provider_name, provider, tool.name, tool_name, tool_description, tool.parameters
                     )
 
-                    # Convert cascade results to provider results format
-                    provider_results = {}
-                    successful_providers = set()
-
-                    for provider_name, result in execution_results.items():
-                        if result.success and result.response:
-                            provider_results[provider_name] = result.response
-                            successful_providers.add(provider_name)
-                        else:
-                            # Create empty response for failed providers
-                            provider_results[provider_name] = SearchResponse(
-                                results=[],
-                                query=query.query,
-                                total_results=0,
-                                provider=provider_name,
-                                error=result.error or "Failed",
-                                timing_ms=result.duration_ms,
-                            )
-
-                    # Log cascade execution details
-                    primary_success = any(
-                        r.is_primary and r.success for r in execution_results.values()
-                    )
-                    await ctx.info(
-                        f"Cascade result: primary_success={primary_success}, total_success={len(successful_providers)}"
-                    )
-
-                else:
-                    # Execute all providers in parallel (original behavior)
-                    provider_tasks = {}
-                    for provider_name in providers_to_use:
-                        if provider_name in self.providers:
-                            provider = self.providers[provider_name]
-                            provider_tasks[provider_name] = asyncio.create_task(
-                                provider.search(query)
-                            )
-
-                    # Wait for all searches to complete with timeout
-                    timeout_sec = query.timeout_ms / 1000
-                    done, pending = await asyncio.wait(
-                        provider_tasks.values(), timeout=timeout_sec
-                    )
-
-                    # Cancel any pending tasks
-                    for task in pending:
-                        task.cancel()
-
-                    # Collect results
-                    provider_results = {}
-                    successful_providers = set()
-                    for provider_name, task in provider_tasks.items():
-                        if task in done and not task.exception():
-                            provider_results[provider_name] = task.result()
-                            successful_providers.add(provider_name)
-                        else:
-                            # Handle errors or timeouts
-                            if task.exception():
-                                await ctx.error(
-                                    f"Provider {provider_name} error: {str(task.exception())}"
-                                )
-                                self.metrics.record_error()
-                            else:
-                                await ctx.warn(f"Provider {provider_name} timed out")
-                                self.metrics.record_error()
-
-                            # Create empty response for failed providers
-                            provider_results[provider_name] = SearchResponse(
-                                results=[],
-                                query=query.query,
-                                total_results=0,
-                                provider=provider_name,
-                                error="Timeout or error",
-                            )
-
-                # Merge and rank results (common for both cascade and parallel)
-                combined_results = self.merger.merge_results(
-                    provider_results,
-                    max_results=query.max_results,
-                    raw_content=query.raw_content,
-                )
-
-                # Calculate costs
-                total_cost = sum(
-                    self.providers[name].estimate_cost(query)
-                    for name in provider_results
-                )
-
-                # Create response
-                response = CombinedSearchResponse(
-                    results=combined_results,
-                    query=query.query,
-                    providers_used=list(provider_results.keys()),
-                    total_results=len(combined_results),
-                    total_cost=total_cost,
-                    timing_ms=(time.time() - start_time) * 1000,
-                )
-
-                # Cache the response
-                self.cache.set(cache_key, response)
-
-                # Record metrics
-                self.metrics.record_query(successful_providers, from_cache=False)
-                self.metrics.end_request(request_id)
-
-                return response
+                logger.info(f"Registered {len(tools)} tools for provider {provider_name}")
 
             except Exception as e:
-                await ctx.error(f"Search error: {str(e)}")
-                # Record error
-                self.metrics.record_error()
-                self.metrics.end_request(request_id)
+                logger.error(f"Failed to register tools for {provider_name}: {e}")
 
-                # Return error response
-                return CombinedSearchResponse(
-                    results=[],
-                    query=query.query,
-                    providers_used=[],
-                    total_results=0,
-                    total_cost=0.0,
-                    timing_ms=(time.time() - start_time) * 1000,
-                )
-
-        @self.mcp.tool()
-        def get_provider_info() -> dict[str, dict]:
-            """Get information about available search providers."""
-            provider_info = {}
-
-            for name, provider in self.providers.items():
-                provider_info[name] = provider.get_capabilities()
-
-            return provider_info
-
-        # Register Firecrawl tools
-        firecrawl_provider = self.providers.get("firecrawl")
-        if firecrawl_provider and isinstance(firecrawl_provider, FirecrawlProvider):
-
-            @self.mcp.tool()
-            async def firecrawl_scrape(
-                url: str,
-                formats: list[str] = None,
-                onlyMainContent: bool = True,
-                timeout: int = 30000,
-                **kwargs,
-            ) -> dict:
-                """
-                Scrape a single webpage with Firecrawl.
-
-                Args:
-                    url: The URL to scrape
-                    formats: Content formats to extract (markdown, html, rawHtml, screenshot, links)
-                    onlyMainContent: Extract only the main content
-                    timeout: Maximum time to wait for page load
-                """
-                if formats is None:
-                    formats = ["markdown"]
-                return await firecrawl_provider.scrape_url(
-                    url,
-                    formats=formats,
-                    onlyMainContent=onlyMainContent,
-                    timeout=timeout,
-                    **kwargs,
-                )
-
-            @self.mcp.tool()
-            async def firecrawl_map(
-                url: str,
-                search: str = None,
-                ignoreSubdomains: bool = False,
-                limit: int = None,
-            ) -> dict:
-                """
-                Discover URLs from a starting point using sitemap and crawling.
-
-                Args:
-                    url: Starting URL for URL discovery
-                    search: Optional search term to filter URLs
-                    ignoreSubdomains: Skip subdomains
-                    limit: Maximum number of URLs to return
-                """
-                return await firecrawl_provider.firecrawl_map(
-                    url, search=search, ignoreSubdomains=ignoreSubdomains, limit=limit
-                )
-
-            @self.mcp.tool()
-            async def firecrawl_crawl(
-                url: str, limit: int = 10, maxDepth: int = 3, **options
-            ) -> dict:
-                """
-                Start an asynchronous crawl of multiple pages.
-
-                Args:
-                    url: Starting URL for the crawl
-                    limit: Maximum number of pages to crawl
-                    maxDepth: Maximum link depth to crawl
-                """
-                return await firecrawl_provider.firecrawl_crawl(
-                    url, limit=limit, maxDepth=maxDepth, **options
-                )
-
-            @self.mcp.tool()
-            async def firecrawl_check_crawl_status(id: str) -> dict:
-                """
-                Check the status of a crawl job.
-
-                Args:
-                    id: The crawl job ID
-                """
-                return await firecrawl_provider.firecrawl_check_crawl_status(id)
-
-            @self.mcp.tool()
-            async def firecrawl_search(query: str, limit: int = 5, **options) -> dict:
-                """
-                Search the web with Firecrawl.
-
-                Args:
-                    query: Search query string
-                    limit: Maximum number of results
-                """
-                return await firecrawl_provider.firecrawl_search(
-                    query, limit=limit, **options
-                )
-
-            @self.mcp.tool()
-            async def firecrawl_extract(
-                urls: list[str], prompt: str, systemPrompt: str = None
-            ) -> dict:
-                """
-                Extract structured information from web pages using LLM.
-
-                Args:
-                    urls: List of URLs to extract information from
-                    prompt: Prompt for the LLM extraction
-                    systemPrompt: System prompt for LLM extraction
-                """
-                return await firecrawl_provider.firecrawl_extract(
-                    urls, prompt=prompt, systemPrompt=systemPrompt
-                )
-
-            @self.mcp.tool()
-            async def firecrawl_deep_research(
-                query: str, maxDepth: int = 3, maxUrls: int = 100, timeLimit: int = 300
-            ) -> dict:
-                """
-                Conduct deep research on a query using web crawling and AI analysis.
-
-                Args:
-                    query: The query to research
-                    maxDepth: Maximum depth of research iterations
-                    maxUrls: Maximum number of URLs to analyze
-                    timeLimit: Time limit in seconds
-                """
-                return await firecrawl_provider.firecrawl_deep_research(
-                    query, maxDepth=maxDepth, maxUrls=maxUrls, timeLimit=timeLimit
-                )
-
-            @self.mcp.tool()
-            async def firecrawl_generate_llmstxt(
-                url: str, maxUrls: int = 10, showFullText: bool = False
-            ) -> dict:
-                """
-                Generate standardized LLMs.txt file for a URL.
-
-                Args:
-                    url: The URL to generate LLMs.txt from
-                    maxUrls: Maximum number of URLs to process
-                    showFullText: Whether to show the full LLMs-full.txt
-                """
-                return await firecrawl_provider.firecrawl_generate_llmstxt(
-                    url, maxUrls=maxUrls, showFullText=showFullText
-                )
-
-        # Register Exa tools
-        exa_provider = self.providers.get("exa")
-        if exa_provider and isinstance(exa_provider, ExaProvider):
-
-            @self.mcp.tool()
-            async def exa_search(
-                query: str,
-                limit: int = 10,
-                type: str = "neural",
-                **kwargs,
-            ) -> dict:
-                """
-                Search the web using Exa's semantic search engine.
-
-                Args:
-                    query: Search query string
-                    limit: Maximum number of results (default: 10)
-                    type: Search type ('neural', 'keyword', 'hybrid')
-                """
-                return await exa_provider.mcp_wrapper.invoke_tool(
-                    "web_search_exa",
-                    {"query": query, "limit": limit, "type": type, **kwargs},
-                )
-
-            @self.mcp.tool()
-            async def exa_research_papers(
-                query: str,
-                limit: int = 10,
-                **kwargs,
-            ) -> dict:
-                """
-                Search for research papers using Exa.
-
-                Args:
-                    query: Search query for research papers
-                    limit: Maximum number of results
-                """
-                return await exa_provider.research_papers(query, limit=limit, **kwargs)
-
-            @self.mcp.tool()
-            async def exa_company_research(
-                query: str,
-                **kwargs,
-            ) -> dict:
-                """
-                Research companies using Exa.
-
-                Args:
-                    query: Company or industry to research
-                """
-                return await exa_provider.company_research(query, **kwargs)
-
-            @self.mcp.tool()
-            async def exa_competitor_finder(
-                company: str,
-                **kwargs,
-            ) -> dict:
-                """
-                Find competitors for a company using Exa.
-
-                Args:
-                    company: Company name to find competitors for
-                """
-                return await exa_provider.competitor_finder(company, **kwargs)
-
-            @self.mcp.tool()
-            async def exa_linkedin_search(
-                query: str,
-                limit: int = 10,
-                **kwargs,
-            ) -> dict:
-                """
-                Search LinkedIn using Exa.
-
-                Args:
-                    query: LinkedIn search query
-                    limit: Maximum number of results
-                """
-                return await exa_provider.linkedin_search(query, limit=limit, **kwargs)
-
-            @self.mcp.tool()
-            async def exa_wikipedia_search(
-                query: str,
-                limit: int = 10,
-                **kwargs,
-            ) -> dict:
-                """
-                Search Wikipedia using Exa.
-
-                Args:
-                    query: Wikipedia search query
-                    limit: Maximum number of results
-                """
-                return await exa_provider.wikipedia_search(query, limit=limit, **kwargs)
-
-            @self.mcp.tool()
-            async def exa_github_search(
-                query: str,
-                limit: int = 10,
-                **kwargs,
-            ) -> dict:
-                """
-                Search GitHub using Exa.
-
-                Args:
-                    query: GitHub search query
-                    limit: Maximum number of results
-                """
-                return await exa_provider.github_search(query, limit=limit, **kwargs)
-
-            @self.mcp.tool()
-            async def exa_crawl(
-                url: str,
-                **kwargs,
-            ) -> dict:
-                """
-                Crawl a URL using Exa.
-
-                Args:
-                    url: URL to crawl and extract content from
-                """
-                return await exa_provider.crawl(url, **kwargs)
-
-        # Register Perplexity tools
-        perplexity_provider = self.providers.get("perplexity")
-        if perplexity_provider and isinstance(perplexity_provider, PerplexityProvider):
-
-            @self.mcp.tool()
-            async def perplexity_ask(
-                query: str,
-                search_focus: str = "web",
-                **kwargs,
-            ) -> dict:
-                """
-                Ask Perplexity a question with web search capabilities.
-
-                Args:
-                    query: The question to ask
-                    search_focus: Search focus type ('web', 'academic', 'youtube', etc.)
-                """
-                return await perplexity_provider.mcp_wrapper.call_tool(
-                    "perplexity_ask",
-                    {
-                        "messages": [{"role": "user", "content": query}],
-                        "search_focus": search_focus,
-                        **kwargs,
-                    },
-                )
-
-            @self.mcp.tool()
-            async def perplexity_research(
-                query: str,
-                **kwargs,
-            ) -> dict:
-                """
-                Conduct deep research on a topic using Perplexity.
-
-                Args:
-                    query: The topic to research
-                """
-                return await perplexity_provider.perplexity_research(query, **kwargs)
-
-            @self.mcp.tool()
-            async def perplexity_reason(
-                query: str,
-                **kwargs,
-            ) -> dict:
-                """
-                Perform reasoning tasks using Perplexity.
-
-                Args:
-                    query: The reasoning task or question
-                """
-                return await perplexity_provider.perplexity_reason(query, **kwargs)
-
-        # Register Linkup tools
-        linkup_provider = self.providers.get("linkup")
-        if linkup_provider and isinstance(linkup_provider, LinkupProvider):
-
-            @self.mcp.tool()
-            async def linkup_search_web(
-                query: str,
-                depth: str = "standard",
-                **kwargs,
-            ) -> dict:
-                """
-                Search the web using Linkup for real-time information and premium content.
-
-                Args:
-                    query: The search query to perform
-                    depth: Search depth ('standard' or 'deep')
-                """
-                return await linkup_provider.mcp_wrapper.call_tool(
-                    "search-web",
-                    {"query": query, "depth": depth, **kwargs},
-                )
-
-        # Register Tavily tools
-        tavily_provider = self.providers.get("tavily")
-        if tavily_provider and isinstance(tavily_provider, TavilyProvider):
-
-            @self.mcp.tool()
-            async def tavily_search(
-                query: str,
-                search_depth: str = "basic",
-                max_results: int = 5,
-                **kwargs,
-            ) -> dict:
-                """
-                Search the web using Tavily's AI-optimized search.
-
-                Args:
-                    query: Search query string
-                    search_depth: Search depth ('basic' or 'advanced')
-                    max_results: Maximum number of results (default: 5)
-                """
-                return await tavily_provider.mcp_wrapper.call_tool(
-                    "tavily-search",
-                    {
-                        "query": query,
-                        "options": {
-                            "searchDepth": search_depth,
-                            "maxResults": max_results,
-                            **kwargs,
-                        },
-                    },
-                )
-
-            @self.mcp.tool()
-            async def tavily_extract(
-                url: str,
-                extract_depth: str = "advanced",
-                **kwargs,
-            ) -> dict:
-                """
-                Extract and analyze content from a URL using Tavily.
-
-                Args:
-                    url: URL to extract content from
-                    extract_depth: Extraction depth ('basic' or 'advanced')
-                """
-                return await tavily_provider.mcp_wrapper.call_tool(
-                    "tavily-extract",
-                    {
-                        "urls": [url],
-                        "options": {"extractDepth": extract_depth, **kwargs},
-                    },
-                )
-
-    def _should_use_cascade(
+    def _register_single_provider_tool(
         self,
-        query: SearchQuery,
-        features,
-        providers: list[str],
-    ) -> bool:
-        """Determine whether to use cascade execution based on query characteristics."""
-        # Use cascade for:
-        # 1. Single provider queries (for reliability)
-        if len(providers) == 1:
-            return True
+        provider_name: str,
+        provider: SearchProvider,
+        original_tool_name: str,
+        tool_name: str,
+        description: str,
+        parameters: dict[str, Any],
+    ):
+        """Register a single provider tool with FastMCP."""
 
-        # 2. High-importance/complexity queries
-        if features.complexity > 0.7:
-            return True
+        @self.mcp.tool(
+            name=tool_name,
+            description=description,
+        )
+        async def provider_tool_wrapper(ctx: Context, **kwargs):
+            """Wrapper function for provider-specific tools."""
+            request_id = str(uuid.uuid4())
+            ctx.info(f"Invoking {provider_name} tool {original_tool_name} with request {request_id}")
 
-        # 3. Queries explicitly requesting high reliability
-        if query.advanced and query.advanced.get("use_cascade", False):
-            return True
+            try:
+                # Use the provider's invoke_tool method
+                return await provider.invoke_tool(original_tool_name, kwargs)
+            except Exception as e:
+                ctx.error(f"Error invoking {provider_name} tool {original_tool_name}: {e}")
+                raise
 
-        # 4. Queries with web content extraction (often need fallbacks)
-        return features.content_type == "web_content"
+    def _register_custom_routes(self):
+        """Register custom FastMCP HTTP routes."""
+        # Use http_app for custom routes
+        app = self.mcp.http_app
+
+        @app.post("/search/combined")
+        async def search_combined(request: Request) -> JSONResponse:
+            """Execute a combined search across multiple providers."""
+            try:
+                data = await request.json()
+                search_query = SearchQuery(**data)
+                request_id = str(uuid.uuid4())
+
+                # Create a mock context for HTTP requests
+                class MockContext:
+                    def info(self, msg):
+                        logger.info(msg)
+
+                    def warning(self, msg):
+                        logger.warning(msg)
+
+                    def error(self, msg):
+                        logger.error(msg)
+
+                mock_ctx = MockContext()
+
+                # Use search_with_routing instead of manual process
+                response = await self.search_with_routing(
+                    search_query, request_id, mock_ctx
+                )
+
+                return JSONResponse(content=response.model_dump(mode="json"))
+
+            except Exception as e:
+                import traceback
+
+                return JSONResponse(
+                    content={
+                        "error": str(e),
+                        "trace": traceback.format_exc(),
+                    },
+                    status_code=500,
+                )
+
+        @app.get("/health")
+        async def health_check(request: Request) -> JSONResponse:
+            """Health check endpoint."""
+            # Build provider health status
+            provider_health = {}
+            for name, provider in self.providers.items():
+                status = provider.check_status()
+                if status:
+                    provider_health[name] = ProviderStatus(
+                        name=status.name,
+                        health=status.health,
+                        status=status.status,
+                        message=status.message,
+                    )
+                else:
+                    provider_health[name] = ProviderStatus(
+                        name=name,
+                        health=HealthStatus.UNHEALTHY,
+                        status=False,
+                        message="Provider unresponsive",
+                    )
+
+            # Overall health
+            overall_health = HealthStatus.HEALTHY
+            if all(p.health == HealthStatus.UNHEALTHY for p in provider_health.values()):
+                overall_health = HealthStatus.UNHEALTHY
+            elif any(
+                p.health in [HealthStatus.UNHEALTHY, HealthStatus.DEGRADED]
+                for p in provider_health.values()
+            ):
+                overall_health = HealthStatus.DEGRADED
+
+            response = HealthResponse(
+                status=overall_health.value,
+                healthy_providers=len(
+                    [p for p in provider_health.values() if p.health == HealthStatus.HEALTHY]
+                ),
+                total_providers=len(provider_health),
+                providers=provider_health,
+            )
+
+            status_code = 200 if overall_health == HealthStatus.HEALTHY else 503
+            return JSONResponse(content=response.model_dump(mode="json"), status_code=status_code)
+
+        @app.get("/metrics")
+        async def metrics(request: Request) -> JSONResponse:
+            """Metrics endpoint."""
+            # Get performance metrics
+            metrics_data = self.metrics.get_metrics()
+
+            # Build provider metrics
+            provider_metrics = {}
+            for name in self.providers:
+                if name in metrics_data:
+                    provider_metrics[name] = {
+                        "queries": metrics_data[name].get("queries", 0),
+                        "successes": metrics_data[name].get("successes", 0),
+                        "failures": metrics_data[name].get("failures", 0),
+                        "success_rate": metrics_data[name].get("success_rate", 0.0),
+                        "avg_response_time": metrics_data[name].get("avg_response_time", 0.0),
+                    }
+
+            # Aggregate metrics
+            total_queries = sum(m.get("queries", 0) for m in provider_metrics.values())
+            total_successes = sum(m.get("successes", 0) for m in provider_metrics.values())
+            total_failures = sum(m.get("failures", 0) for m in provider_metrics.values())
+
+            response = MetricsResponse(
+                total_queries=total_queries,
+                total_successes=total_successes,
+                total_failures=total_failures,
+                cache_hit_rate=metrics_data.get("cache_hit_rate", 0.0),
+                avg_response_time=metrics_data.get("avg_response_time", 0.0),
+                provider_metrics=provider_metrics,
+                last_updated=metrics_data.get("last_updated", time.time()),
+            )
+
+            return JSONResponse(content=response.model_dump(mode="json"))
+
+    async def search_with_routing(
+        self, search_query: SearchQuery, request_id: str, ctx: Context
+    ) -> CombinedSearchResponse:
+        """Execute a search using the unified router."""
+        # Check cache first
+        cache_key = self.cache.generate_key(search_query)
+        cached_result = self.cache.get(cache_key)
+        if cached_result:
+            ctx.info(f"Cache hit for request {request_id}")
+            # Track cache hit metric
+            self.metrics.record_query(
+                provider_name="_cache", success=True, response_time=0.001, result_count=len(cached_result.results)
+            )
+            return cached_result
+
+        # Analyze query
+        features = self.analyzer.analyze(search_query)
+        ctx.info(f"Request {request_id} - Query features: {features.model_dump()}")
+
+        # Route and execute
+        ctx.info(f"Request {request_id} - Starting search with unified router")
+        start_time = time.time()
+
+        # Use the unified router which handles provider selection and execution
+        results = await self.router.route_and_execute(
+            query=search_query,
+            features=features,
+        )
+
+        response_time = time.time() - start_time
+        ctx.info(f"Request {request_id} - Search completed in {response_time:.2f}s")
+
+        # Merge results from all providers
+        merged_results = self.merger.merge_results(results)
+
+        # Build combined response
+        response = CombinedSearchResponse(
+            results=merged_results,
+            metadata={
+                "request_id": request_id,
+                "query": search_query.query,
+                "features": features.model_dump(),
+                "providers_used": list(results.keys()),
+                "result_count": len(merged_results),
+                "response_time": response_time,
+            },
+        )
+
+        # Cache the result
+        self.cache.set(cache_key, response)
+
+        # Track metrics for actual providers used
+        for provider_name in results:
+            provider_results = results[provider_name]
+            self.metrics.record_query(
+                provider_name=provider_name,
+                success=len(provider_results) > 0,
+                response_time=response_time / len(results),  # Approximate per-provider time
+                result_count=len(provider_results),
+            )
+
+        return response
+
+    async def start(self, transport: str = "streamable-http", host: str = "0.0.0.0", port: int = 8000):
+        """Start the FastMCP server."""
+        # Initialize all providers and register their tools
+        if not self._provider_tools_registered:
+            logger.info("Initializing providers and registering tools...")
+            await self._register_provider_tools()
+            self._provider_tools_registered = True
+
+        # Run the server based on transport
+        logger.info(f"Starting MCP Search Hub on {host}:{port} with transport {transport}")
+
+        if transport == "stdio":
+            await self.mcp.run_stdio_async()
+        elif transport == "streamable-http":
+            await self.mcp.run_streamable_http_async(host=host, port=port)
+        else:
+            # Default HTTP
+            await self.mcp.run_http_async(host=host, port=port)
+
+    def run(self, transport: str = "streamable-http", host: str = "0.0.0.0", port: int = 8000, log_level: str = "INFO"):
+        """Run the server synchronously."""
+        asyncio.run(self.start(transport=transport, host=host, port=port))
 
     async def close(self):
-        """Close all provider connections."""
+        """Close all providers and cleanup resources."""
+        logger.info("Closing all providers...")
         close_tasks = []
-        for provider in self.providers.values():
-            if hasattr(provider, "close"):
-                close_tasks.append(asyncio.create_task(provider.close()))
 
+        for provider_name, provider in self.providers.items():
+            if provider.initialized:
+                try:
+                    close_tasks.append(provider.close())
+                except Exception as e:
+                    logger.error(f"Failed to create close task for {provider_name}: {e}")
+
+        # Wait for all providers to close
         if close_tasks:
-            await asyncio.gather(*close_tasks)
+            close_results = await asyncio.gather(*close_tasks, return_exceptions=True)
 
-    def run(self, **kwargs):
-        """Run the FastMCP server."""
-        self.mcp.run(**kwargs)
+            # Log any close errors
+            for provider_name, result in zip(self.providers.keys(), close_results, strict=False):
+                if isinstance(result, Exception):
+                    logger.error(f"Failed to close {provider_name}: {result}")
+
+        logger.info("All providers closed")
