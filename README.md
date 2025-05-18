@@ -51,10 +51,10 @@ We've implemented an innovative approach: **embedding all official provider MCP 
 This architectural decision applies to all providers:
 
 - **Firecrawl**: Successfully embedded with all tools available
-- **Perplexity**: In progress - will expose ask, research, and search tools
-- **Exa**: In progress - will expose web_search_exa, research_paper_search, and more
-- **Linkup**: In progress - Python-to-Python MCP communication for search
-- **Tavily**: In progress - will expose tavily-search and tavily-extract tools
+- **Perplexity**: Successfully embedded with all tools available
+- **Exa**: Successfully embedded with all tools available
+- **Linkup**: Successfully embedded with all tools available
+- **Tavily**: Successfully embedded with all tools available
 
 Benefits of this approach:
 
@@ -557,13 +557,13 @@ MCP Search Hub embeds all official provider MCP servers, giving you access to th
 - `firecrawl_deep_research`: Comprehensive research automation
 - `firecrawl_generate_llmstxt`: Generate LLMs.txt files
 
-#### Perplexity (In Progress)
+#### Perplexity (Completed)
 
 - `perplexity_ask`: Conversational search with AI
 - `perplexity_research`: Deep research capabilities
 - `perplexity_search`: Web search with citations
 
-#### Exa (In Progress)
+#### Exa (Completed)
 
 - `web_search_exa`: Semantic web search
 - `research_paper_search`: Academic paper search
@@ -572,11 +572,11 @@ MCP Search Hub embeds all official provider MCP servers, giving you access to th
 - `wikipedia_search_exa`: Wikipedia search
 - `github_search`: GitHub repository search
 
-#### Linkup (In Progress)
+#### Linkup (Completed)
 
 - `linkup_search`: Premium content search with real-time results
 
-#### Tavily (In Progress)
+#### Tavily (Completed)
 
 - `tavily_search`: RAG-optimized search
 - `tavily_extract`: Content extraction

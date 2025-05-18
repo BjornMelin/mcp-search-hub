@@ -21,8 +21,7 @@ class ResultMerger:
     }
 
     def __init__(self, provider_weights: dict[str, float] | None = None):
-        """
-        Initialize the result merger.
+        """Initialize the result merger.
 
         Args:
             provider_weights: Optional custom weight mapping for providers
@@ -116,13 +115,12 @@ class ResultMerger:
         results: list[SearchResult],
         provider_results: dict[str, SearchResponse | list[SearchResult]],
     ) -> list[SearchResult]:
-        """
-        Rank results based on provider quality and result scores.
+        """Rank results based on provider quality and result scores.
 
         Uses a multi-factor ranking algorithm:
-        1. Provider quality weight
-        2. Original result score
-        3. Consensus boost (results appearing in multiple providers)
+            1. Provider quality weight
+            2. Original result score
+            3. Consensus boost (results appearing in multiple providers)
         """
         # Apply consensus boost for results appearing in multiple providers
         url_counts = {}
@@ -160,8 +158,7 @@ class ResultMerger:
         results: list[SearchResult],
         custom_weights: dict[str, float] | None = None,
     ) -> list[SearchResult]:
-        """
-        Simple ranking by applying source weights to scores.
+        """Simple ranking by applying source weights to scores.
 
         This method is provided for compatibility and simple use cases.
         The main merge_results method provides more sophisticated ranking.
