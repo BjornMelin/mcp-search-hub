@@ -12,7 +12,7 @@ class BaseMCPProviderTestMixin:
 
     provider_class = None  # To be set by subclasses
     provider_name = None  # To be set by subclasses
-    tool_name = None      # To be set by subclasses
+    tool_name = None  # To be set by subclasses
 
     def get_provider(self, api_key="test_key"):
         """Get an instance of the provider."""
@@ -56,16 +56,18 @@ class BaseMCPProviderTestMixin:
         # Mock tool invocation
         mock_result = AsyncMock()
         mock_result.content = [
-            MagicMock(text={
-                "results": [
-                    {
-                        "title": "Test Result",
-                        "url": "https://example.com",
-                        "snippet": "Test snippet",
-                        "score": 0.9
-                    }
-                ]
-            })
+            MagicMock(
+                text={
+                    "results": [
+                        {
+                            "title": "Test Result",
+                            "url": "https://example.com",
+                            "snippet": "Test snippet",
+                            "score": 0.9,
+                        }
+                    ]
+                }
+            )
         ]
         provider.session.call_tool = AsyncMock(return_value=mock_result)
 
@@ -92,9 +94,7 @@ class BaseMCPProviderTestMixin:
         provider = self.get_provider()
         provider.initialized = True
         provider.session = MagicMock()
-        provider.session.call_tool = AsyncMock(
-            side_effect=Exception("API error")
-        )
+        provider.session.call_tool = AsyncMock(side_effect=Exception("API error"))
 
         query = SearchQuery(query="test query")
         results = await provider.search(query)
@@ -128,25 +128,25 @@ class AdvancedQueryTestMixin:
         # Mock tool invocation
         mock_result = AsyncMock()
         mock_result.content = [
-            MagicMock(text={
-                "results": [
-                    {
-                        "title": "Advanced Result",
-                        "url": "https://example.com/advanced",
-                        "snippet": "Advanced snippet",
-                        "score": 0.95
-                    }
-                ]
-            })
+            MagicMock(
+                text={
+                    "results": [
+                        {
+                            "title": "Advanced Result",
+                            "url": "https://example.com/advanced",
+                            "snippet": "Advanced snippet",
+                            "score": 0.95,
+                        }
+                    ]
+                }
+            )
         ]
         provider.session.call_tool = AsyncMock(return_value=mock_result)
 
         # Test with provider-specific advanced options
         advanced_options = self.get_advanced_options()
         query = SearchQuery(
-            query="test query",
-            max_results=5,
-            advanced=advanced_options
+            query="test query", max_results=5, advanced=advanced_options
         )
 
         results = await provider.search(query)
@@ -182,25 +182,23 @@ class RawContentTestMixin:
         # Mock tool invocation with raw content
         mock_result = AsyncMock()
         mock_result.content = [
-            MagicMock(text={
-                "results": [
-                    {
-                        "title": "Content Result",
-                        "url": "https://example.com/content",
-                        "snippet": "Content snippet",
-                        "content": "This is the full raw content",
-                        "score": 0.88
-                    }
-                ]
-            })
+            MagicMock(
+                text={
+                    "results": [
+                        {
+                            "title": "Content Result",
+                            "url": "https://example.com/content",
+                            "snippet": "Content snippet",
+                            "content": "This is the full raw content",
+                            "score": 0.88,
+                        }
+                    ]
+                }
+            )
         ]
         provider.session.call_tool = AsyncMock(return_value=mock_result)
 
-        query = SearchQuery(
-            query="test query",
-            max_results=5,
-            raw_content=True
-        )
+        query = SearchQuery(query="test query", max_results=5, raw_content=True)
 
         results = await provider.search(query)
 

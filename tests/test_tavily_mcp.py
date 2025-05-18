@@ -11,7 +11,9 @@ from .test_base_mcp import (
 )
 
 
-class TestTavilyMCPProvider(TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuery, TestBaseMCPProviderRawContent):
+class TestTavilyMCPProvider(
+    TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuery, TestBaseMCPProviderRawContent
+):
     """Test Tavily MCP provider functionality."""
 
     provider_class = TavilyMCPProvider
@@ -24,9 +26,7 @@ class TestTavilyMCPProvider(TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuer
 
     def get_advanced_options(self):
         """Get Tavily-specific advanced options."""
-        return {
-            "deep_search": True
-        }
+        return {"deep_search": True}
 
     def verify_advanced_params(self, params):
         """Verify Tavily-specific advanced parameters."""

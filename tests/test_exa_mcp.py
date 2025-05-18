@@ -52,16 +52,18 @@ class TestExaMCPProvider:
         # Mock tool invocation
         mock_result = MagicMock()
         mock_result.content = [
-            MagicMock(text={
-                "results": [
-                    {
-                        "title": "Test Result",
-                        "url": "https://example.com",
-                        "snippet": "Test snippet",
-                        "score": 0.9
-                    }
-                ]
-            })
+            MagicMock(
+                text={
+                    "results": [
+                        {
+                            "title": "Test Result",
+                            "url": "https://example.com",
+                            "snippet": "Test snippet",
+                            "score": 0.9,
+                        }
+                    ]
+                }
+            )
         ]
         provider.session.call_tool = AsyncMock(return_value=mock_result)
 
@@ -83,16 +85,18 @@ class TestExaMCPProvider:
         # Mock tool invocation
         mock_result = MagicMock()
         mock_result.content = [
-            MagicMock(text={
-                "results": [
-                    {
-                        "title": "Advanced Result",
-                        "url": "https://example.com/advanced",
-                        "snippet": "Advanced snippet",
-                        "score": 0.95
-                    }
-                ]
-            })
+            MagicMock(
+                text={
+                    "results": [
+                        {
+                            "title": "Advanced Result",
+                            "url": "https://example.com/advanced",
+                            "snippet": "Advanced snippet",
+                            "score": 0.95,
+                        }
+                    ]
+                }
+            )
         ]
         provider.session.call_tool = AsyncMock(return_value=mock_result)
 
@@ -102,8 +106,8 @@ class TestExaMCPProvider:
             advanced={
                 "highlights": True,
                 "startPublishedDate": "2023-01-01",
-                "contents": "text"
-            }
+                "contents": "text",
+            },
         )
 
         results = await provider.search(query)
@@ -133,9 +137,7 @@ class TestExaMCPProvider:
         """Test search error handling."""
         provider.initialized = True
         provider.session = MagicMock()
-        provider.session.call_tool = AsyncMock(
-            side_effect=Exception("API error")
-        )
+        provider.session.call_tool = AsyncMock(side_effect=Exception("API error"))
 
         query = SearchQuery(query="test query")
         results = await provider.search(query)
