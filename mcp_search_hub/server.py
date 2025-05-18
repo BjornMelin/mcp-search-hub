@@ -92,7 +92,10 @@ class SearchServer:
                 # Import provider class dynamically
                 module_name = f"mcp_search_hub.providers.{provider_name}_mcp"
                 # Convert provider name to CamelCase for class names
-                class_name = ''.join(word.capitalize() for word in provider_name.split('_')) + 'MCPProvider'
+                class_name = (
+                    "".join(word.capitalize() for word in provider_name.split("_"))
+                    + "MCPProvider"
+                )
                 module = __import__(module_name, fromlist=[class_name])
                 provider_class = getattr(module, class_name, None)
 
@@ -138,10 +141,7 @@ class SearchServer:
 
             # Use search_with_routing which handles caching internally
             response = await self.search_with_routing(search_query, request_id, ctx)
-            return SearchResponse(
-                results=response.results,
-                metadata=response.metadata
-            )
+            return SearchResponse(results=response.results, metadata=response.metadata)
 
         # Dynamically register provider-specific tools (deferred to server start)
 
@@ -153,20 +153,26 @@ class SearchServer:
             try:
                 init_tasks.append(provider.initialize())
             except Exception as e:
-                logger.error(f"Failed to create initialization task for {provider_name}: {e}")
+                logger.error(
+                    f"Failed to create initialization task for {provider_name}: {e}"
+                )
 
         # Wait for all initializations
         init_results = await asyncio.gather(*init_tasks, return_exceptions=True)
 
         # Log any initialization errors
-        for provider_name, result in zip(self.providers.keys(), init_results, strict=False):
+        for provider_name, result in zip(
+            self.providers.keys(), init_results, strict=False
+        ):
             if isinstance(result, Exception):
                 logger.error(f"Failed to initialize {provider_name}: {result}")
 
         # Register tools for successfully initialized providers
         for provider_name, provider in self.providers.items():
             if not provider.initialized:
-                logger.warning(f"Skipping tool registration for uninitialized provider: {provider_name}")
+                logger.warning(
+                    f"Skipping tool registration for uninitialized provider: {provider_name}"
+                )
                 continue
 
             try:
@@ -180,10 +186,17 @@ class SearchServer:
 
                     # Register the tool with FastMCP
                     self._register_single_provider_tool(
-                        provider_name, provider, tool.name, tool_name, tool_description, tool.parameters
+                        provider_name,
+                        provider,
+                        tool.name,
+                        tool_name,
+                        tool_description,
+                        tool.parameters,
                     )
 
-                logger.info(f"Registered {len(tools)} tools for provider {provider_name}")
+                logger.info(
+                    f"Registered {len(tools)} tools for provider {provider_name}"
+                )
 
             except Exception as e:
                 logger.error(f"Failed to register tools for {provider_name}: {e}")
@@ -206,13 +219,17 @@ class SearchServer:
         async def provider_tool_wrapper(ctx: Context, **kwargs):
             """Wrapper function for provider-specific tools."""
             request_id = str(uuid.uuid4())
-            ctx.info(f"Invoking {provider_name} tool {original_tool_name} with request {request_id}")
+            ctx.info(
+                f"Invoking {provider_name} tool {original_tool_name} with request {request_id}"
+            )
 
             try:
                 # Use the provider's invoke_tool method
                 return await provider.invoke_tool(original_tool_name, kwargs)
             except Exception as e:
-                ctx.error(f"Error invoking {provider_name} tool {original_tool_name}: {e}")
+                ctx.error(
+                    f"Error invoking {provider_name} tool {original_tool_name}: {e}"
+                )
                 raise
 
     def _register_custom_routes(self):
@@ -283,7 +300,9 @@ class SearchServer:
 
             # Overall health
             overall_health = HealthStatus.HEALTHY
-            if all(p.health == HealthStatus.UNHEALTHY for p in provider_health.values()):
+            if all(
+                p.health == HealthStatus.UNHEALTHY for p in provider_health.values()
+            ):
                 overall_health = HealthStatus.UNHEALTHY
             elif any(
                 p.health in [HealthStatus.UNHEALTHY, HealthStatus.DEGRADED]
@@ -294,14 +313,20 @@ class SearchServer:
             response = HealthResponse(
                 status=overall_health.value,
                 healthy_providers=len(
-                    [p for p in provider_health.values() if p.health == HealthStatus.HEALTHY]
+                    [
+                        p
+                        for p in provider_health.values()
+                        if p.health == HealthStatus.HEALTHY
+                    ]
                 ),
                 total_providers=len(provider_health),
                 providers=provider_health,
             )
 
             status_code = 200 if overall_health == HealthStatus.HEALTHY else 503
-            return JSONResponse(content=response.model_dump(mode="json"), status_code=status_code)
+            return JSONResponse(
+                content=response.model_dump(mode="json"), status_code=status_code
+            )
 
         @app.get("/metrics")
         async def metrics(request: Request) -> JSONResponse:
@@ -318,13 +343,19 @@ class SearchServer:
                         "successes": metrics_data[name].get("successes", 0),
                         "failures": metrics_data[name].get("failures", 0),
                         "success_rate": metrics_data[name].get("success_rate", 0.0),
-                        "avg_response_time": metrics_data[name].get("avg_response_time", 0.0),
+                        "avg_response_time": metrics_data[name].get(
+                            "avg_response_time", 0.0
+                        ),
                     }
 
             # Aggregate metrics
             total_queries = sum(m.get("queries", 0) for m in provider_metrics.values())
-            total_successes = sum(m.get("successes", 0) for m in provider_metrics.values())
-            total_failures = sum(m.get("failures", 0) for m in provider_metrics.values())
+            total_successes = sum(
+                m.get("successes", 0) for m in provider_metrics.values()
+            )
+            total_failures = sum(
+                m.get("failures", 0) for m in provider_metrics.values()
+            )
 
             response = MetricsResponse(
                 total_queries=total_queries,
@@ -349,7 +380,10 @@ class SearchServer:
             ctx.info(f"Cache hit for request {request_id}")
             # Track cache hit metric
             self.metrics.record_query(
-                provider_name="_cache", success=True, response_time=0.001, result_count=len(cached_result.results)
+                provider_name="_cache",
+                success=True,
+                response_time=0.001,
+                result_count=len(cached_result.results),
             )
             return cached_result
 
@@ -395,13 +429,19 @@ class SearchServer:
             self.metrics.record_query(
                 provider_name=provider_name,
                 success=len(provider_results) > 0,
-                response_time=response_time / len(results),  # Approximate per-provider time
+                response_time=response_time
+                / len(results),  # Approximate per-provider time
                 result_count=len(provider_results),
             )
 
         return response
 
-    async def start(self, transport: str = "streamable-http", host: str = "0.0.0.0", port: int = 8000):
+    async def start(
+        self,
+        transport: str = "streamable-http",
+        host: str = "0.0.0.0",
+        port: int = 8000,
+    ):
         """Start the FastMCP server."""
         # Initialize all providers and register their tools
         if not self._provider_tools_registered:
@@ -410,7 +450,9 @@ class SearchServer:
             self._provider_tools_registered = True
 
         # Run the server based on transport
-        logger.info(f"Starting MCP Search Hub on {host}:{port} with transport {transport}")
+        logger.info(
+            f"Starting MCP Search Hub on {host}:{port} with transport {transport}"
+        )
 
         if transport == "stdio":
             await self.mcp.run_stdio_async()
@@ -420,7 +462,13 @@ class SearchServer:
             # Default HTTP
             await self.mcp.run_http_async(host=host, port=port)
 
-    def run(self, transport: str = "streamable-http", host: str = "0.0.0.0", port: int = 8000, log_level: str = "INFO"):
+    def run(
+        self,
+        transport: str = "streamable-http",
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        log_level: str = "INFO",
+    ):
         """Run the server synchronously."""
         asyncio.run(self.start(transport=transport, host=host, port=port))
 
@@ -434,14 +482,18 @@ class SearchServer:
                 try:
                     close_tasks.append(provider.close())
                 except Exception as e:
-                    logger.error(f"Failed to create close task for {provider_name}: {e}")
+                    logger.error(
+                        f"Failed to create close task for {provider_name}: {e}"
+                    )
 
         # Wait for all providers to close
         if close_tasks:
             close_results = await asyncio.gather(*close_tasks, return_exceptions=True)
 
             # Log any close errors
-            for provider_name, result in zip(self.providers.keys(), close_results, strict=False):
+            for provider_name, result in zip(
+                self.providers.keys(), close_results, strict=False
+            ):
                 if isinstance(result, Exception):
                     logger.error(f"Failed to close {provider_name}: {result}")
 

@@ -20,9 +20,7 @@ class TestLinkupMCPProvider(TestBaseMCPProvider, TestBaseMCPProviderAdvancedQuer
 
     def get_advanced_options(self):
         """Get Linkup-specific advanced options."""
-        return {
-            "depth": "deep"
-        }
+        return {"depth": "deep"}
 
     def verify_advanced_params(self, params):
         """Verify Linkup-specific advanced parameters."""

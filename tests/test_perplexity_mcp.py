@@ -29,11 +29,7 @@ class TestPerplexityMCPProvider(TestBaseMCPProvider):
 
         # Mock tool invocation
         mock_result = AsyncMock()
-        mock_result.content = [
-            MagicMock(text={
-                "results": []
-            })
-        ]
+        mock_result.content = [MagicMock(text={"results": []})]
         provider.session.call_tool = AsyncMock(return_value=mock_result)
 
         query = SearchQuery(query="test query")
