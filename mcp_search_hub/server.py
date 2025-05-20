@@ -7,10 +7,16 @@ import uuid
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .config import get_settings
+from .middleware.auth import AuthMiddleware
+from .middleware.base import MiddlewareManager
+from .middleware.logging import LoggingMiddleware
+from .middleware.rate_limit import RateLimitMiddleware
+from .middleware.retry import RetryMiddleware
 from .models.base import HealthResponse, HealthStatus, MetricsResponse, ProviderStatus
 from .models.query import SearchQuery
 from .models.results import CombinedSearchResponse, SearchResponse
@@ -26,10 +32,29 @@ from .utils.metrics import MetricsTracker
 logger = logging.getLogger(__name__)
 
 
+class MiddlewareHTTPWrapper(BaseHTTPMiddleware):
+    """HTTP middleware wrapper for the middleware manager."""
+    
+    def __init__(self, app, middleware_manager):
+        """Initialize with app and middleware manager."""
+        super().__init__(app)
+        self.middleware_manager = middleware_manager
+        
+    async def dispatch(self, request, call_next):
+        """Process HTTP request through middleware manager."""
+        return await self.middleware_manager.process_http_request(request, call_next)
+
+
 class SearchServer:
     """FastMCP search server implementation with unified routing."""
 
     def __init__(self):
+        # Initialize settings
+        self.settings = get_settings()
+        
+        # Initialize middleware manager
+        self.middleware_manager = MiddlewareManager()
+        
         # Initialize FastMCP server
         self.mcp = FastMCP(
             name="MCP Search Hub",
@@ -37,8 +62,11 @@ class SearchServer:
             This server provides access to multiple search providers through a unified interface.
             Use the search tool to find information with automatic provider selection.
             """,
-            log_level=get_settings().log_level,
+            log_level=self.settings.log_level,
         )
+
+        # Setup middleware
+        self._setup_middleware()
 
         # Initialize providers dynamically from configuration
         self.providers = self._initialize_providers()
@@ -55,7 +83,7 @@ class SearchServer:
         )
 
         self.merger = ResultMerger()
-        self.cache = QueryCache(ttl=get_settings().cache_ttl)
+        self.cache = QueryCache(ttl=self.settings.cache_ttl)
         self.metrics = MetricsTracker()
 
         # Register tools and custom routes
@@ -64,6 +92,67 @@ class SearchServer:
 
         # Provider tools will be registered when the server starts
         self._provider_tools_registered = False
+        
+    def _setup_middleware(self):
+        """Set up and configure middleware components."""
+        middleware_config = self.settings.middleware
+        
+        # Add logging middleware (runs first)
+        if middleware_config.logging.enabled:
+            self.middleware_manager.add_middleware(
+                LoggingMiddleware,
+                enabled=middleware_config.logging.enabled,
+                order=middleware_config.logging.order,
+                log_level=middleware_config.logging.log_level,
+                include_headers=middleware_config.logging.include_headers,
+                include_body=middleware_config.logging.include_body,
+                sensitive_headers=middleware_config.logging.sensitive_headers,
+                max_body_size=middleware_config.logging.max_body_size,
+            )
+            logger.info("Logging middleware initialized")
+        
+        # Add authentication middleware
+        if middleware_config.auth.enabled:
+            self.middleware_manager.add_middleware(
+                AuthMiddleware,
+                enabled=middleware_config.auth.enabled,
+                order=middleware_config.auth.order,
+                api_keys=middleware_config.auth.api_keys,
+                skip_auth_paths=middleware_config.auth.skip_auth_paths,
+            )
+            logger.info("Authentication middleware initialized")
+        
+        # Add rate limiting middleware
+        if middleware_config.rate_limit.enabled:
+            self.middleware_manager.add_middleware(
+                RateLimitMiddleware,
+                enabled=middleware_config.rate_limit.enabled,
+                order=middleware_config.rate_limit.order,
+                limit=middleware_config.rate_limit.limit,
+                window=middleware_config.rate_limit.window,
+                global_limit=middleware_config.rate_limit.global_limit,
+                global_window=middleware_config.rate_limit.global_window,
+                skip_paths=middleware_config.rate_limit.skip_paths,
+            )
+            logger.info("Rate limit middleware initialized")
+            
+        # Add retry middleware
+        if middleware_config.retry.enabled:
+            self.middleware_manager.add_middleware(
+                RetryMiddleware,
+                enabled=middleware_config.retry.enabled,
+                order=middleware_config.retry.order,
+                max_retries=middleware_config.retry.max_retries,
+                base_delay=middleware_config.retry.base_delay,
+                max_delay=middleware_config.retry.max_delay,
+                exponential_base=middleware_config.retry.exponential_base,
+                jitter=middleware_config.retry.jitter,
+                skip_paths=middleware_config.retry.skip_paths,
+            )
+            logger.info("Retry middleware initialized")
+            
+        # Apply HTTP middleware to the FastMCP app
+        self.mcp.http_app.add_middleware(MiddlewareHTTPWrapper, middleware_manager=self.middleware_manager)
 
     def _initialize_providers(self) -> dict[str, SearchProvider]:
         """Initialize providers from configuration."""
@@ -127,21 +216,36 @@ class SearchServer:
             raw_content: bool = False,
             advanced: dict[str, Any] | None = None,
         ) -> SearchResponse:
-            """Execute a search query across multiple providers."""
-            request_id = str(uuid.uuid4())
-            ctx.info(f"Processing search request {request_id}: {query}")
+            """Execute a search query across multiple providers with middleware processing."""
+            # Prepare parameters for middleware
+            params = {
+                "query": query,
+                "max_results": max_results,
+                "raw_content": raw_content,
+                "advanced": advanced,
+                "tool_name": "search",  # Include tool name for middleware
+            }
+            
+            # Create handler function
+            async def handler(p):
+                # Extract params after middleware processing
+                request_id = str(uuid.uuid4())
+                ctx.info(f"Processing search request {request_id}: {p['query']}")
 
-            # Build search query object
-            search_query = SearchQuery(
-                query=query,
-                max_results=max_results,
-                raw_content=raw_content,
-                advanced=advanced,
-            )
+                # Build search query object
+                search_query = SearchQuery(
+                    query=p["query"],
+                    max_results=p["max_results"],
+                    raw_content=p["raw_content"],
+                    advanced=p["advanced"],
+                )
 
-            # Use search_with_routing which handles caching internally
-            response = await self.search_with_routing(search_query, request_id, ctx)
-            return SearchResponse(results=response.results, metadata=response.metadata)
+                # Use search_with_routing which handles caching internally
+                response = await self.search_with_routing(search_query, request_id, ctx)
+                return SearchResponse(results=response.results, metadata=response.metadata)
+            
+            # Process through middleware
+            return await self.middleware_manager.process_tool_request(params, ctx, handler)
 
         # Dynamically register provider-specific tools (deferred to server start)
 
@@ -217,20 +321,38 @@ class SearchServer:
             description=description,
         )
         async def provider_tool_wrapper(ctx: Context, **kwargs):
-            """Wrapper function for provider-specific tools."""
-            request_id = str(uuid.uuid4())
-            ctx.info(
-                f"Invoking {provider_name} tool {original_tool_name} with request {request_id}"
-            )
-
-            try:
-                # Use the provider's invoke_tool method
-                return await provider.invoke_tool(original_tool_name, kwargs)
-            except Exception as e:
-                ctx.error(
-                    f"Error invoking {provider_name} tool {original_tool_name}: {e}"
+            """Wrapper function for provider-specific tools with middleware processing."""
+            # Add tool metadata to parameters for middleware
+            params = {
+                **kwargs,
+                "tool_name": tool_name,
+                "provider_name": provider_name,
+                "original_tool_name": original_tool_name,
+            }
+            
+            # Create handler function
+            async def handler(p):
+                request_id = str(uuid.uuid4())
+                ctx.info(
+                    f"Invoking {provider_name} tool {original_tool_name} with request {request_id}"
                 )
-                raise
+
+                try:
+                    # Remove middleware metadata before invoking the tool
+                    tool_params = {k: v for k, v in p.items() 
+                                 if k not in ["tool_name", "provider_name", "original_tool_name", 
+                                              "_retry_attempt", "_retryable_request"]}
+                    
+                    # Use the provider's invoke_tool method
+                    return await provider.invoke_tool(original_tool_name, tool_params)
+                except Exception as e:
+                    ctx.error(
+                        f"Error invoking {provider_name} tool {original_tool_name}: {e}"
+                    )
+                    raise
+            
+            # Process through middleware
+            return await self.middleware_manager.process_tool_request(params, ctx, handler)
 
     def _register_custom_routes(self):
         """Register custom FastMCP HTTP routes."""
