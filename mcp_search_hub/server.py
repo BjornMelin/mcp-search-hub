@@ -26,7 +26,7 @@ from .providers.provider_config import PROVIDER_CONFIGS
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.unified_router import UnifiedRouter
 from .result_processing.merger import ResultMerger
-from .utils.cache import QueryCache
+from .utils.cache import QueryCache, TieredCache
 from .utils.metrics import MetricsTracker
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,31 @@ class SearchServer:
         )
 
         self.merger = ResultMerger()
-        self.cache = QueryCache(ttl=self.settings.cache_ttl)
+        
+        # Initialize cache (either legacy or tiered)
+        if self.settings.cache.redis_enabled:
+            # Use tiered cache with Redis
+            self.cache = TieredCache(
+                redis_url=self.settings.cache.redis_url,
+                redis_enabled=True,
+                memory_ttl=self.settings.cache.memory_ttl,
+                redis_ttl=self.settings.cache.redis_ttl,
+                prefix=self.settings.cache.prefix,
+                fingerprint_enabled=self.settings.cache.fingerprint_enabled,
+            )
+            
+            if self.cache.redis_enabled:
+                logger.info(f"Initialized tiered cache with Redis at {self.settings.cache.redis_url}")
+            else:
+                logger.warning(
+                    f"Redis not available, falling back to memory-only cache. "
+                    f"Install the 'redis' package to enable Redis caching."
+                )
+        else:
+            # Use legacy memory-only cache
+            self.cache = QueryCache(ttl=self.settings.cache_ttl)
+            logger.info("Initialized memory-only cache")
+            
         self.metrics = MetricsTracker()
 
         # Register tools and custom routes
@@ -495,9 +519,18 @@ class SearchServer:
         self, search_query: SearchQuery, request_id: str, ctx: Context
     ) -> CombinedSearchResponse:
         """Execute a search using the unified router."""
-        # Check cache first
+        # Generate cache key
         cache_key = self.cache.generate_key(search_query)
-        cached_result = self.cache.get(cache_key)
+        
+        # Check cache based on the cache implementation type
+        cached_result = None
+        if isinstance(self.cache, TieredCache):
+            # TieredCache has async methods
+            cached_result = await self.cache.get_async(cache_key)
+        else:
+            # Legacy QueryCache is synchronous
+            cached_result = self.cache.get(cache_key)
+            
         if cached_result:
             ctx.info(f"Cache hit for request {request_id}")
             # Track cache hit metric
@@ -539,11 +572,17 @@ class SearchServer:
                 "providers_used": list(results.keys()),
                 "result_count": len(merged_results),
                 "response_time": response_time,
+                "cache_key": cache_key,  # Include cache key for debugging
             },
         )
 
-        # Cache the result
-        self.cache.set(cache_key, response)
+        # Cache the result based on the cache implementation type
+        if isinstance(self.cache, TieredCache):
+            # TieredCache has async methods
+            await self.cache.set_async(cache_key, response)
+        else:
+            # Legacy QueryCache is synchronous
+            self.cache.set(cache_key, response)
 
         # Track metrics for actual providers used
         for provider_name in results:
@@ -619,4 +658,12 @@ class SearchServer:
                 if isinstance(result, Exception):
                     logger.error(f"Failed to close {provider_name}: {result}")
 
-        logger.info("All providers closed")
+        # Close tiered cache if it's used
+        if isinstance(self.cache, TieredCache):
+            try:
+                await self.cache.close()
+                logger.info("Closed Redis connection in cache")
+            except Exception as e:
+                logger.error(f"Failed to close Redis connection in cache: {e}")
+
+        logger.info("All resources closed")

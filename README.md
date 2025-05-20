@@ -37,13 +37,15 @@ MCP Search Hub uses a modular architecture with the following core components:
 2. **Provider Layer**: Standardized interface with implementations for each service
 3. **Query Routing**: Extracts features from queries to determine content type, complexity, and selects appropriate providers
 4. **Result Processing**: Combines, ranks, and deduplicates results from multiple providers
-5. **Middleware**: Centralized handling of cross-cutting concerns like authentication, rate limiting, and logging
-6. **Utilities**: Caching, error handling, and configuration management
+5. **Tiered Caching**: Multi-level caching system with memory and Redis backends, semantic fingerprinting for similar queries
+6. **Middleware**: Centralized handling of cross-cutting concerns like authentication, rate limiting, and logging
+7. **Utilities**: Error handling, metrics tracking, and configuration management
 
 For detailed information on key components:
 - [Middleware Architecture](docs/middleware.md)
 - [Exponential Backoff Retry Logic](docs/retry.md)
 - [OpenAPI Documentation](docs/openapi-documentation.md)
+- [Tiered Caching System](docs/tiered-caching.md)
 
 ### Embedded MCP Server Architecture
 

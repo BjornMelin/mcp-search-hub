@@ -302,7 +302,16 @@ Create a `.env` file in the project root with your API keys:
 HOST=0.0.0.0
 PORT=8000
 LOG_LEVEL=INFO
-CACHE_TTL=300
+# Caching configuration
+CACHE_TTL=300                    # Legacy memory cache TTL in seconds
+CACHE_MEMORY_TTL=300             # Memory cache TTL for tiered cache (5 minutes)
+CACHE_REDIS_TTL=3600             # Redis cache TTL for tiered cache (1 hour)
+REDIS_URL=redis://localhost:6379  # Redis connection URL
+REDIS_CACHE_ENABLED=false         # Set to 'true' to enable Redis caching
+CACHE_PREFIX=search:              # Prefix for Redis cache keys
+CACHE_FINGERPRINT_ENABLED=true    # Enable semantic fingerprinting for queries
+CACHE_CLEAN_INTERVAL=600          # Cache cleanup interval (10 minutes)
+# Budget
 DEFAULT_BUDGET=0.1
 
 # Firecrawl
