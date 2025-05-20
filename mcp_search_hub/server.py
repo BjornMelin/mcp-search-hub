@@ -1,7 +1,7 @@
 """FastMCP search server implementation using unified router."""
 
 import asyncio
-import json
+import logging
 import time
 import uuid
 from typing import Any
@@ -12,33 +12,37 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .config import get_settings
-from .middleware import (
-    AuthMiddleware,
-    LoggingMiddleware,
-    MiddlewareManager,
-    RateLimitMiddleware,
-)
-from .models.base import (
-    ErrorResponse,
-    HealthResponse,
-    HealthStatus,
-    MetricsResponse,
-    ProviderStatus,
-)
+from .middleware.auth import AuthMiddleware
+from .middleware.base import MiddlewareManager
+from .middleware.logging import LoggingMiddleware
+from .middleware.rate_limit import RateLimitMiddleware
+from .middleware.retry import RetryMiddleware
+from .models.base import HealthResponse, HealthStatus, MetricsResponse, ProviderStatus
 from .models.query import SearchQuery
 from .models.results import CombinedSearchResponse, SearchResponse
 from .models.router import TimeoutConfig
-from .openapi import custom_openapi
 from .providers.base import SearchProvider
 from .providers.provider_config import PROVIDER_CONFIGS
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.unified_router import UnifiedRouter
 from .result_processing.merger import ResultMerger
 from .utils.cache import QueryCache
-from .utils.logging import get_logger
 from .utils.metrics import MetricsTracker
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+
+
+class MiddlewareHTTPWrapper(BaseHTTPMiddleware):
+    """HTTP middleware wrapper for the middleware manager."""
+    
+    def __init__(self, app, middleware_manager):
+        """Initialize with app and middleware manager."""
+        super().__init__(app)
+        self.middleware_manager = middleware_manager
+        
+    async def dispatch(self, request, call_next):
+        """Process HTTP request through middleware manager."""
+        return await self.middleware_manager.process_http_request(request, call_next)
 
 
 class SearchServer:
@@ -47,12 +51,11 @@ class SearchServer:
     def __init__(self):
         # Initialize settings
         self.settings = get_settings()
-
+        
         # Initialize middleware manager
         self.middleware_manager = MiddlewareManager()
-        self._setup_middleware()
-
-        # Initialize FastMCP server with OpenAPI documentation
+        
+        # Initialize FastMCP server
         self.mcp = FastMCP(
             name="MCP Search Hub",
             instructions="""
@@ -60,13 +63,10 @@ class SearchServer:
             Use the search tool to find information with automatic provider selection.
             """,
             log_level=self.settings.log_level,
-            title="MCP Search Hub API",
-            description="Intelligent multi-provider search aggregation server built on FastMCP 2.0",
-            version="1.0.0",
-            docs_url="/docs",  # URL for Swagger UI
-            redoc_url="/redoc",  # URL for ReDoc UI
-            openapi_url="/openapi.json",  # URL for OpenAPI JSON schema
         )
+
+        # Setup middleware
+        self._setup_middleware()
 
         # Initialize providers dynamically from configuration
         self.providers = self._initialize_providers()
@@ -89,60 +89,70 @@ class SearchServer:
         # Register tools and custom routes
         self._register_tools()
         self._register_custom_routes()
-        
-        # Set custom OpenAPI schema generator
-        self.mcp.http_app.openapi = lambda: custom_openapi(self.mcp.http_app)
 
         # Provider tools will be registered when the server starts
         self._provider_tools_registered = False
-
+        
     def _setup_middleware(self):
         """Set up and configure middleware components."""
         middleware_config = self.settings.middleware
-
-        # Add logging middleware
+        
+        # Add logging middleware (runs first)
         if middleware_config.logging.enabled:
-            logging_config = middleware_config.logging
             self.middleware_manager.add_middleware(
                 LoggingMiddleware,
-                order=logging_config.order,
-                log_level=logging_config.log_level,
-                include_headers=logging_config.include_headers,
-                include_body=logging_config.include_body,
-                sensitive_headers=logging_config.sensitive_headers,
-                max_body_size=logging_config.max_body_size,
+                enabled=middleware_config.logging.enabled,
+                order=middleware_config.logging.order,
+                log_level=middleware_config.logging.log_level,
+                include_headers=middleware_config.logging.include_headers,
+                include_body=middleware_config.logging.include_body,
+                sensitive_headers=middleware_config.logging.sensitive_headers,
+                max_body_size=middleware_config.logging.max_body_size,
             )
-            logger.info("Logging middleware enabled")
-
+            logger.info("Logging middleware initialized")
+        
         # Add authentication middleware
         if middleware_config.auth.enabled:
-            auth_config = middleware_config.auth
             self.middleware_manager.add_middleware(
                 AuthMiddleware,
-                order=auth_config.order,
-                api_keys=auth_config.api_keys,
-                skip_auth_paths=auth_config.skip_auth_paths,
+                enabled=middleware_config.auth.enabled,
+                order=middleware_config.auth.order,
+                api_keys=middleware_config.auth.api_keys,
+                skip_auth_paths=middleware_config.auth.skip_auth_paths,
             )
-            logger.info(
-                f"Authentication middleware enabled with {len(auth_config.api_keys)} API keys"
-            )
-
+            logger.info("Authentication middleware initialized")
+        
         # Add rate limiting middleware
         if middleware_config.rate_limit.enabled:
-            rate_limit_config = middleware_config.rate_limit
             self.middleware_manager.add_middleware(
                 RateLimitMiddleware,
-                order=rate_limit_config.order,
-                limit=rate_limit_config.limit,
-                window=rate_limit_config.window,
-                global_limit=rate_limit_config.global_limit,
-                global_window=rate_limit_config.global_window,
-                skip_paths=rate_limit_config.skip_paths,
+                enabled=middleware_config.rate_limit.enabled,
+                order=middleware_config.rate_limit.order,
+                limit=middleware_config.rate_limit.limit,
+                window=middleware_config.rate_limit.window,
+                global_limit=middleware_config.rate_limit.global_limit,
+                global_window=middleware_config.rate_limit.global_window,
+                skip_paths=middleware_config.rate_limit.skip_paths,
             )
-            logger.info(
-                f"Rate limiting middleware enabled: {rate_limit_config.limit} "
-                f"requests per {rate_limit_config.window}s"
+            logger.info("Rate limit middleware initialized")
+            
+        # Add retry middleware
+        if middleware_config.retry.enabled:
+            self.middleware_manager.add_middleware(
+                RetryMiddleware,
+                enabled=middleware_config.retry.enabled,
+                order=middleware_config.retry.order,
+                max_retries=middleware_config.retry.max_retries,
+                base_delay=middleware_config.retry.base_delay,
+                max_delay=middleware_config.retry.max_delay,
+                exponential_base=middleware_config.retry.exponential_base,
+                jitter=middleware_config.retry.jitter,
+                skip_paths=middleware_config.retry.skip_paths,
             )
+            logger.info("Retry middleware initialized")
+            
+        # Apply HTTP middleware to the FastMCP app
+        self.mcp.http_app.add_middleware(MiddlewareHTTPWrapper, middleware_manager=self.middleware_manager)
 
     def _initialize_providers(self) -> dict[str, SearchProvider]:
         """Initialize providers from configuration."""
@@ -195,39 +205,18 @@ class SearchServer:
     def _register_tools(self):
         """Register search tools with FastMCP server."""
 
-        # Define the original search function
-        async def _search_implementation(
+        @self.mcp.tool(
+            name="search",
+            description="Search across multiple providers with intelligent routing",
+        )
+        async def search(
             query: str,
             ctx: Context,
             max_results: int = 10,
             raw_content: bool = False,
             advanced: dict[str, Any] | None = None,
         ) -> SearchResponse:
-            """Execute a search query across multiple providers."""
-            request_id = str(uuid.uuid4())
-            ctx.info(f"Processing search request {request_id}: {query}")
-
-            # Build search query object
-            search_query = SearchQuery(
-                query=query,
-                max_results=max_results,
-                raw_content=raw_content,
-                advanced=advanced,
-            )
-
-            # Use search_with_routing which handles caching internally
-            response = await self.search_with_routing(search_query, request_id, ctx)
-            return SearchResponse(results=response.results, metadata=response.metadata)
-
-        # Create a middleware-wrapped search function
-        async def search_with_middleware(
-            query: str,
-            ctx: Context,
-            max_results: int = 10,
-            raw_content: bool = False,
-            advanced: dict[str, Any] | None = None,
-        ) -> SearchResponse:
-            """Execute a search query with middleware processing."""
+            """Execute a search query across multiple providers with middleware processing."""
             # Prepare parameters for middleware
             params = {
                 "query": query,
@@ -236,82 +225,27 @@ class SearchServer:
                 "advanced": advanced,
                 "tool_name": "search",  # Include tool name for middleware
             }
+            
+            # Create handler function
+            async def handler(p):
+                # Extract params after middleware processing
+                request_id = str(uuid.uuid4())
+                ctx.info(f"Processing search request {request_id}: {p['query']}")
 
-            # Create a handler that will call the implementation with unpacked params
-            async def handler(**p):
-                # Remove tool_name from params before passing to implementation
-                if "tool_name" in p:
-                    p = {k: v for k, v in p.items() if k != "tool_name"}
-                return await _search_implementation(**p)
+                # Build search query object
+                search_query = SearchQuery(
+                    query=p["query"],
+                    max_results=p["max_results"],
+                    raw_content=p["raw_content"],
+                    advanced=p["advanced"],
+                )
 
+                # Use search_with_routing which handles caching internally
+                response = await self.search_with_routing(search_query, request_id, ctx)
+                return SearchResponse(results=response.results, metadata=response.metadata)
+            
             # Process through middleware
-            return await self.middleware_manager.process_tool_request(
-                params, ctx, handler
-            )
-
-        # Register the middleware-wrapped function with enhanced documentation
-        self.mcp.tool(
-            name="search",
-            description="Search across multiple providers with intelligent routing",
-            parameters={
-                "query": {
-                    "type": "string",
-                    "description": "The search query text"
-                },
-                "max_results": {
-                    "type": "integer",
-                    "description": "Maximum number of results to return",
-                    "default": 10
-                },
-                "raw_content": {
-                    "type": "boolean",
-                    "description": "Whether to include raw content in results",
-                    "default": False
-                },
-                "advanced": {
-                    "type": "object",
-                    "description": "Advanced search parameters (optional)",
-                    "default": None
-                }
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "results": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "title": {"type": "string"},
-                                "url": {"type": "string"},
-                                "snippet": {"type": "string"},
-                                "source": {"type": "string"},
-                                "score": {"type": "number"}
-                            }
-                        }
-                    },
-                    "query": {"type": "string"},
-                    "providers_used": {"type": "array", "items": {"type": "string"}},
-                    "total_results": {"type": "integer"},
-                    "total_cost": {"type": "number"},
-                    "timing_ms": {"type": "number"}
-                }
-            },
-            examples=[
-                {
-                    "query": "latest advancements in artificial intelligence",
-                    "max_results": 5,
-                    "raw_content": False,
-                    "advanced": None
-                },
-                {
-                    "query": "climate change studies 2025",
-                    "max_results": 10,
-                    "raw_content": True,
-                    "advanced": {"content_type": "SCIENTIFIC"}
-                }
-            ]
-        )(search_with_middleware)
+            return await self.middleware_manager.process_tool_request(params, ctx, handler)
 
         # Dynamically register provider-specific tools (deferred to server start)
 
@@ -382,123 +316,50 @@ class SearchServer:
     ):
         """Register a single provider tool with FastMCP."""
 
-        # Define the original implementation
-        async def _provider_implementation(ctx: Context, **kwargs):
-            """Original provider tool implementation."""
-            request_id = str(uuid.uuid4())
-            ctx.info(
-                f"Invoking {provider_name} tool {original_tool_name} with request {request_id}"
-            )
-
-            try:
-                # Use the provider's invoke_tool method
-                return await provider.invoke_tool(original_tool_name, kwargs)
-            except Exception as e:
-                ctx.error(
-                    f"Error invoking {provider_name} tool {original_tool_name}: {e}"
-                )
-                raise
-
-        # Create a middleware-wrapped function
-        async def provider_tool_with_middleware(ctx: Context, **kwargs):
-            """Middleware-processed provider tool wrapper."""
-            # Add tool info to parameters
+        @self.mcp.tool(
+            name=tool_name,
+            description=description,
+        )
+        async def provider_tool_wrapper(ctx: Context, **kwargs):
+            """Wrapper function for provider-specific tools with middleware processing."""
+            # Add tool metadata to parameters for middleware
             params = {
                 **kwargs,
                 "tool_name": tool_name,
-                "provider": provider_name,
+                "provider_name": provider_name,
                 "original_tool_name": original_tool_name,
             }
-
-            # Create handler that will invoke the implementation
-            async def handler(**p):
-                # Clean tool-specific keys before passing to implementation
-                clean_params = {
-                    k: v
-                    for k, v in p.items()
-                    if k not in ["tool_name", "provider", "original_tool_name"]
-                }
-                return await _provider_implementation(ctx, **clean_params)
-
-            # Process through middleware
-            return await self.middleware_manager.process_tool_request(
-                params, ctx, handler
-            )
-
-        # Add provider-specific examples
-        examples = []
-        if provider_name == "firecrawl" and original_tool_name in ["firecrawl_search", "firecrawl_scrape"]:
-            examples.append({
-                "summary": "Basic search example",
-                "value": {"query": "latest AI research papers"}
-            })
-        elif provider_name == "tavily":
-            examples.append({
-                "summary": "Search with advanced options",
-                "value": {"query": "climate change", "search_depth": "advanced"}
-            })
-        elif provider_name == "perplexity":
-            examples.append({
-                "summary": "Ask a research question",
-                "value": {"messages": [{"role": "user", "content": "What are the latest developments in quantum computing?"}]}
-            })
-        elif provider_name == "exa":
-            examples.append({
-                "summary": "Academic search example",
-                "value": {"query": "machine learning in healthcare"}
-            })
-        elif provider_name == "linkup":
-            examples.append({
-                "summary": "Deep web search",
-                "value": {"query": "emerging technologies 2025", "depth": "deep"}
-            })
             
-        # Register the middleware-wrapped function with provider-specific documentation
-        self.mcp.tool(
-            name=tool_name,
-            description=description,
-            parameters=parameters,
-            examples=examples if examples else None,
-        )(provider_tool_with_middleware)
+            # Create handler function
+            async def handler(p):
+                request_id = str(uuid.uuid4())
+                ctx.info(
+                    f"Invoking {provider_name} tool {original_tool_name} with request {request_id}"
+                )
+
+                try:
+                    # Remove middleware metadata before invoking the tool
+                    tool_params = {k: v for k, v in p.items() 
+                                 if k not in ["tool_name", "provider_name", "original_tool_name", 
+                                              "_retry_attempt", "_retryable_request"]}
+                    
+                    # Use the provider's invoke_tool method
+                    return await provider.invoke_tool(original_tool_name, tool_params)
+                except Exception as e:
+                    ctx.error(
+                        f"Error invoking {provider_name} tool {original_tool_name}: {e}"
+                    )
+                    raise
+            
+            # Process through middleware
+            return await self.middleware_manager.process_tool_request(params, ctx, handler)
 
     def _register_custom_routes(self):
         """Register custom FastMCP HTTP routes."""
         # Use http_app for custom routes
         app = self.mcp.http_app
 
-        @app.post(
-            "/search/combined",
-            summary="Execute a combined search across multiple providers",
-            description="Performs a unified search across all enabled providers, with intelligent routing and result merging.",
-            tags=["Search"],
-            response_model=CombinedSearchResponse,
-            responses={
-                200: {
-                    "description": "Successful search with combined results",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/CombinedSearchResponse"}
-                        }
-                    },
-                },
-                400: {
-                    "description": "Bad request - invalid query parameters",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
-                        }
-                    },
-                },
-                500: {
-                    "description": "Server error during search",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
-                        }
-                    },
-                },
-            },
-        )
+        @app.post("/search/combined")
         async def search_combined(request: Request) -> JSONResponse:
             """Execute a combined search across multiple providers."""
             try:
@@ -537,31 +398,7 @@ class SearchServer:
                     status_code=500,
                 )
 
-        @app.get(
-            "/health",
-            summary="Check server health status",
-            description="Returns the health status of the server and all enabled providers.",
-            tags=["Health"],
-            response_model=HealthResponse,
-            responses={
-                200: {
-                    "description": "Server is healthy",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/HealthResponse"}
-                        }
-                    }
-                },
-                503: {
-                    "description": "Server is unhealthy or degraded",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/HealthResponse"}
-                        }
-                    }
-                }
-            }
-        )
+        @app.get("/health")
         async def health_check(request: Request) -> JSONResponse:
             """Health check endpoint."""
             # Build provider health status
@@ -613,23 +450,7 @@ class SearchServer:
                 content=response.model_dump(mode="json"), status_code=status_code
             )
 
-        @app.get(
-            "/metrics",
-            summary="Get server performance metrics",
-            description="Returns detailed performance metrics for the server and all providers.",
-            tags=["Metrics"],
-            response_model=MetricsResponse,
-            responses={
-                200: {
-                    "description": "Metrics retrieved successfully",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/MetricsResponse"}
-                        }
-                    }
-                }
-            }
-        )
+        @app.get("/metrics")
         async def metrics(request: Request) -> JSONResponse:
             """Metrics endpoint."""
             # Get performance metrics
@@ -669,37 +490,6 @@ class SearchServer:
             )
 
             return JSONResponse(content=response.model_dump(mode="json"))
-        
-        @app.get(
-            "/export-openapi",
-            summary="Export OpenAPI schema as a downloadable file",
-            description="Generates the OpenAPI schema for the API and returns it as a downloadable JSON file.",
-            tags=["Documentation"],
-            responses={
-                200: {
-                    "description": "OpenAPI schema JSON file",
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": True
-                            }
-                        }
-                    }
-                }
-            }
-        )
-        async def export_openapi(request: Request) -> JSONResponse:
-            """Export OpenAPI schema as a downloadable file."""
-            schema = app.openapi()
-            
-            # Return schema as a downloadable file
-            from starlette.responses import Response
-            return Response(
-                content=json.dumps(schema, indent=2),
-                media_type="application/json",
-                headers={"Content-Disposition": "attachment; filename=mcp-search-hub-openapi.json"}
-            )
 
     async def search_with_routing(
         self, search_query: SearchQuery, request_id: str, ctx: Context
@@ -780,50 +570,6 @@ class SearchServer:
             logger.info("Initializing providers and registering tools...")
             await self._register_provider_tools()
             self._provider_tools_registered = True
-
-        # Apply HTTP middlewares to app
-        # Note: They are applied in reverse order (last added = outermost middleware)
-        app = self.mcp.http_app
-
-        # Create custom HTTP middleware using our middleware manager
-        class MiddlewareHTTPWrapper(BaseHTTPMiddleware):
-            """HTTP middleware wrapper for the middleware manager."""
-
-            def __init__(self, app, middleware_manager):
-                super().__init__(app)
-                self.middleware_manager = middleware_manager
-
-            async def dispatch(self, request, call_next):
-                """Process HTTP request through middleware manager."""
-                try:
-                    return await self.middleware_manager.process_http_request(
-                        request, call_next
-                    )
-                except Exception as e:
-                    # If middleware raised an exception with a JSONResponse, return it
-                    if (
-                        isinstance(e.__cause__, JSONResponse)
-                        or hasattr(e, "args")
-                        and len(e.args) > 0
-                        and isinstance(e.args[0], JSONResponse)
-                    ):
-                        if isinstance(e.__cause__, JSONResponse):
-                            return e.__cause__
-                        return e.args[0]
-
-                    # Otherwise create a generic error response
-                    logger.error(f"Error in middleware: {str(e)}")
-                    error_response = ErrorResponse(
-                        error="ServerError",
-                        message="An error occurred processing the request",
-                        status_code=500,
-                    )
-                    return JSONResponse(
-                        status_code=500, content=error_response.model_dump()
-                    )
-
-        # Apply our middleware wrapper
-        self.mcp.http_app = MiddlewareHTTPWrapper(app, self.middleware_manager)
 
         # Run the server based on transport
         logger.info(

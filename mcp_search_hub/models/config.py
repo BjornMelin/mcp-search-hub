@@ -1,5 +1,6 @@
 """Configuration models."""
 
+
 from pydantic import BaseModel, SecretStr
 
 
@@ -31,6 +32,72 @@ class RetryConfig(BaseModel):
     jitter: bool = True  # Whether to add randomization to retry delays
 
 
+class LoggingMiddlewareConfig(BaseModel):
+    """Configuration for logging middleware."""
+
+    enabled: bool = True
+    order: int = 5
+    log_level: str = "INFO"
+    include_headers: bool = True
+    include_body: bool = False
+    sensitive_headers: list[str] = [
+        "authorization",
+        "x-api-key",
+        "cookie",
+        "set-cookie",
+    ]
+    max_body_size: int = 1024
+
+
+class AuthMiddlewareConfig(BaseModel):
+    """Configuration for authentication middleware."""
+
+    enabled: bool = True
+    order: int = 10
+    api_keys: list[str] = []
+    skip_auth_paths: list[str] = [
+        "/health",
+        "/metrics",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    ]
+
+
+class RateLimitMiddlewareConfig(BaseModel):
+    """Configuration for rate limiting middleware."""
+
+    enabled: bool = True
+    order: int = 20
+    limit: int = 100  # Requests per window
+    window: int = 60  # Time window in seconds
+    global_limit: int = 1000  # Global requests per window
+    global_window: int = 60  # Global time window
+    skip_paths: list[str] = ["/health", "/metrics"]
+
+
+class RetryMiddlewareConfig(BaseModel):
+    """Configuration for retry middleware."""
+
+    enabled: bool = True
+    order: int = 30
+    max_retries: int = 3
+    base_delay: float = 1.0  # Initial delay between retries in seconds
+    max_delay: float = 60.0  # Maximum delay between retries in seconds
+    exponential_base: float = 2.0  # Base for exponential backoff calculation
+    jitter: bool = True  # Whether to add randomization to retry delays
+    skip_paths: list[str] = ["/health", "/metrics"]
+
+
+class MiddlewareConfig(BaseModel):
+    """Configuration for middleware components."""
+
+    logging: LoggingMiddlewareConfig = LoggingMiddlewareConfig()
+    auth: AuthMiddlewareConfig = AuthMiddlewareConfig()
+    rate_limit: RateLimitMiddlewareConfig = RateLimitMiddlewareConfig()
+    retry: RetryMiddlewareConfig = RetryMiddlewareConfig()
+
+
 class Settings(BaseModel):
     """Application settings."""
 
@@ -44,3 +111,4 @@ class Settings(BaseModel):
         "streamable-http"  # Default to HTTP, can be "stdio" for command-line use
     )
     retry: RetryConfig = RetryConfig()  # Retry configuration with defaults
+    middleware: MiddlewareConfig = MiddlewareConfig()  # Middleware configuration

@@ -1,0 +1,125 @@
+"""Authentication middleware for MCP Search Hub."""
+
+import os
+from typing import Any
+
+from fastmcp import Context
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+from ..models.base import ErrorResponse
+from ..utils.logging import get_logger
+from .base import BaseMiddleware
+
+logger = get_logger(__name__)
+
+
+class AuthMiddleware(BaseMiddleware):
+    """Middleware to handle API key authentication for HTTP and tool requests."""
+
+    def _initialize(self, **options):
+        """Initialize authentication middleware.
+
+        Args:
+            **options: Configuration options including:
+                - api_keys: Optional list of valid API keys
+                - skip_auth_paths: List of paths that don't require authentication
+        """
+        self.order = options.get("order", 10)  # Auth should run early
+
+        # Get API keys from options or environment
+        self.api_keys = options.get("api_keys", [])
+        if not self.api_keys:
+            api_key = os.getenv("MCP_SEARCH_HUB_API_KEY")
+            if api_key:
+                self.api_keys = [api_key]
+
+        # Paths that don't require authentication
+        self.skip_auth_paths = options.get(
+            "skip_auth_paths",
+            ["/health", "/metrics", "/docs", "/redoc", "/openapi.json"],
+        )
+
+        logger.info(
+            f"Authentication middleware initialized with "
+            f"{len(self.api_keys)} API keys and {len(self.skip_auth_paths)} skipped paths"
+        )
+
+    async def process_request(
+        self, request: Any, context: Context | None = None
+    ) -> Any:
+        """Process the incoming request for authentication.
+
+        Args:
+            request: The incoming request (HTTP or tool params)
+            context: Optional Context object for tool requests
+
+        Returns:
+            The request if authentication succeeds
+
+        Raises:
+            Exception: If authentication fails
+        """
+        # Skip authentication if no API keys are configured
+        if not self.api_keys:
+            return request
+
+        # Handle HTTP requests
+        if isinstance(request, Request):
+            return await self._authenticate_http_request(request)
+
+        # Tool requests don't need auth - they've already been authenticated
+        # at the HTTP layer or via MCP client authentication
+        return request
+
+    async def _authenticate_http_request(self, request: Request) -> Request:
+        """Authenticate an HTTP request.
+
+        Args:
+            request: The HTTP request
+
+        Returns:
+            The request if authentication succeeds
+
+        Raises:
+            Exception: With JSONResponse if authentication fails
+        """
+        # Skip authentication for allowed paths
+        if any(request.url.path.startswith(path) for path in self.skip_auth_paths):
+            return request
+
+        # Get API key from header
+        api_key = request.headers.get("X-API-Key") or request.headers.get(
+            "Authorization"
+        )
+        if api_key and api_key.startswith("Bearer "):
+            api_key = api_key.replace("Bearer ", "")
+
+        # Validate API key
+        if not api_key or api_key not in self.api_keys:
+            logger.warning(f"Authentication failed for request to {request.url.path}")
+            error_response = ErrorResponse(
+                error="Unauthorized",
+                message="Invalid or missing API key",
+                status_code=401,
+            )
+            raise Exception(
+                JSONResponse(status_code=401, content=error_response.model_dump())
+            )
+
+        return request
+
+    async def process_response(
+        self, response: Any, request: Any, context: Context | None = None
+    ) -> Any:
+        """Process the outgoing response (not used for authentication).
+
+        Args:
+            response: The response
+            request: The original request
+            context: Optional Context object
+
+        Returns:
+            The unmodified response
+        """
+        return response
