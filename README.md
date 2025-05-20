@@ -37,7 +37,13 @@ MCP Search Hub uses a modular architecture with the following core components:
 2. **Provider Layer**: Standardized interface with implementations for each service
 3. **Query Routing**: Extracts features from queries to determine content type, complexity, and selects appropriate providers
 4. **Result Processing**: Combines, ranks, and deduplicates results from multiple providers
-5. **Utilities**: Caching, error handling, and configuration management
+5. **Middleware**: Centralized handling of cross-cutting concerns like authentication, rate limiting, and logging
+6. **Utilities**: Caching, error handling, and configuration management
+
+For detailed information on key components:
+- [Middleware Architecture](docs/middleware.md)
+- [Exponential Backoff Retry Logic](docs/retry.md)
+- [OpenAPI Documentation](docs/openapi-documentation.md)
 
 ### Embedded MCP Server Architecture
 
@@ -220,6 +226,26 @@ RETRY_BASE_DELAY=1.0        # Initial delay between retries in seconds
 RETRY_MAX_DELAY=60.0        # Maximum delay between retries in seconds
 RETRY_EXPONENTIAL_BASE=2.0  # Base for exponential backoff calculation
 RETRY_JITTER=true           # Whether to add randomization to retry delays
+
+# Middleware configuration
+# Logging middleware
+MIDDLEWARE_LOGGING_ENABLED=true         # Enable logging middleware
+MIDDLEWARE_LOGGING_ORDER=5              # Order of execution (lower runs first)
+MIDDLEWARE_LOGGING_LOG_LEVEL=INFO       # Log level for middleware
+MIDDLEWARE_LOGGING_INCLUDE_HEADERS=true # Include headers in logs
+MIDDLEWARE_LOGGING_INCLUDE_BODY=false   # Include request/response bodies
+
+# Authentication middleware
+MIDDLEWARE_AUTH_ENABLED=true            # Enable authentication middleware
+MIDDLEWARE_AUTH_ORDER=10                # Order of execution
+MIDDLEWARE_AUTH_API_KEY=your_api_key    # API key for authentication
+
+# Rate limiting middleware
+MIDDLEWARE_RATE_LIMIT_ENABLED=true      # Enable rate limiting middleware
+MIDDLEWARE_RATE_LIMIT_ORDER=20          # Order of execution
+MIDDLEWARE_RATE_LIMIT_LIMIT=100         # Requests per window per client
+MIDDLEWARE_RATE_LIMIT_WINDOW=60         # Window in seconds
+MIDDLEWARE_RATE_LIMIT_GLOBAL_LIMIT=1000 # Global requests per window
 ```
 
 ## Usage
