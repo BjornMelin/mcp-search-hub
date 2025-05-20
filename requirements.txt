@@ -8,6 +8,7 @@ w3lib>=2.2.1
 rapidfuzz>=3.6.1
 scikit-learn>=1.2.0
 dateparser>=1.2.0
+redis>=5.0.0
 
 # Test dependencies
 pytest>=8.0.0

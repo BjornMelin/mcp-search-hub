@@ -7,12 +7,14 @@ from pydantic import SecretStr
 
 from .models.config import (
     AuthMiddlewareConfig,
+    CacheConfig,
     LoggingMiddlewareConfig,
     MiddlewareConfig,
     ProviderConfig,
     ProvidersConfig,
     RateLimitMiddlewareConfig,
     RetryConfig,
+    RetryMiddlewareConfig,
     Settings,
 )
 
@@ -92,7 +94,16 @@ def get_settings() -> Settings:
             ),
         ),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        cache_ttl=int(os.getenv("CACHE_TTL", "3600")),
+        cache_ttl=int(os.getenv("CACHE_TTL", "3600")),  # Legacy setting
+        cache=CacheConfig(
+            memory_ttl=int(os.getenv("CACHE_MEMORY_TTL", "300")),
+            redis_ttl=int(os.getenv("CACHE_REDIS_TTL", "3600")),
+            redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
+            redis_enabled=os.getenv("REDIS_CACHE_ENABLED", "false").lower() == "true",
+            prefix=os.getenv("CACHE_PREFIX", "search:"),
+            fingerprint_enabled=os.getenv("CACHE_FINGERPRINT_ENABLED", "true").lower() == "true",
+            clean_interval=int(os.getenv("CACHE_CLEAN_INTERVAL", "600")),
+        ),
         default_budget=(
             float(os.getenv("DEFAULT_BUDGET")) if os.getenv("DEFAULT_BUDGET") else None
         ),

@@ -32,6 +32,18 @@ class RetryConfig(BaseModel):
     jitter: bool = True  # Whether to add randomization to retry delays
 
 
+class CacheConfig(BaseModel):
+    """Configuration for caching system."""
+
+    memory_ttl: int = 300  # 5 minutes for memory cache
+    redis_ttl: int = 3600  # 1 hour for Redis cache
+    redis_url: str = "redis://localhost:6379"
+    redis_enabled: bool = False  # Default to disabled until explicitly enabled
+    prefix: str = "search:"
+    fingerprint_enabled: bool = True  # Enable semantic query fingerprinting
+    clean_interval: int = 600  # Cleanup interval in seconds
+
+
 class LoggingMiddlewareConfig(BaseModel):
     """Configuration for logging middleware."""
 
@@ -103,7 +115,8 @@ class Settings(BaseModel):
 
     providers: ProvidersConfig
     log_level: str = "INFO"
-    cache_ttl: int = 3600  # Cache TTL in seconds
+    cache_ttl: int = 3600  # Legacy cache TTL in seconds (deprecated)
+    cache: CacheConfig = CacheConfig()  # New tiered cache configuration
     default_budget: float | None = None
     port: int = 8000
     host: str = "0.0.0.0"
