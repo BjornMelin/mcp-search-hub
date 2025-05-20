@@ -43,6 +43,7 @@ MCP Search Hub uses a modular architecture with the following core components:
 For detailed information on key components:
 - [Middleware Architecture](docs/middleware.md)
 - [Exponential Backoff Retry Logic](docs/retry.md)
+- [OpenAPI Documentation](docs/openapi-documentation.md)
 
 ### Embedded MCP Server Architecture
 
