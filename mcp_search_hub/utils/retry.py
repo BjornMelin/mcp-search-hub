@@ -2,6 +2,8 @@
 
 import asyncio
 import random
+import time
+import traceback
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar, cast
@@ -58,7 +60,7 @@ class RetryConfig:
             exponential_base: Base for exponential backoff calculation
             jitter: Whether to add randomization to delays
         """
-        self.max_retries = max_retries
+        self.max_retries = max(0, max_retries)  # Ensure non-negative
         self.base_delay = base_delay
         self.max_delay = max_delay
         self.exponential_base = exponential_base
@@ -109,6 +111,83 @@ def is_retryable_exception(exc: Exception) -> bool:
     return False
 
 
+def format_exception_for_log(exc: Exception) -> str:
+    """Format exception details for logging.
+
+    Args:
+        exc: Exception to format
+
+    Returns:
+        Formatted exception string with type and details
+    """
+    exception_type = type(exc).__name__
+    exception_details = str(exc)
+
+    # Add HTTP status code if available
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        reason = exc.response.reason_phrase
+        exception_details = f"HTTP {status_code} {reason}: {exception_details}"
+
+        # Add useful headers if they exist
+        headers = exc.response.headers
+        if "retry-after" in headers:
+            exception_details += f" (Retry-After: {headers['retry-after']})"
+
+    # Add timeout information if it's a timeout exception
+    elif isinstance(exc, httpx.TimeoutException):
+        # Just include the exception string, don't try to access request
+        # (it might not be set in test mocks)
+        pass
+
+    return f"{exception_type}: {exception_details}"
+
+
+def log_retry_attempt(
+    func_name: str,
+    exc: Exception,
+    attempt: int,
+    max_retries: int,
+    delay: float,
+    request_info: dict | None = None,
+) -> None:
+    """Log information about a retry attempt.
+
+    Args:
+        func_name: Name of the function being retried
+        exc: Exception that triggered the retry
+        attempt: Current attempt number (0-indexed)
+        max_retries: Maximum number of retry attempts
+        delay: Delay before next attempt in seconds
+        request_info: Optional dictionary with request information
+    """
+    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    exception_details = format_exception_for_log(exc)
+
+    # Build log message
+    log_message = [
+        f"Retryable error in {func_name} (attempt {attempt + 1}/{max_retries + 1})",
+        f"Time: {current_time}",
+        f"Error: {exception_details}",
+        f"Retrying after {delay:.2f}s...",
+    ]
+
+    # Add request info if available
+    if request_info:
+        if "url" in request_info:
+            log_message.append(f"URL: {request_info['url']}")
+        if "method" in request_info:
+            log_message.append(f"Method: {request_info['method']}")
+
+    # Join all parts with newlines for structured logging
+    logger.warning("\n".join(log_message))
+
+    # For debugging in development, include stack trace at DEBUG level
+    if logger.isEnabledFor(10):  # DEBUG level
+        stack_trace = "".join(traceback.format_tb(exc.__traceback__))
+        logger.debug(f"Retry stack trace for {func_name}:\n{stack_trace}")
+
+
 def with_exponential_backoff(
     config: RetryConfig | None = None,
     on_retry: Callable[[Exception, int], None] | None = None,
@@ -129,33 +208,70 @@ def with_exponential_backoff(
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             last_exception: Exception | None = None
+            start_time = time.time()
+            request_info = {}
+
+            # Try to extract request info if this is an HTTP request
+            if hasattr(func, "__name__") and "http" in func.__name__.lower():
+                # Check for URL in arguments
+                for arg in args:
+                    if isinstance(arg, str) and (
+                        arg.startswith(("http://", "https://"))
+                    ):
+                        request_info["url"] = arg
+                        break
+
+                # Check for method and URL in kwargs
+                if "method" in kwargs:
+                    request_info["method"] = kwargs["method"]
+                if "url" in kwargs:
+                    request_info["url"] = kwargs["url"]
 
             for attempt in range(config.max_retries + 1):
                 try:
-                    return await func(*args, **kwargs)
+                    result = await func(*args, **kwargs)
+
+                    # Log success after retries if there were previous attempts
+                    if attempt > 0:
+                        total_time = time.time() - start_time
+                        logger.info(
+                            f"Successfully completed {func.__name__} after {attempt} "
+                            f"retries in {total_time:.2f}s"
+                        )
+
+                    return result
+
                 except Exception as exc:
                     last_exception = exc
 
                     # Check if this is the last attempt
                     if attempt >= config.max_retries:
+                        total_time = time.time() - start_time
                         logger.error(
-                            f"All retry attempts exhausted for {func.__name__}: {exc}"
+                            f"All retry attempts exhausted for {func.__name__} after "
+                            f"{total_time:.2f}s: {format_exception_for_log(exc)}"
                         )
                         raise
 
                     # Check if the exception is retryable
                     if not is_retryable_exception(exc):
                         logger.debug(
-                            f"Non-retryable exception in {func.__name__}: {exc}"
+                            f"Non-retryable exception in {func.__name__}: "
+                            f"{format_exception_for_log(exc)}"
                         )
                         raise
 
                     # Calculate delay for next attempt
                     delay = config.calculate_delay(attempt)
 
-                    logger.warning(
-                        f"Retryable error in {func.__name__} (attempt {attempt + 1}/{config.max_retries + 1}): {exc}. "
-                        f"Retrying after {delay:.2f}s..."
+                    # Enhanced logging
+                    log_retry_attempt(
+                        func.__name__,
+                        exc,
+                        attempt,
+                        config.max_retries,
+                        delay,
+                        request_info,
                     )
 
                     # Call retry callback if provided
@@ -201,29 +317,70 @@ async def retry_async(
         config = RetryConfig()
 
     last_exception: Exception | None = None
+    start_time = time.time()
+    request_info = {}
+
+    # Try to extract request info for HTTP requests
+    if hasattr(func, "__name__") and "http" in func.__name__.lower():
+        # Try to find URLs in args or kwargs
+        for arg in args:
+            if isinstance(arg, str) and (
+                arg.startswith(("http://", "https://"))
+            ):
+                request_info["url"] = arg
+                break
+
+        # Check kwargs
+        if "url" in kwargs:
+            request_info["url"] = kwargs["url"]
+        if "method" in kwargs:
+            request_info["method"] = kwargs["method"]
 
     for attempt in range(config.max_retries + 1):
         try:
-            return await func(*args, **kwargs)
+            result = await func(*args, **kwargs)
+
+            # Log success after retries if there were previous attempts
+            if attempt > 0:
+                total_time = time.time() - start_time
+                logger.info(
+                    f"Successfully completed {func.__name__} after {attempt} "
+                    f"retries in {total_time:.2f}s"
+                )
+
+            return result
+
         except Exception as exc:
             last_exception = exc
 
             # Check if this is the last attempt
             if attempt >= config.max_retries:
-                logger.error(f"All retry attempts exhausted for {func.__name__}: {exc}")
+                total_time = time.time() - start_time
+                logger.error(
+                    f"All retry attempts exhausted for {func.__name__} after "
+                    f"{total_time:.2f}s: {format_exception_for_log(exc)}"
+                )
                 raise
 
             # Check if the exception is retryable
             if not is_retryable_exception(exc):
-                logger.debug(f"Non-retryable exception in {func.__name__}: {exc}")
+                logger.debug(
+                    f"Non-retryable exception in {func.__name__}: "
+                    f"{format_exception_for_log(exc)}"
+                )
                 raise
 
             # Calculate delay for next attempt
             delay = config.calculate_delay(attempt)
 
-            logger.warning(
-                f"Retryable error in {func.__name__} (attempt {attempt + 1}/{config.max_retries + 1}): {exc}. "
-                f"Retrying after {delay:.2f}s..."
+            # Enhanced logging
+            log_retry_attempt(
+                func.__name__,
+                exc,
+                attempt,
+                config.max_retries,
+                delay,
+                request_info,
             )
 
             # Call retry callback if provided
