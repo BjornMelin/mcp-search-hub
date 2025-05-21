@@ -224,7 +224,9 @@ class ErrorHandlerMiddlewareConfig(BaseModel):
 class MiddlewareConfig(BaseModel):
     """Configuration for middleware components."""
 
-    error_handler: ErrorHandlerMiddlewareConfig = ErrorHandlerMiddlewareConfig()  # Error handler
+    error_handler: ErrorHandlerMiddlewareConfig = (
+        ErrorHandlerMiddlewareConfig()
+    )  # Error handler
     logging: LoggingMiddlewareConfig = LoggingMiddlewareConfig()  # Logging middleware
     auth: AuthMiddlewareConfig = AuthMiddlewareConfig()  # Auth middleware
     rate_limit: RateLimitMiddlewareConfig = (

@@ -7,9 +7,7 @@ from typing import Any
 
 from fastmcp import Context
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
-from ..models.base import ErrorResponse
 from ..utils.errors import ProviderRateLimitError
 from ..utils.logging import get_logger
 from .base import BaseMiddleware
@@ -150,7 +148,7 @@ class RateLimitMiddleware(BaseMiddleware):
         allowed, remaining, reset = await self.global_limiter.check_rate_limit("global")
         if not allowed:
             logger.warning("Global rate limit exceeded")
-            
+
             # Use ProviderRateLimitError from the error hierarchy for consistency
             # This integrates with the retry middleware and error handling pipeline
             error = ProviderRateLimitError(
@@ -159,7 +157,7 @@ class RateLimitMiddleware(BaseMiddleware):
                 retry_after=reset,
                 message=f"Global rate limit exceeded. Try again in {reset:.1f} seconds",
             )
-            
+
             # Store headers in error details for response processing
             error.details["headers"] = {
                 "X-RateLimit-Limit": str(self.global_limiter.limit),
@@ -167,7 +165,7 @@ class RateLimitMiddleware(BaseMiddleware):
                 "X-RateLimit-Reset": str(int(reset)),
                 "Retry-After": str(int(reset)),
             }
-            
+
             raise error
 
         # Check client-specific rate limit
@@ -178,7 +176,7 @@ class RateLimitMiddleware(BaseMiddleware):
 
         if not allowed:
             logger.warning(f"Rate limit exceeded for client {client_id}")
-            
+
             # Use ProviderRateLimitError from the error hierarchy for consistency
             # This integrates with the retry middleware and error handling pipeline
             error = ProviderRateLimitError(
@@ -187,7 +185,7 @@ class RateLimitMiddleware(BaseMiddleware):
                 retry_after=reset,
                 message=f"Rate limit exceeded for client {client_id}. Try again in {reset:.1f} seconds",
             )
-            
+
             # Store client ID and headers in error details for response processing
             error.details["client_id"] = client_id
             error.details["headers"] = {
@@ -196,7 +194,7 @@ class RateLimitMiddleware(BaseMiddleware):
                 "X-RateLimit-Reset": str(int(reset)),
                 "Retry-After": str(int(reset)),
             }
-            
+
             raise error
 
         return request

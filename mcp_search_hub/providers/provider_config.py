@@ -1,13 +1,11 @@
 """Configuration for provider implementations."""
 
 from decimal import Decimal
-from typing import Dict, Any, Optional
 
 from ..utils.retry import RetryConfig
 from .base_mcp import ServerType
 from .budget_tracker import BudgetConfig
 from .rate_limiter import RateLimitConfig
-
 
 # Default retry configuration
 DEFAULT_RETRY_CONFIG = RetryConfig(
@@ -143,10 +141,10 @@ PROVIDER_CONFIGS = {
         # Retry configuration
         "retry_config": RetryConfig(
             max_retries=4,  # More retries for Perplexity due to variable response times
-            base_delay=2.0, # Longer base delay
+            base_delay=2.0,  # Longer base delay
             max_delay=40.0,
             exponential_base=2.0,
-            jitter=0.15,    # More jitter to avoid request bunching
+            jitter=0.15,  # More jitter to avoid request bunching
         ),
         # Enable/disable retry
         "retry_enabled": True,

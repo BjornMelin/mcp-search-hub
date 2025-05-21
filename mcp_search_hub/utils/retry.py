@@ -127,16 +127,22 @@ def is_retryable_exception(exc: Exception) -> bool:
     # Service errors can be retryable if they're temporary
     if isinstance(exc, ProviderServiceError):
         # Check the status code if available
-        if hasattr(exc, 'status_code') and exc.status_code in RETRYABLE_STATUS_CODES:
+        if hasattr(exc, "status_code") and exc.status_code in RETRYABLE_STATUS_CODES:
             return True
         # Check for temporary indicators in message
-        if any(keyword in str(exc).lower() for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"]):
+        if any(
+            keyword in str(exc).lower()
+            for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"]
+        ):
             return True
 
     # For general SearchErrors, be more cautious
     if isinstance(exc, SearchError):
         # Only retry if it's a temporary error
-        return any(keyword in str(exc).lower() for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"])
+        return any(
+            keyword in str(exc).lower()
+            for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"]
+        )
 
     return False
 
@@ -158,25 +164,25 @@ def format_exception_for_log(exc: Exception) -> str:
         details_str = ""
 
         # Add provider information if available
-        if hasattr(exc, 'provider') and exc.provider:
+        if hasattr(exc, "provider") and exc.provider:
             details_str += f" [Provider: {exc.provider}]"
 
         # Add status code if available
-        if hasattr(exc, 'status_code'):
+        if hasattr(exc, "status_code"):
             details_str += f" [Status: {exc.status_code}]"
 
         # Add operation information for timeout errors
-        if isinstance(exc, ProviderTimeoutError) and hasattr(exc, 'details'):
-            if 'operation' in exc.details:
+        if isinstance(exc, ProviderTimeoutError) and hasattr(exc, "details"):
+            if "operation" in exc.details:
                 details_str += f" [Operation: {exc.details['operation']}]"
-            if 'timeout_seconds' in exc.details:
+            if "timeout_seconds" in exc.details:
                 details_str += f" [Timeout: {exc.details['timeout_seconds']}s]"
 
         # Add rate limit information
-        if isinstance(exc, ProviderRateLimitError) and hasattr(exc, 'details'):
-            if 'limit_type' in exc.details:
+        if isinstance(exc, ProviderRateLimitError) and hasattr(exc, "details"):
+            if "limit_type" in exc.details:
                 details_str += f" [Limit: {exc.details['limit_type']}]"
-            if 'retry_after_seconds' in exc.details:
+            if "retry_after_seconds" in exc.details:
                 details_str += f" [Retry-After: {exc.details['retry_after_seconds']}s]"
 
         # If we have details, include them
@@ -184,7 +190,7 @@ def format_exception_for_log(exc: Exception) -> str:
             exception_details = f"{exception_details}{details_str}"
 
         # Include original error type if wrapped
-        if hasattr(exc, 'original_error') and exc.original_error:
+        if hasattr(exc, "original_error") and exc.original_error:
             orig_type = type(exc.original_error).__name__
             exception_details = f"{exception_details} (Original: {orig_type}: {str(exc.original_error)})"
 

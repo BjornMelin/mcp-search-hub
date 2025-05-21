@@ -5,9 +5,7 @@ from typing import Any
 
 from fastmcp import Context
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
-from ..models.base import ErrorResponse
 from ..utils.errors import AuthenticationError
 from ..utils.logging import get_logger
 from .base import BaseMiddleware
@@ -91,10 +89,10 @@ class AuthMiddleware(BaseMiddleware):
 
         # Get API key from header - case insensitive
         api_key = (
-            request.headers.get("X-API-Key") or 
-            request.headers.get("x-api-key") or 
-            request.headers.get("Authorization") or 
-            request.headers.get("authorization")
+            request.headers.get("X-API-Key")
+            or request.headers.get("x-api-key")
+            or request.headers.get("Authorization")
+            or request.headers.get("authorization")
         )
         if api_key and api_key.lower().startswith("bearer "):
             api_key = api_key[7:]  # Remove 'Bearer ' prefix

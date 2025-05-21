@@ -70,10 +70,9 @@ class ModelTrainer:
         self._can_train = USE_ML
         if USE_ML:
             try:
-                import torch
-
                 # Import just to check availability
                 import sentence_transformers
+                import torch
 
                 self._can_train = True
                 # Set device

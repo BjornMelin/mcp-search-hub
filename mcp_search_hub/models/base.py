@@ -40,6 +40,17 @@ class HealthResponse(BaseModel):
     providers: dict[str, ProviderStatus]
 
 
+class MetricsData(BaseModel):
+    """Data structure for tracking metrics."""
+
+    total_requests: int = 0
+    total_queries: int = 0
+    total_response_time_ms: float = 0.0
+    cache_hits: int = 0
+    cache_misses: int = 0
+    provider_usage: dict[str, int] = Field(default_factory=dict)
+
+
 class MetricsResponse(BaseModel):
     """Metrics response."""
 

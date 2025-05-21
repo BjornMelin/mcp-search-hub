@@ -10,5 +10,5 @@ class LinkupMCPProvider(GenericMCPProvider):
 
     def __init__(self, api_key: str | None = None):
         super().__init__("linkup", api_key)
-        
+
     # No need for custom search method anymore, as retry logic is now in BaseMCPProvider

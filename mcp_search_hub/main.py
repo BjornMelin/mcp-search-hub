@@ -1,18 +1,50 @@
-"""Main entry point for the MCP Search Hub server."""
+"""Main entry point for the MCP Search Hub server.
+
+This module provides the main CLI interface and server initialization logic for
+the MCP Search Hub. It handles command-line argument parsing, environment
+configuration, and server lifecycle management including graceful shutdown.
+
+Example:
+    Run the server with stdio transport:
+        $ python -m mcp_search_hub.main --transport stdio
+
+    Run the server with HTTP transport:
+        $ python -m mcp_search_hub.main --transport streamable-http --host 0.0.0.0 --port 8000
+
+    Run with specific API keys:
+        $ python -m mcp_search_hub.main --exa-api-key your_key --tavily-api-key your_key
+"""
+
+from __future__ import annotations
 
 import argparse
 import asyncio
 import logging
 import os
 import signal
+from typing import NoReturn
 
 from .config import get_settings
 from .server import SearchServer
 from .utils.logging import configure_logging
 
 
-async def shutdown(server: SearchServer):
-    """Gracefully shutdown the server."""
+async def shutdown(server: SearchServer) -> None:
+    """Gracefully shutdown the server and clean up resources.
+
+    This function handles the complete shutdown process including:
+    - Closing all provider connections
+    - Cancelling remaining asyncio tasks
+    - Proper cleanup for different transport types
+
+    Args:
+        server: The SearchServer instance to shutdown
+
+    Note:
+        This function is designed to be called from signal handlers and
+        ensures all resources are properly cleaned up regardless of the
+        transport type (stdio or HTTP).
+    """
     logging.info("Shutting down server...")
 
     try:
@@ -42,8 +74,22 @@ async def shutdown(server: SearchServer):
         logging.error(f"Error cleaning up tasks: {str(e)}")
 
 
-def parse_args():
-    """Parse command-line arguments."""
+def parse_args() -> argparse.Namespace:
+    """Parse and validate command-line arguments.
+
+    Creates an argument parser with all supported CLI options including:
+    - Transport protocol selection (streamable-http or stdio)
+    - Server configuration (host, port, log level)
+    - Provider API keys for all supported search providers
+
+    Returns:
+        Parsed command-line arguments as a Namespace object
+
+    Example:
+        >>> args = parse_args()
+        >>> print(args.transport)  # 'stdio' or 'streamable-http'
+        >>> print(args.exa_api_key)  # API key if provided
+    """
     parser = argparse.ArgumentParser(description="MCP Search Hub server")
     parser.add_argument(
         "--transport",
@@ -75,8 +121,28 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    """Run the FastMCP search server."""
+def main() -> NoReturn:
+    """Run the FastMCP search server with complete initialization.
+
+    This is the main entry point that:
+    1. Parses command-line arguments
+    2. Configures environment variables and settings
+    3. Sets up logging
+    4. Initializes the search server
+    5. Configures signal handlers for graceful shutdown
+    6. Starts the server with the specified transport
+
+    The function does not return as it runs the server indefinitely until
+    a shutdown signal is received.
+
+    Note:
+        This function will not return under normal operation. It either
+        runs indefinitely or exits the process on shutdown/error.
+
+    Example:
+        This is typically called via:
+            python -m mcp_search_hub.main
+    """
     # Parse command-line arguments
     args = parse_args()
 

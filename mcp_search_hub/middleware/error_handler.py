@@ -4,7 +4,7 @@ This middleware provides centralized error handling for all middleware
 components and response formatting for consistent error responses.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastmcp import Context
 from starlette.requests import Request
@@ -38,7 +38,7 @@ class ErrorHandlerMiddleware(BaseMiddleware):
         )
 
     async def process_request(
-        self, request: Any, context: Optional[Context] = None
+        self, request: Any, context: Context | None = None
     ) -> Any:
         """Process the incoming request (no modifications).
 
@@ -53,7 +53,7 @@ class ErrorHandlerMiddleware(BaseMiddleware):
         return request
 
     async def process_response(
-        self, response: Any, request: Any, context: Optional[Context] = None
+        self, response: Any, request: Any, context: Context | None = None
     ) -> Any:
         """Process the outgoing response for consistent error formatting.
 
@@ -105,7 +105,7 @@ class ErrorHandlerMiddleware(BaseMiddleware):
         self,
         request: Any,
         call_next: callable,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> Any:
         """Execute the middleware with error handling.
 
@@ -135,6 +135,6 @@ class ErrorHandlerMiddleware(BaseMiddleware):
         except Exception as exc:
             # Log the exception
             logger.error(f"Caught exception in error handler: {exc}", exc_info=True)
-            
+
             # Convert exception to standardized response
             return await self.process_response(exc, request, context)

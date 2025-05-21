@@ -122,16 +122,16 @@ class BaseMiddleware(abc.ABC):
             # Process response (post-processing)
             return await self.process_response(response, request, context)
         except Exception as e:
-            # Log with appropriate level based on error type            
+            # Log with appropriate level based on error type
             if isinstance(e, SearchError):
                 log_method = self.logger.warning
                 if e.status_code >= 500:
                     log_method = self.logger.error
             else:
                 log_method = self.logger.error
-                
+
             log_method(f"Error in middleware {self.name}: {str(e)}", exc_info=True)
-            
+
             # Re-raise for error handling middleware to catch
             raise
 
@@ -155,7 +155,7 @@ class MiddlewareManager:
         Args:
             middleware_class: Middleware class to instantiate
             **options: Options to pass to the middleware constructor
-            
+
         Raises:
             ConfigurationError: If there's an issue with middleware configuration
         """
@@ -164,13 +164,15 @@ class MiddlewareManager:
             self.middlewares.append(middleware)
             # Re-sort middleware by order
             self.middlewares.sort(key=lambda m: m.order)
-            logger.info(f"Added middleware {middleware_class.__name__} with order {middleware.order}")
+            logger.info(
+                f"Added middleware {middleware_class.__name__} with order {middleware.order}"
+            )
         except Exception as e:
             # Convert initialization error to configuration error for consistency
             raise ConfigurationError(
                 message=f"Failed to initialize middleware {middleware_class.__name__}: {str(e)}",
                 details={"options": str(options)},
-                original_error=e
+                original_error=e,
             )
 
     def add_http_middleware(

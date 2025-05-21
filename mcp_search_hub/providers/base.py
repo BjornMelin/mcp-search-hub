@@ -1,13 +1,31 @@
-"""Base class for all search providers."""
+"""Base class for all search providers.
+
+This module defines the foundational interfaces and base classes for all search
+providers in the MCP Search Hub. It provides consistent patterns for provider
+initialization, configuration, health monitoring, and result handling.
+
+The module includes:
+- ProviderConfig: Base configuration schema for all providers
+- ProviderMetrics: Standardized metrics collection
+- SearchProvider: Abstract base class with common functionality
+
+Example:
+    Creating a new provider:
+        >>> class MyProvider(SearchProvider):
+        ...     async def search_impl(self, query: SearchQuery) -> SearchResponse:
+        ...         # Implementation here
+        ...         pass
+"""
+
+from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, cast
 
 from ..models.base import HealthStatus
 from ..models.component import SearchProviderBase
 from ..models.config import ComponentConfig
-from ..models.interfaces import SearchProviderProtocol
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse
 from ..utils.logging import get_logger
@@ -18,16 +36,16 @@ logger = get_logger(__name__)
 class ProviderConfig(ComponentConfig):
     """Base configuration for search providers."""
 
-    api_key: Optional[str] = None
+    api_key: str | None = None
     enabled: bool = True
     timeout_ms: int = 30000
     max_retries: int = 3
-    rate_limit_per_minute: Optional[int] = None
-    rate_limit_per_hour: Optional[int] = None
-    rate_limit_per_day: Optional[int] = None
+    rate_limit_per_minute: int | None = None
+    rate_limit_per_hour: int | None = None
+    rate_limit_per_day: int | None = None
 
 
-class ProviderMetrics(Dict[str, Any]):
+class ProviderMetrics(dict[str, Any]):
     """Metrics for search providers."""
 
     def __init__(self):
@@ -50,7 +68,7 @@ class ProviderMetrics(Dict[str, Any]):
 class SearchProvider(SearchProviderBase[ProviderConfig], ABC):
     """Base class for all search providers."""
 
-    def __init__(self, name: str, config: Optional[ProviderConfig] = None):
+    def __init__(self, name: str, config: ProviderConfig | None = None):
         """Initialize the search provider with name and optional config."""
         super().__init__(name, config)
         self.metrics = ProviderMetrics()
@@ -66,7 +84,7 @@ class SearchProvider(SearchProviderBase[ProviderConfig], ABC):
         ...
 
     @abstractmethod
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Return provider capabilities."""
         ...
 
@@ -75,7 +93,7 @@ class SearchProvider(SearchProviderBase[ProviderConfig], ABC):
         """Estimate the cost of executing the query."""
         ...
 
-    async def check_status(self) -> Tuple[HealthStatus, str]:
+    async def check_status(self) -> tuple[HealthStatus, str]:
         """
         Check the status of the provider.
 
@@ -124,42 +142,44 @@ class SearchProvider(SearchProviderBase[ProviderConfig], ABC):
             # Update metrics on success
             end_time = time.time()
             duration_ms = (end_time - start_time) * 1000
-            
+
             self.success_count += 1
             self.metrics["total_queries"] += 1
             self.metrics["successful_queries"] += 1
-            
+
             # Update average response time with running average
             prev_avg = self.metrics["avg_response_time_ms"]
             prev_count = self.metrics["successful_queries"] - 1  # Exclude current
-            new_avg = (prev_avg * prev_count + duration_ms) / max(1, self.metrics["successful_queries"])
+            new_avg = (prev_avg * prev_count + duration_ms) / max(
+                1, self.metrics["successful_queries"]
+            )
             self.metrics["avg_response_time_ms"] = new_avg
-            
+
             # Update cost metrics
             cost = self.estimate_cost(query)
             self.total_cost += cost
             self.metrics["estimated_cost"] = self.total_cost
-            
+
             # Update result counts if we have results
             if response and response.results:
                 self.metrics["total_results"] += len(response.results)
-                self.metrics["avg_results_per_query"] = (
-                    self.metrics["total_results"] / max(1, self.metrics["successful_queries"])
-                )
-            
+                self.metrics["avg_results_per_query"] = self.metrics[
+                    "total_results"
+                ] / max(1, self.metrics["successful_queries"])
+
             # Update last query time and error rate
             self.metrics["last_query_time"] = end_time
             self.metrics["error_rate"] = self.error_count / max(1, self.query_count)
-            
+
             return response
-            
+
         except Exception as e:
             # Update metrics on error
             end_time = time.time()
             self.error_count += 1
             self.metrics["failed_queries"] += 1
             self.metrics["error_rate"] = self.error_count / max(1, self.query_count)
-            
+
             # Log error and re-raise
             logger.error(f"Provider {self.name} search error: {str(e)}")
             raise
@@ -172,12 +192,12 @@ class SearchProvider(SearchProviderBase[ProviderConfig], ABC):
         self.success_count = 0
         self.error_count = 0
         self.total_cost = 0.0
-        
-    def get_metrics(self) -> Dict[str, Any]:
+
+    def get_metrics(self) -> dict[str, Any]:
         """Get current metrics."""
         # Ensure metrics are up to date
         self.metrics["error_rate"] = self.error_count / max(1, self.query_count)
-        return cast(Dict[str, Any], self.metrics)
+        return cast(dict[str, Any], self.metrics)
 
     async def initialize(self) -> None:
         """Initialize the provider, setting up required resources."""

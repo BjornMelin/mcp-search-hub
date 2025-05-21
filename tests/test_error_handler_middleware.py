@@ -86,7 +86,7 @@ async def test_format_authentication_error_http(error_handler_middleware):
     # Verify the response is a proper JSONResponse
     assert isinstance(response, JSONResponse)
     assert response.status_code == 401
-    
+
     # Check content
     content = response.body.decode("utf-8")
     assert "Invalid API key" in content
@@ -106,7 +106,7 @@ async def test_format_rate_limit_error_with_headers(error_handler_middleware):
         retry_after=30,
         message="Rate limit exceeded",
     )
-    
+
     # Add headers to error details
     error.details["headers"] = {
         "X-RateLimit-Limit": "100",
@@ -129,7 +129,7 @@ async def test_format_rate_limit_error_with_headers(error_handler_middleware):
     assert response.headers["X-RateLimit-Remaining"] == "0"
     assert response.headers["X-RateLimit-Reset"] == "30"
     assert response.headers["Retry-After"] == "30"
-    
+
     # Check content
     content = response.body.decode("utf-8")
     assert "Rate limit exceeded" in content
