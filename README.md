@@ -46,6 +46,8 @@ For detailed information on key components:
 - [Exponential Backoff Retry Logic](docs/retry.md)
 - [OpenAPI Documentation](docs/openapi-documentation.md)
 - [Tiered Caching System](docs/tiered-caching.md)
+- [Docker Configuration](docs/docker-configuration.md)
+- [Provider Management](docs/provider-management.md)
 
 ### Embedded MCP Server Architecture
 
@@ -99,18 +101,36 @@ Learn more about this decision in our [Architecture Decisions](docs/architecture
    # Edit .env with your API keys and configuration
    ```
 
-3. Run with Docker Compose:
+3. Run the validation script to check your setup (optional but recommended):
 
+   ```bash
+   ./scripts/validate_docker_setup.sh
+   ```
+
+4. Choose an environment and run with Docker Compose:
+
+   **Default environment:**
    ```bash
    docker-compose up -d
    ```
 
-4. Verify the server is running:
+   **Development environment:**
+   ```bash
+   docker-compose -f docker-compose.dev.yml up -d
+   ```
+
+   **Production environment:**
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+5. Verify the server is running:
 
    ```bash
    curl http://localhost:8000/health
-   # Expected response: {"status": "ok"}
    ```
+
+For detailed information on Docker configuration, including multi-stage builds, environment setup, health checks, and deployment best practices, see the [Docker Configuration Guide](docs/docker-configuration.md).
 
 ### Manual Installation
 
@@ -670,6 +690,8 @@ ruff check --select I --fix .
 - **Connection Refused**: Check that the server is running and the port (default: 8000) is not in use
 - **Provider Failures**: If a specific provider fails, check its API status and consider disabling it temporarily
 - **Timeout Errors**: For complex queries, consider increasing the timeout setting
+- **Docker Build Failures**: If Docker build fails, check your Docker installation and ensure you have sufficient disk space
+- **Container Health Check Failures**: Check container logs and verify environment variables are set correctly
 
 ### Logs
 
@@ -679,9 +701,26 @@ Check the logs for detailed error information:
 # For Docker installations
 docker logs mcp-search-hub
 
+# View health status
+docker inspect --format='{{json .State.Health}}' mcp-search-hub
+
 # For manual installations
 # Logs are output to stdout/stderr or to the file specified in your configuration
 ```
+
+### Docker Health Checks
+
+MCP Search Hub includes automatic health checks that ensure the service is operating correctly:
+
+```bash
+# Check container health status
+docker ps --filter name=mcp-search-hub --format "{{.Names}} {{.Status}}"
+
+# View detailed health check information
+docker inspect --format='{{json .State.Health}}' mcp-search-hub | jq
+```
+
+If the container shows an unhealthy status, check the logs for specific error information.
 
 ## License
 
