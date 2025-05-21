@@ -682,6 +682,139 @@ ruff format .
 ruff check --select I --fix .
 ```
 
+## Error Handling and Exception Patterns
+
+MCP Search Hub implements a comprehensive error handling system with a consistent exception hierarchy, propagation, and retry logic. This ensures robust operation even when facing transient provider failures or network issues.
+
+### Exception Hierarchy
+
+The system uses a structured exception hierarchy for consistent error handling:
+
+```
+SearchError (Base class for all errors)
+├── ProviderError (Provider-related errors)
+│   ├── ProviderNotFoundError
+│   ├── ProviderNotEnabledError
+│   ├── ProviderInitializationError
+│   ├── ProviderTimeoutError
+│   ├── ProviderRateLimitError
+│   ├── ProviderAuthenticationError
+│   ├── ProviderQuotaExceededError
+│   └── ProviderServiceError
+├── QueryError (Query-related errors)
+│   ├── QueryValidationError
+│   ├── QueryTooComplexError
+│   └── QueryBudgetExceededError
+├── RouterError (Routing-related errors)
+│   ├── NoProvidersAvailableError
+│   ├── CircuitBreakerOpenError
+│   └── RoutingStrategyError
+├── ConfigurationError
+│   ├── MissingConfigurationError
+│   └── InvalidConfigurationError
+├── AuthenticationError
+├── AuthorizationError
+└── NetworkError
+    ├── NetworkConnectionError
+    └── NetworkTimeoutError
+```
+
+Each exception type includes:
+- Structured context data (provider name, error details, etc.)
+- Appropriate HTTP status code for REST API responses
+- Original exception (if wrapping another error)
+- Detailed information for logging and debugging
+
+### Retryable vs. Non-Retryable Errors
+
+MCP Search Hub automatically classifies errors as retryable or non-retryable:
+
+#### Retryable Errors
+- **Timeouts**: Provider and network timeouts
+- **Rate limits**: Provider request rate exceeded
+- **Temporary failures**: Service overloaded, maintenance, etc.
+- **Connection issues**: Network blips, connection refused, etc.
+- **HTTP status codes**: 408, 429, 500, 502, 503, 504
+
+#### Non-Retryable Errors
+- **Authentication failures**: Invalid API keys
+- **Authorization issues**: Permission denied
+- **Query validation errors**: Invalid query format
+- **Budget exceeded**: Cost limits reached
+- **Permanent provider errors**: Service permanently unavailable
+
+### Exponential Backoff Retry
+
+The system implements exponential backoff retry for transient errors:
+
+- Automatic retry with increasing delays (default: 1s → 2s → 4s)
+- Configurable via `MAX_RETRIES`, `RETRY_BASE_DELAY`, etc.
+- Jitter added to prevent thundering herd problems
+- Detailed logging for visibility into retry attempts
+- Circuit breaker pattern to prevent overwhelming failing providers
+
+### HTTP Error Responses
+
+When errors occur in HTTP endpoints, they are converted to structured JSON responses:
+
+```json
+{
+  "error_type": "ProviderTimeoutError",
+  "message": "Search operation timed out for provider 'exa' after 5 seconds",
+  "provider": "exa",
+  "details": {
+    "operation": "search",
+    "timeout_seconds": 5
+  },
+  "status_code": 504
+}
+```
+
+### Provider Error Propagation
+
+Provider errors are propagated through the system in a consistent way:
+
+1. **Provider Layer**: Specific exceptions raised (e.g., `ProviderTimeoutError`)
+2. **Router Layer**: Captures provider errors, may retry or fail over to other providers
+3. **Server Layer**: Converts exceptions to appropriate HTTP responses
+4. **Client**: Receives structured error information
+
+### Common Errors and Solutions
+
+| Error Type | HTTP Status | Common Causes | Solutions |
+|------------|-------------|--------------|-----------|
+| `ProviderAuthenticationError` | 401 | Invalid/missing API key | Check API key in `.env` file |
+| `ProviderRateLimitError` | 429 | Too many requests | Increase rate limit settings or wait for cooldown |
+| `ProviderTimeoutError` | 504 | Slow provider response | Increase provider timeout or try simpler queries |
+| `QueryBudgetExceededError` | 402 | Query would exceed budget | Increase budget or simplify query |
+| `NoProvidersAvailableError` | 503 | All providers unavailable | Check provider status and API limits |
+| `NetworkConnectionError` | 502 | Network connectivity issues | Check network connection and provider status |
+
+### Error Handling in Client Code
+
+When integrating with MCP Search Hub, handle errors appropriately:
+
+```python
+from mcp.client import Client
+
+client = Client("http://localhost:8000/mcp")
+
+try:
+    response = client.invoke("search", {
+        "query": "Latest quantum computing advances",
+        "max_results": 5
+    })
+    print(f"Found {len(response['results'])} results")
+except Exception as e:
+    if hasattr(e, 'error_type') and e.error_type == 'ProviderRateLimitError':
+        retry_after = e.details.get('retry_after_seconds', 60)
+        print(f"Rate limited. Try again in {retry_after} seconds")
+    elif hasattr(e, 'error_type') and e.error_type == 'ProviderTimeoutError':
+        print(f"Search timed out. Try a simpler query or increase timeout")
+    else:
+        print(f"Error: {e}")
+```
+
 ## Troubleshooting
 
 ### Common Issues

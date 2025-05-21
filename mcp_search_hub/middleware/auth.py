@@ -8,6 +8,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from ..models.base import ErrorResponse
+from ..utils.errors import AuthenticationError
 from ..utils.logging import get_logger
 from .base import BaseMiddleware
 
@@ -58,7 +59,7 @@ class AuthMiddleware(BaseMiddleware):
             The request if authentication succeeds
 
         Raises:
-            Exception: If authentication fails
+            AuthenticationError: If authentication fails
         """
         # Skip authentication if no API keys are configured
         if not self.api_keys:
@@ -82,29 +83,27 @@ class AuthMiddleware(BaseMiddleware):
             The request if authentication succeeds
 
         Raises:
-            Exception: With JSONResponse if authentication fails
+            AuthenticationError: If authentication fails
         """
         # Skip authentication for allowed paths
         if any(request.url.path.startswith(path) for path in self.skip_auth_paths):
             return request
 
-        # Get API key from header
-        api_key = request.headers.get("X-API-Key") or request.headers.get(
-            "Authorization"
+        # Get API key from header - case insensitive
+        api_key = (
+            request.headers.get("X-API-Key") or 
+            request.headers.get("x-api-key") or 
+            request.headers.get("Authorization") or 
+            request.headers.get("authorization")
         )
-        if api_key and api_key.startswith("Bearer "):
-            api_key = api_key.replace("Bearer ", "")
+        if api_key and api_key.lower().startswith("bearer "):
+            api_key = api_key[7:]  # Remove 'Bearer ' prefix
 
         # Validate API key
         if not api_key or api_key not in self.api_keys:
             logger.warning(f"Authentication failed for request to {request.url.path}")
-            error_response = ErrorResponse(
-                error="Unauthorized",
+            raise AuthenticationError(
                 message="Invalid or missing API key",
-                status_code=401,
-            )
-            raise Exception(
-                JSONResponse(status_code=401, content=error_response.model_dump())
             )
 
         return request

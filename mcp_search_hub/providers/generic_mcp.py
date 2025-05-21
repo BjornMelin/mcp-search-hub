@@ -128,6 +128,9 @@ class GenericMCPProvider(BaseMCPProvider):
 
         except Exception as e:
             logger.error(f"Error processing {self.name} search results: {str(e)}")
+            # Don't re-raise the exception - this is a non-critical error in result processing
+            # Instead, return whatever results we were able to parse
+            # If no results were found, the empty list is appropriate
 
         return search_results
 

@@ -224,11 +224,82 @@ class MiddlewareConfig(BaseModel):
 
 ## Error Handling
 
-The middleware system includes error handling to ensure that errors in middleware components don't crash the server:
+The middleware system implements comprehensive error handling that integrates with the application's exception hierarchy. This ensures errors are properly categorized, propagated, and responded to consistently:
 
-1. In the middleware pipeline, errors are caught and propagated
-2. For HTTP requests, errors are converted to appropriate HTTP responses
-3. For tool invocations, errors are caught and can be handled by the caller
+### Error Propagation Flow
+
+1. **Detection**: Errors are detected in middleware components or handlers
+2. **Classification**: Errors are classified using the SearchError exception hierarchy
+3. **Propagation**: Errors are propagated through the middleware pipeline (potentially with retries)
+4. **Response Translation**: Errors are converted to appropriate HTTP responses or tool responses
+
+### Exception Classification & Handling
+
+Each middleware component handles exceptions according to its role:
+
+1. **LoggingMiddleware**: 
+   - Logs exceptions with detailed context and stack traces
+   - Preserves original exception for further handling
+   - Adds request/response context to error logs
+
+2. **AuthMiddleware**:
+   - Raises `AuthenticationError` for missing or invalid API keys
+   - Converts authentication errors to 401 HTTP responses
+   - Includes detailed error messages without exposing sensitive information
+
+3. **RateLimitMiddleware**:
+   - Raises `ProviderRateLimitError` when rate limits are exceeded
+   - Adds `Retry-After` headers to rate limit responses
+   - Includes detailed usage metrics in error responses
+
+4. **RetryMiddleware**:
+   - Classifies exceptions as retryable or non-retryable
+   - Applies exponential backoff for retryable errors
+   - Preserves original exception information while adding retry context
+   - Handles specialized error types from the SearchError hierarchy
+
+### HTTP Error Response Format
+
+HTTP errors are formatted using the `http_error_response` utility that ensures consistent error responses:
+
+```python
+def http_error_response(error: Exception | str, status_code: int = 500, **kwargs) -> dict:
+    """Convert an error to a standardized HTTP error response."""
+    if isinstance(error, SearchError):
+        response = error.to_dict()
+        status_code = error.status_code
+    else:
+        response = {
+            "error_type": getattr(error, "__class__", {"__name__": "Error"}).__name__,
+            "message": str(error),
+        }
+
+    response["status_code"] = status_code
+    
+    # Add any additional fields
+    for key, value in kwargs.items():
+        if key not in response:
+            response[key] = value
+            
+    return response
+```
+
+This ensures all HTTP error responses include:
+- Error type (specific exception class name)
+- Human-readable error message
+- HTTP status code
+- Provider information (when applicable)
+- Detailed error context (when available)
+- Retry-after information (for rate limit errors)
+
+### Tool Error Handling
+
+For tool invocations, errors are processed in a similar way:
+
+1. Errors are wrapped in appropriate SearchError subclasses
+2. Error details are added to provide context
+3. Errors are returned in standardized format to clients
+4. RetryMiddleware automatically retries transient errors
 
 ## Middleware Ordering
 

@@ -84,19 +84,29 @@ delay = min(base_delay * (exponential_base ^ attempt), max_delay)
 
 When jitter is enabled, a random adjustment of ±25% is applied to the calculated delay.
 
-## Retryable Exceptions
+## Retryable vs. Non-Retryable Exceptions
+
+The retry system uses sophisticated classification to determine which exceptions should trigger retries.
+
+### Retryable Exceptions
 
 The following exceptions trigger retries automatically:
 
-### Network Errors
+#### Network Errors
 - `httpx.TimeoutException`: Connection or read timeouts
 - `httpx.ConnectError`: Connection errors
 - `httpx.RemoteProtocolError`: Protocol errors
 - `ConnectionError`: Generic connection errors
 - `TimeoutError`: Generic timeout errors
-- `ProviderTimeoutError`: Custom provider timeouts
+- `NetworkConnectionError`: Custom network connection errors
+- `NetworkTimeoutError`: Custom network timeout errors
 
-### HTTP Status Codes
+#### Provider-Specific Errors
+- `ProviderTimeoutError`: Provider operation timeouts
+- `ProviderRateLimitError`: Rate limit exceeded errors
+- `ProviderServiceError`: Temporary provider service errors
+
+#### HTTP Status Codes
 - 408: Request Timeout
 - 429: Too Many Requests (Rate Limiting)
 - 500: Internal Server Error
@@ -104,8 +114,80 @@ The following exceptions trigger retries automatically:
 - 503: Service Unavailable
 - 504: Gateway Timeout
 
-### Custom Errors
-- `SearchError` instances containing "temporary" or "timeout" in their message
+#### Heuristic Classification
+For other error types, the system uses heuristics to identify potentially transient errors:
+- Error messages containing indicators like "temporary", "timeout", "retry", "overloaded", or "busy"
+- Provider services returning indications of transient failure
+- Analysis of original exceptions wrapped in custom error types
+
+### Non-Retryable Exceptions
+
+The following exceptions will never trigger retries:
+
+#### Authentication/Authorization Errors
+- `ProviderAuthenticationError`: Invalid API keys or authentication failures
+- `AuthenticationError`: Missing or invalid authentication
+- `AuthorizationError`: Permission or authorization issues
+
+#### Budget/Quota Errors
+- `ProviderQuotaExceededError`: Provider quota or usage cap exceeded
+- `QueryBudgetExceededError`: Query would exceed allocated budget
+
+#### Input Validation Errors
+- `QueryValidationError`: Invalid query parameters or format
+- `QueryTooComplexError`: Query is too complex to process
+
+#### Configuration Errors
+- `MissingConfigurationError`: Required configuration is missing
+- `InvalidConfigurationError`: Configuration is invalid
+
+#### Provider Availability Errors
+- `ProviderNotFoundError`: Requested provider doesn't exist
+- `ProviderNotEnabledError`: Provider is disabled in configuration
+
+### Classification Logic
+
+The `is_retryable_exception` function implements a sophisticated decision tree for classifying exceptions:
+
+```python
+def is_retryable_exception(exc: Exception) -> bool:
+    """Check if an exception is retryable."""
+    # Check if it's a known retryable exception type
+    if isinstance(exc, RETRYABLE_EXCEPTIONS):
+        return True
+
+    # Check if it's an HTTP status code exception
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in RETRYABLE_STATUS_CODES
+
+    # Check for specific provider error types that are retryable
+    if isinstance(exc, ProviderTimeoutError):
+        return True
+
+    # Rate limits are retryable
+    if isinstance(exc, ProviderRateLimitError):
+        return True
+
+    # Network errors are generally retryable
+    if isinstance(exc, NetworkConnectionError | NetworkTimeoutError):
+        return True
+
+    # Service errors can be retryable if they're temporary
+    if isinstance(exc, ProviderServiceError):
+        # Check the status code if available
+        if hasattr(exc, 'status_code') and exc.status_code in RETRYABLE_STATUS_CODES:
+            return True
+        # Check for temporary indicators in message
+        if any(keyword in str(exc).lower() for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"]):
+            return True
+
+    # For general SearchErrors, be more cautious
+    if isinstance(exc, SearchError):
+        # Only retry if it's a temporary error
+        return any(keyword in str(exc).lower() for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"])
+
+    return False
+```
 
 ## Logging
 
