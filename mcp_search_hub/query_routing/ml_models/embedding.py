@@ -1,11 +1,10 @@
 """Embedding generator for text representation."""
 
 import logging
-import os
 import multiprocessing
+import os
 from functools import lru_cache
 from multiprocessing import cpu_count
-from typing import Dict, List, Optional, Union, Any
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -36,7 +35,7 @@ class EmbeddingGenerator:
         cache_folder: str | None = None,
         use_quantization: bool = False,
         use_disk_cache: bool = False,
-        parallel_processes: Optional[int] = None,
+        parallel_processes: int | None = None,
     ):
         """Initialize the embedding generator.
 
@@ -102,8 +101,9 @@ class EmbeddingGenerator:
     def _setup_disk_cache(self) -> None:
         """Set up disk cache for embeddings."""
         try:
-            import diskcache
             import hashlib
+
+            import diskcache
 
             # Create cache directory
             cache_dir = os.path.join(self.cache_folder, "embedding_cache")
@@ -128,8 +128,9 @@ class EmbeddingGenerator:
         """Lazily load the model when needed."""
         if self._model is None and USE_ML:
             try:
-                from sentence_transformers import SentenceTransformer
                 import os
+
+                from sentence_transformers import SentenceTransformer
 
                 # Ensure cache directory exists
                 os.makedirs(self.cache_folder, exist_ok=True)
@@ -177,7 +178,7 @@ class EmbeddingGenerator:
 
         return self._model
 
-    def _get_from_disk_cache(self, text: str) -> Optional[List[float]]:
+    def _get_from_disk_cache(self, text: str) -> list[float] | None:
         """Get embedding from disk cache if available."""
         if not self.use_disk_cache:
             return None
@@ -192,7 +193,7 @@ class EmbeddingGenerator:
 
         return None
 
-    def _save_to_disk_cache(self, text: str, embedding: List[float]) -> None:
+    def _save_to_disk_cache(self, text: str, embedding: list[float]) -> None:
         """Save embedding to disk cache."""
         if not self.use_disk_cache:
             return
@@ -253,7 +254,7 @@ class EmbeddingGenerator:
             text=text, embedding=embedding, model_name=self.model_name
         )
 
-    def _process_batch(self, texts_chunk: List[str]) -> List[EmbeddingResult]:
+    def _process_batch(self, texts_chunk: list[str]) -> list[EmbeddingResult]:
         """Process a batch of texts to generate embeddings.
 
         This function is used by the parallel processing system.

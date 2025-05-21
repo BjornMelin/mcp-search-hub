@@ -6,26 +6,18 @@ from mcp_search_hub.models.base import (
     ErrorResponse,
     HealthResponse,
     HealthStatus,
-    MetricsResponse,
     ProviderStatus,
-    UsageStatsResponse,
 )
 from mcp_search_hub.models.config import (
     ComponentConfig,
     ProviderConfig,
     ProvidersConfig,
-    RouterConfig,
-    ResultProcessorConfig,
-    MergerConfig,
-    CacheConfig,
-    RetryConfig,
     Settings,
 )
-from mcp_search_hub.models.query import SearchQuery, QueryFeatures
+from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.models.results import (
-    SearchResult,
     SearchResponse,
-    CombinedSearchResponse,
+    SearchResult,
 )
 
 
@@ -64,7 +56,7 @@ class TestBaseModels:
             rate_limits={"per_minute": 10},
             budget={"remaining": 5.0},
         )
-        
+
         # Test serialization with model_dump
         data = status.model_dump()
         assert data["name"] == "test_provider"
@@ -83,21 +75,21 @@ class TestBaseModels:
             health=HealthStatus.HEALTHY,
             status=True,
         )
-        
+
         response = HealthResponse(
             status="healthy",
             healthy_providers=1,
             total_providers=1,
             providers={"test_provider": provider_status},
         )
-        
+
         # Test serialization
         data = response.model_dump()
         assert data["status"] == "healthy"
         assert data["healthy_providers"] == 1
         assert data["total_providers"] == 1
         assert "test_provider" in data["providers"]
-        
+
         # Test JSON serialization
         json_data = response.model_dump_json()
         assert isinstance(json_data, str)
@@ -110,12 +102,12 @@ class TestBaseModels:
             message="Resource not found",
             status_code=404,
         )
-        
+
         assert error.error == "NotFoundError"
         assert error.message == "Resource not found"
         assert error.status_code == 404
         assert error.details is None
-        
+
         # With details
         error = ErrorResponse(
             error="ValidationError",
@@ -123,7 +115,7 @@ class TestBaseModels:
             status_code=400,
             details={"field": "name", "error": "Required"},
         )
-        
+
         data = error.model_dump()
         assert data["error"] == "ValidationError"
         assert data["details"]["field"] == "name"
@@ -138,7 +130,7 @@ class TestConfigModels:
         assert config.name == "test_component"
         assert config.enabled is True  # Default
         assert config.debug is False  # Default
-        
+
         # Test with all fields
         config = ComponentConfig(
             name="test_component",
@@ -146,7 +138,7 @@ class TestConfigModels:
             debug=True,
             custom_field="custom_value",  # Extra field should be allowed
         )
-        
+
         data = config.model_dump()
         assert data["name"] == "test_component"
         assert data["enabled"] is False
@@ -158,7 +150,7 @@ class TestConfigModels:
         config = ProviderConfig(name="test_provider")
         assert config.name == "test_provider"
         assert config.timeout_ms == 30000  # Default
-        
+
         # Test with custom values
         config = ProviderConfig(
             name="test_provider",
@@ -166,7 +158,7 @@ class TestConfigModels:
             max_retries=5,
             rate_limit_per_minute=100,
         )
-        
+
         assert config.timeout_ms == 5000
         assert config.max_retries == 5
         assert config.rate_limit_per_minute == 100
@@ -181,13 +173,13 @@ class TestConfigModels:
             tavily=provider_config,
             firecrawl=provider_config,
         )
-        
+
         settings = Settings(
             providers=providers_config,
             log_level="DEBUG",
             cache_ttl=1800,
         )
-        
+
         assert settings.log_level == "DEBUG"
         assert settings.cache_ttl == 1800
         assert settings.providers.linkup.name == "test_provider"
@@ -204,7 +196,7 @@ class TestQueryModels:
         assert query.advanced is False  # Default
         assert query.max_results == 10  # Default
         assert query.content_type is None  # Default
-        
+
         # Full query
         query = SearchQuery(
             query="test query",
@@ -218,7 +210,7 @@ class TestQueryModels:
             routing_strategy="parallel",
             routing_hints="prioritize recent content",
         )
-        
+
         assert query.query == "test query"
         assert query.advanced is True
         assert query.max_results == 20
@@ -229,18 +221,18 @@ class TestQueryModels:
         assert query.raw_content is True
         assert query.routing_strategy == "parallel"
         assert query.routing_hints == "prioritize recent content"
-        
+
         # Test validation - max_results constraint
         with pytest.raises(ValueError):
             SearchQuery(query="test", max_results=0)  # Below minimum (ge=1)
-            
+
         with pytest.raises(ValueError):
             SearchQuery(query="test", max_results=101)  # Above maximum (le=100)
-            
+
         # Test validation - timeout constraint
         with pytest.raises(ValueError):
             SearchQuery(query="test", timeout_ms=500)  # Below minimum (ge=1000)
-            
+
         with pytest.raises(ValueError):
             SearchQuery(query="test", timeout_ms=35000)  # Above maximum (le=30000)
 
@@ -257,7 +249,7 @@ class TestResultModels:
             source="test_provider",
             score=0.95,
         )
-        
+
         assert result.title == "Test Result"
         assert result.url == "https://example.com"
         assert result.snippet == "This is a test result"
@@ -265,7 +257,7 @@ class TestResultModels:
         assert result.score == 0.95
         assert result.raw_content is None
         assert result.metadata == {}
-        
+
         # With optional fields
         result = SearchResult(
             title="Test Result",
@@ -276,10 +268,10 @@ class TestResultModels:
             raw_content="Full content here",
             metadata={"type": "article", "date": "2023-01-01"},
         )
-        
+
         assert result.raw_content == "Full content here"
         assert result.metadata["type"] == "article"
-        
+
         # Serialization
         data = result.model_dump()
         assert data["title"] == "Test Result"
@@ -295,7 +287,7 @@ class TestResultModels:
             source="test_provider",
             score=0.95,
         )
-        
+
         response = SearchResponse(
             results=[result],
             query="test query",
@@ -303,7 +295,7 @@ class TestResultModels:
             provider="test_provider",
             timing_ms=150.5,
         )
-        
+
         assert response.query == "test query"
         assert response.total_results == 1
         assert response.provider == "test_provider"
@@ -314,7 +306,7 @@ class TestResultModels:
         assert response.budget_exceeded is False
         assert len(response.results) == 1
         assert response.results[0].title == "Test Result"
-        
+
         # Serialization
         data = response.model_dump()
         assert data["query"] == "test query"

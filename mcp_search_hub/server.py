@@ -1,4 +1,24 @@
-"""FastMCP search server implementation using unified router."""
+"""FastMCP search server implementation using unified router.
+
+This module provides the core SearchServer class that orchestrates the entire
+MCP Search Hub system. It integrates multiple search providers through a unified
+interface, handles middleware, manages caching, and provides health monitoring.
+
+The server supports both HTTP and stdio transports and includes comprehensive
+middleware for authentication, rate limiting, logging, and error handling.
+
+Example:
+    Basic server initialization:
+        >>> server = SearchServer()
+        >>> server.run(transport="streamable-http", host="0.0.0.0", port=8000)
+
+    Server with custom settings:
+        >>> server = SearchServer()
+        >>> # Server automatically uses configuration from environment
+        >>> server.run()
+"""
+
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -7,9 +27,10 @@ import uuid
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .config import get_settings
 from .middleware import (
@@ -36,22 +57,97 @@ logger = logging.getLogger(__name__)
 
 
 class MiddlewareHTTPWrapper(BaseHTTPMiddleware):
-    """HTTP middleware wrapper for the middleware manager."""
+    """HTTP middleware wrapper that integrates the middleware manager with Starlette.
 
-    def __init__(self, app, middleware_manager):
-        """Initialize with app and middleware manager."""
+    This class bridges the gap between Starlette's HTTP middleware system and
+    our custom middleware manager, allowing the middleware manager to process
+    HTTP requests within the Starlette application framework.
+
+    Attributes:
+        middleware_manager: The MiddlewareManager instance that handles request processing
+    """
+
+    def __init__(self, app: Starlette, middleware_manager: MiddlewareManager) -> None:
+        """Initialize the wrapper with the Starlette app and middleware manager.
+
+        Args:
+            app: The Starlette application instance
+            middleware_manager: The middleware manager that will process requests
+        """
         super().__init__(app)
         self.middleware_manager = middleware_manager
 
-    async def dispatch(self, request, call_next):
-        """Process HTTP request through middleware manager."""
+    async def dispatch(self, request: Request, call_next) -> Response:
+        """Process HTTP request through the middleware manager.
+
+        This method is called for every HTTP request and delegates processing
+        to the middleware manager, which applies all configured middleware
+        in the correct order.
+
+        Args:
+            request: The incoming HTTP request
+            call_next: The next middleware or handler in the chain
+
+        Returns:
+            The HTTP response after processing through all middleware
+        """
         return await self.middleware_manager.process_http_request(request, call_next)
 
 
 class SearchServer:
-    """FastMCP search server implementation with unified routing."""
+    """FastMCP search server implementation with unified routing and provider management.
 
-    def __init__(self):
+    The SearchServer is the central orchestrator for the MCP Search Hub system. It manages:
+    - Multiple search providers (Exa, Tavily, Linkup, Perplexity, Firecrawl)
+    - Intelligent query routing and provider selection
+    - Comprehensive middleware stack (auth, rate limiting, logging, etc.)
+    - Caching system (memory and Redis tiers)
+    - Health monitoring and metrics
+    - Tool registration for MCP clients
+
+    The server supports both HTTP and stdio transports and automatically discovers
+    and initializes available search providers based on configuration.
+
+    Attributes:
+        settings: Server configuration settings
+        middleware_manager: Manages the middleware processing pipeline
+        mcp: FastMCP server instance
+        providers: Dictionary of initialized search providers
+        analyzer: Query analysis component
+        router: Unified router for provider selection and execution
+        merger: Result merging and ranking component
+        cache: Caching system (QueryCache or TieredCache)
+        metrics: Metrics tracking component
+
+    Example:
+        >>> server = SearchServer()
+        >>> server.run(transport="streamable-http", host="0.0.0.0", port=8000)
+
+        >>> # For stdio transport (MCP clients)
+        >>> server = SearchServer()
+        >>> server.run(transport="stdio")
+    """
+
+    def __init__(self) -> None:
+        """Initialize the SearchServer with all components and providers.
+
+        This method performs a complete initialization sequence:
+        1. Loads configuration settings from environment
+        2. Sets up the middleware processing pipeline
+        3. Initializes the FastMCP server instance
+        4. Discovers and initializes available search providers
+        5. Sets up query analysis and routing components
+        6. Configures caching (memory or Redis-backed)
+        7. Registers MCP tools and HTTP routes
+
+        The initialization is designed to be fail-safe - if certain providers
+        or services (like Redis) are unavailable, the server will continue
+        with reduced functionality rather than failing to start.
+
+        Raises:
+            ConfigurationError: If critical configuration is missing or invalid
+            InitializationError: If core components fail to initialize
+        """
         # Initialize settings
         self.settings = get_settings()
 
@@ -125,7 +221,7 @@ class SearchServer:
     def _setup_middleware(self):
         """Set up and configure middleware components."""
         middleware_config = self.settings.middleware
-        
+
         # Add error handler middleware (runs first - lowest order value)
         if middleware_config.error_handler.enabled:
             self.middleware_manager.add_middleware(
@@ -400,42 +496,40 @@ class SearchServer:
 
                     # Use the provider's invoke_tool method
                     return await provider.invoke_tool(original_tool_name, tool_params)
-                    
+
                 except Exception as e:
                     # Convert to appropriate provider error if needed
                     from .utils.errors import (
-                        ProviderError, 
-                        ProviderTimeoutError, 
+                        ProviderError,
                         ProviderRateLimitError,
-                        ProviderServiceError
+                        ProviderServiceError,
+                        ProviderTimeoutError,
                     )
-                    
+
                     if not isinstance(e, ProviderError):
                         # Wrap in appropriate provider error
                         if "time" in str(e).lower() or "timeout" in str(e).lower():
                             error = ProviderTimeoutError(
                                 provider=provider_name,
                                 operation=original_tool_name,
-                                original_error=e
+                                original_error=e,
                             )
                         elif "rate" in str(e).lower() or "limit" in str(e).lower():
                             error = ProviderRateLimitError(
-                                provider=provider_name,
-                                original_error=e
+                                provider=provider_name, original_error=e
                             )
                         else:
                             error = ProviderServiceError(
                                 provider=provider_name,
                                 message=f"Error invoking {provider_name} tool {original_tool_name}",
-                                original_error=e
+                                original_error=e,
                             )
-                        
+
                         ctx.error(f"{error.__class__.__name__}: {str(error)}")
                         raise error
-                    else:
-                        # Pass through provider errors
-                        ctx.error(f"{e.__class__.__name__}: {str(e)}")
-                        raise
+                    # Pass through provider errors
+                    ctx.error(f"{e.__class__.__name__}: {str(e)}")
+                    raise
 
             # Process through middleware
             return await self.middleware_manager.process_tool_request(
@@ -477,7 +571,7 @@ class SearchServer:
 
             except Exception as e:
                 from .utils.errors import SearchError, http_error_response
-                
+
                 if isinstance(e, SearchError):
                     # Use the appropriate status code and error format
                     error_response = http_error_response(e)
@@ -485,19 +579,19 @@ class SearchServer:
                         content=error_response,
                         status_code=e.status_code,
                     )
-                else:
-                    # Generic error handling
-                    import traceback
-                    logger.error(f"Unhandled error in search_combined: {str(e)}")
-                    
-                    return JSONResponse(
-                        content=http_error_response(
-                            e,
-                            status_code=500,
-                            trace=traceback.format_exc() if self.settings.debug else None,
-                        ),
+                # Generic error handling
+                import traceback
+
+                logger.error(f"Unhandled error in search_combined: {str(e)}")
+
+                return JSONResponse(
+                    content=http_error_response(
+                        e,
                         status_code=500,
-                    )
+                        trace=traceback.format_exc() if self.settings.debug else None,
+                    ),
+                    status_code=500,
+                )
 
         @app.get("/health")
         async def health_check(request: Request) -> JSONResponse:

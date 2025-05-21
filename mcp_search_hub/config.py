@@ -16,7 +16,7 @@ __all__ = ["get_settings", "Settings"]
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Get application settings using standardized configuration loading.
-    
+
     This function maintains backward compatibility while using the new
     streamlined configuration loading system internally.
     """

@@ -2,16 +2,16 @@
 """Example script for training and updating embedding models."""
 
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 
 # Add the parent directory to the path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
 from mcp_search_hub.query_routing.ml_models import (
     ModelTrainer,
-    TrainingExample,
     TrainingConfig,
+    TrainingExample,
 )
 
 # Configure logging
@@ -82,16 +82,26 @@ def main():
     )
 
     # 4. Train the model
-    model_path = trainer.train_model(examples, config, model_name="search-queries-model")
+    model_path = trainer.train_model(
+        examples, config, model_name="search-queries-model"
+    )
     logger.info(f"Model trained and saved to {model_path}")
 
     # 5. Evaluate the model
     # Create test examples (different from training data)
     test_examples = [
-        TrainingExample(text1="how to bake bread", text2="bread baking tutorial", score=0.95),
-        TrainingExample(text1="renewable energy", text2="solar and wind power", score=0.85),
-        TrainingExample(text1="learn guitar", text2="guitar lessons for beginners", score=0.9),
-        TrainingExample(text1="digital marketing", text2="online advertising strategies", score=0.8),
+        TrainingExample(
+            text1="how to bake bread", text2="bread baking tutorial", score=0.95
+        ),
+        TrainingExample(
+            text1="renewable energy", text2="solar and wind power", score=0.85
+        ),
+        TrainingExample(
+            text1="learn guitar", text2="guitar lessons for beginners", score=0.9
+        ),
+        TrainingExample(
+            text1="digital marketing", text2="online advertising strategies", score=0.8
+        ),
         TrainingExample(text1="healthy recipes", text2="quantum physics", score=0.1),
     ]
 
@@ -99,7 +109,9 @@ def main():
     logger.info(f"Model evaluation results: {metrics}")
 
     # 6. Export the model to ONNX format for faster inference
-    exported_path = trainer.export_model(model_path, export_format="onnx", quantize=True)
+    exported_path = trainer.export_model(
+        model_path, export_format="onnx", quantize=True
+    )
     logger.info(f"Model exported to {exported_path}")
 
     # 7. How to use the trained model with EmbeddingGenerator

@@ -8,7 +8,7 @@ from ..models.query import SearchQuery
 from ..models.results import SearchResult
 from ..utils.retry import RetryConfig
 from .base_mcp import BaseMCPProvider
-from .provider_config import PROVIDER_CONFIGS, DEFAULT_RETRY_CONFIG
+from .provider_config import DEFAULT_RETRY_CONFIG, PROVIDER_CONFIGS
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class GenericMCPProvider(BaseMCPProvider):
             rate_limit_config=rate_limit_config,
             budget_config=budget_config,
         )
-        
+
         # Set retry configuration
         self.RETRY_ENABLED = retry_enabled
         self._retry_config = retry_config
@@ -281,15 +281,15 @@ class GenericMCPProvider(BaseMCPProvider):
 
     def get_retry_config(self) -> RetryConfig:
         """Get retry configuration for this provider.
-        
-        Overrides BaseMCPProvider.get_retry_config to use the 
+
+        Overrides BaseMCPProvider.get_retry_config to use the
         provider-specific configuration.
-        
+
         Returns:
             RetryConfig: Provider-specific retry configuration
         """
         return self._retry_config
-    
+
     def get_capabilities(self) -> dict[str, Any]:
         """Return provider capabilities."""
         # Base capabilities - can be overridden per provider

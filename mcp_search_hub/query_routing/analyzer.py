@@ -1,4 +1,23 @@
-"""Query analyzer for extracting features."""
+"""Query analyzer for extracting features and detecting content types.
+
+This module provides intelligent query analysis to extract features that help
+with provider selection and routing decisions. It analyzes query text to
+determine content type, complexity, time sensitivity, and other characteristics.
+
+The analyzer uses a combination of keyword matching, pattern recognition, and
+heuristics to classify queries and extract meaningful features for the routing
+system.
+
+Example:
+    Basic usage:
+        >>> analyzer = QueryAnalyzer()
+        >>> query = SearchQuery(query="What is machine learning?")
+        >>> features = analyzer.extract_features(query)
+        >>> print(features.content_type)  # 'academic'
+        >>> print(features.complexity)   # 0.7
+"""
+
+from __future__ import annotations
 
 import re
 
@@ -6,17 +25,69 @@ from ..models.query import QueryFeatures, SearchQuery
 
 
 class QueryAnalyzer:
-    """Analyzes search queries to extract features for routing."""
+    """Analyzes search queries to extract features for intelligent routing.
 
-    def __init__(self):
-        """Initialize the analyzer with content type detection data."""
+    The QueryAnalyzer is responsible for understanding query characteristics
+    to enable optimal provider selection and routing decisions. It extracts
+    features such as content type, complexity, time sensitivity, and factual
+    nature from the query text.
+
+    The analyzer uses multiple techniques:
+    - Keyword matching with weighted scores
+    - Regular expression patterns
+    - Heuristic analysis of query structure
+    - Time-sensitive language detection
+
+    Attributes:
+        content_type_data: Dictionary mapping content types to weighted keywords
+        content_type_patterns: Compiled regex patterns for content detection
+
+    Example:
+        >>> analyzer = QueryAnalyzer()
+        >>> query = SearchQuery(query="Latest news about AI developments")
+        >>> features = analyzer.extract_features(query)
+        >>> print(features.content_type)      # 'news'
+        >>> print(features.time_sensitivity)  # 0.9
+    """
+
+    def __init__(self) -> None:
+        """Initialize the analyzer with content type detection data.
+
+        Sets up keyword dictionaries and regex patterns used for analyzing
+        queries and extracting features. The initialization prepares all
+        the data structures needed for efficient query analysis.
+        """
         # Define the content type categories with weights and keywords
         self.content_type_data = self._initialize_content_type_data()
         # Define regex patterns for more complex content type detection
         self.content_type_patterns = self._initialize_content_type_patterns()
 
     def extract_features(self, query: SearchQuery) -> QueryFeatures:
-        """Extract features from a search query."""
+        """Extract comprehensive features from a search query.
+
+        This method analyzes the query text to extract multiple features
+        that are used for provider selection and routing decisions:
+
+        - Basic metrics (length, word count)
+        - Question detection
+        - Content type classification
+        - Time sensitivity scoring
+        - Complexity assessment
+        - Factual nature determination
+
+        Args:
+            query: The search query to analyze
+
+        Returns:
+            QueryFeatures object containing all extracted features
+
+        Example:
+            >>> query = SearchQuery(query="How does quantum computing work?")
+            >>> features = analyzer.extract_features(query)
+            >>> print(features.content_type)    # 'academic'
+            >>> print(features.complexity)      # 0.8
+            >>> print(features.contains_question)  # True
+        """
         text = query.query
 
         # Basic features

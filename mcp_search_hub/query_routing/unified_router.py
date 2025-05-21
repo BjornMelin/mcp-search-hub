@@ -4,17 +4,14 @@ import asyncio
 import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Protocol, Tuple, cast
+from typing import Any
 
 from ..models.base import HealthStatus
 from ..models.component import RouterBase
 from ..models.config import RouterConfig
 from ..models.interfaces import (
-    AsyncExecutable,
-    ErrorBoundary,
     ExecutionStrategyProtocol,
     ProviderScorerProtocol,
-    RouterProtocol,
     SearchProviderProtocol,
 )
 from ..models.query import QueryFeatures, SearchQuery
@@ -44,10 +41,10 @@ class ExecutionStrategy(ABC, ExecutionStrategyProtocol):
         self,
         query: SearchQuery,
         features: QueryFeatures,
-        providers: Dict[str, SearchProviderProtocol],
-        selected_providers: List[str],
+        providers: dict[str, SearchProviderProtocol],
+        selected_providers: list[str],
         timeout_config: TimeoutConfig,
-    ) -> Dict[str, ProviderExecutionResult]:
+    ) -> dict[str, ProviderExecutionResult]:
         """Execute providers according to the strategy."""
 
 
@@ -59,7 +56,7 @@ class ProviderScorer(ProviderScorerProtocol):
         provider_name: str,
         provider: SearchProviderProtocol,
         features: QueryFeatures,
-        metrics: Optional[ProviderPerformanceMetrics] = None,
+        metrics: ProviderPerformanceMetrics | None = None,
     ) -> ProviderScore:
         """Score a provider for given query features."""
 
@@ -75,20 +72,20 @@ class UnifiedRouter(RouterBase[RouterConfig]):
     def __init__(
         self,
         name: str = "unified_router",
-        providers: Optional[Dict[str, SearchProviderProtocol]] = None,
-        config: Optional[RouterConfig] = None,
-        performance_metrics: Optional[Dict[str, ProviderPerformanceMetrics]] = None,
+        providers: dict[str, SearchProviderProtocol] | None = None,
+        config: RouterConfig | None = None,
+        performance_metrics: dict[str, ProviderPerformanceMetrics] | None = None,
     ):
         """Initialize the unified router."""
         # If no config is provided, create a default one
         if config is None:
             config = RouterConfig(name=name)
-            
+
         super().__init__(name, config)
-        
+
         # Set up provider mapping
         self.providers = providers or {}
-        
+
         # Set timeout config from router config
         self.timeout_config = TimeoutConfig(
             base_timeout_ms=config.base_timeout_ms,
@@ -96,40 +93,42 @@ class UnifiedRouter(RouterBase[RouterConfig]):
             max_timeout_ms=config.max_timeout_ms,
             complexity_factor=0.5,  # Default complexity factor
         )
-        
+
         self.performance_metrics = performance_metrics or {}
 
         # Core components
         self.cost_optimizer = CostOptimizer()
         self.scoring_calculator = ScoringCalculator()
-        
+
         # Import here to avoid circular imports
-        from .llm_router import LLMQueryRouter, LLM_ROUTER_ENABLED
-        
+        from .llm_router import LLM_ROUTER_ENABLED, LLMQueryRouter
+
         # Initialize LLM router if enabled
         self.llm_router = None
         if LLM_ROUTER_ENABLED:
             try:
-                self.llm_router = LLMQueryRouter(fallback_scorer=self.scoring_calculator)
+                self.llm_router = LLMQueryRouter(
+                    fallback_scorer=self.scoring_calculator
+                )
                 logger.info("LLM query routing enabled")
             except Exception as e:
                 logger.error(f"Failed to initialize LLM router: {e}")
 
         # Execution strategies
-        self._strategies: Dict[str, ExecutionStrategy] = {
+        self._strategies: dict[str, ExecutionStrategy] = {
             "parallel": ParallelExecutionStrategy(),
             "cascade": CascadeExecutionStrategy(),
         }
 
         # Default scorers
-        self._scorers: List[ProviderScorer] = [self.scoring_calculator]
+        self._scorers: list[ProviderScorer] = [self.scoring_calculator]
         # Add LLM router as a scorer if available
         if self.llm_router:
             self._scorers.append(self.llm_router)
 
         # Circuit breakers for each provider
-        self._circuit_breakers: Dict[str, CircuitBreaker] = {}
-        
+        self._circuit_breakers: dict[str, CircuitBreaker] = {}
+
         # Router metrics
         self.metrics = {
             "total_queries": 0,
@@ -140,7 +139,7 @@ class UnifiedRouter(RouterBase[RouterConfig]):
             "avg_routing_time_ms": 0.0,
             "provider_selection_counts": {},
         }
-        
+
         self.initialized = False
 
     async def initialize(self) -> None:
@@ -160,52 +159,55 @@ class UnifiedRouter(RouterBase[RouterConfig]):
     async def route(
         self,
         query: SearchQuery,
-        providers: Optional[Dict[str, SearchProviderProtocol]] = None,
-    ) -> List[str]:
+        providers: dict[str, SearchProviderProtocol] | None = None,
+    ) -> list[str]:
         """
         Route a query to appropriate providers.
-        
+
         Args:
             query: The search query
             providers: Available providers (uses instance providers if None)
-            
+
         Returns:
             List of provider names to use
         """
         # Use instance providers if none provided
         providers_to_use = providers or self.providers
-        
+
         # Extract features from query
         from .analyzer import QueryAnalyzer
+
         analyzer = QueryAnalyzer()
         features = analyzer.extract_features(query)
-        
+
         # Select providers based on scoring
         routing_decision = self.select_providers(query, features)
-        
+
         # If explicit providers were specified, filter the selection
         if query.providers:
             # Filter but keep order from scoring
-            filtered_providers = [p for p in routing_decision.selected_providers if p in query.providers]
+            filtered_providers = [
+                p for p in routing_decision.selected_providers if p in query.providers
+            ]
             # Add any missing providers that were explicitly requested
             for p in query.providers:
                 if p not in filtered_providers and p in providers_to_use:
                     filtered_providers.append(p)
-            
+
             selected_providers = filtered_providers
             logger.info(f"Using explicitly requested providers: {selected_providers}")
         else:
             selected_providers = routing_decision.selected_providers
-            
+
         return selected_providers
 
     async def route_and_execute(
         self,
         query: SearchQuery,
-        providers: Optional[Dict[str, SearchProviderProtocol]] = None,
-        budget: Optional[float] = None,
-        strategy: Optional[str] = None,
-    ) -> Dict[str, ProviderExecutionResult]:
+        providers: dict[str, SearchProviderProtocol] | None = None,
+        budget: float | None = None,
+        strategy: str | None = None,
+    ) -> dict[str, ProviderExecutionResult]:
         """
         Route query to providers and execute with selected strategy.
 
@@ -220,52 +222,62 @@ class UnifiedRouter(RouterBase[RouterConfig]):
         """
         start_time = time.time()
         providers_to_use = providers or self.providers
-        
+
         # Extract features from query
         from .analyzer import QueryAnalyzer
+
         analyzer = QueryAnalyzer()
         features = analyzer.extract_features(query)
-        
+
         try:
             # Process routing hints if provided
             if query.routing_hints:
                 logger.info(f"Processing routing hints: {query.routing_hints}")
                 from .llm_router import RoutingHintParser
+
                 hint_parser = RoutingHintParser()
                 hint_params = hint_parser.parse_hints(query.routing_hints)
-                
+
                 # Apply hints for provider selection if no explicit providers specified
                 if not query.providers and "preferred_providers" in hint_params:
                     query.providers = hint_params["preferred_providers"]
-                    logger.info(f"Using preferred providers from hints: {query.providers}")
-                
+                    logger.info(
+                        f"Using preferred providers from hints: {query.providers}"
+                    )
+
                 # Apply strategy hint if no explicit strategy specified
                 if strategy is None and "strategy" in hint_params:
                     strategy = hint_params["strategy"]
                     logger.info(f"Using strategy from hints: {strategy}")
-            
+
             # Use routing_strategy from query if provided
             if strategy is None and query.routing_strategy:
                 strategy = query.routing_strategy
-            
+
             # Use explicitly provided budget if available
             if budget is None and query.budget is not None:
                 budget = query.budget
-            
+
             # Select providers based on scoring
             routing_decision = self.select_providers(query, features, budget)
-            
+
             # If explicit providers were specified, filter the selection
             if query.providers:
                 # Filter but keep order from scoring
-                filtered_providers = [p for p in routing_decision.selected_providers if p in query.providers]
+                filtered_providers = [
+                    p
+                    for p in routing_decision.selected_providers
+                    if p in query.providers
+                ]
                 # Add any missing providers that were explicitly requested
                 for p in query.providers:
                     if p not in filtered_providers and p in providers_to_use:
                         filtered_providers.append(p)
-                
+
                 selected_providers = filtered_providers
-                logger.info(f"Using explicitly requested providers: {selected_providers}")
+                logger.info(
+                    f"Using explicitly requested providers: {selected_providers}"
+                )
             else:
                 selected_providers = routing_decision.selected_providers
 
@@ -294,46 +306,45 @@ class UnifiedRouter(RouterBase[RouterConfig]):
 
             # Update circuit breakers based on results
             self._update_circuit_breakers(results)
-            
+
             # Update metrics
             self._update_metrics(selected_providers, results, time.time() - start_time)
 
             return results
-            
+
         except Exception as e:
             # Update error metrics
             self.metrics["error_count"] += 1
             logger.error(f"Router execution failed: {str(e)}")
             raise
-            
+
     def _update_metrics(
-        self, 
-        selected_providers: List[str], 
-        results: Dict[str, ProviderExecutionResult],
-        duration: float
+        self,
+        selected_providers: list[str],
+        results: dict[str, ProviderExecutionResult],
+        duration: float,
     ) -> None:
         """Update router metrics."""
         self.metrics["total_queries"] += 1
-        
+
         # Update provider selection counts
         for provider in selected_providers:
             if provider not in self.metrics["provider_selection_counts"]:
                 self.metrics["provider_selection_counts"][provider] = 0
             self.metrics["provider_selection_counts"][provider] += 1
-            
+
         # Update queries per provider
         for provider_name, result in results.items():
             if provider_name not in self.metrics["queries_per_provider"]:
                 self.metrics["queries_per_provider"][provider_name] = 0
             self.metrics["queries_per_provider"][provider_name] += 1
-            
+
         # Update average providers per query
         total_providers_used = len(self.metrics["provider_selection_counts"])
-        self.metrics["avg_providers_per_query"] = (
-            sum(self.metrics["provider_selection_counts"].values()) / 
-            max(1, self.metrics["total_queries"])
-        )
-        
+        self.metrics["avg_providers_per_query"] = sum(
+            self.metrics["provider_selection_counts"].values()
+        ) / max(1, self.metrics["total_queries"])
+
         # Update success rate
         success_count = sum(1 for r in results.values() if r.success)
         if selected_providers:
@@ -342,23 +353,21 @@ class UnifiedRouter(RouterBase[RouterConfig]):
             prev_rate = self.metrics["success_rate"]
             prev_count = self.metrics["total_queries"] - 1
             self.metrics["success_rate"] = (
-                (prev_rate * prev_count + query_success_rate) / 
-                self.metrics["total_queries"]
-            )
-            
+                prev_rate * prev_count + query_success_rate
+            ) / self.metrics["total_queries"]
+
         # Update avg routing time with moving average
         prev_avg = self.metrics["avg_routing_time_ms"]
         prev_count = self.metrics["total_queries"] - 1
         self.metrics["avg_routing_time_ms"] = (
-            (prev_avg * prev_count + duration * 1000) / 
-            self.metrics["total_queries"]
-        )
+            prev_avg * prev_count + duration * 1000
+        ) / self.metrics["total_queries"]
 
     def select_providers(
         self,
         query: SearchQuery,
         features: QueryFeatures,
-        budget: Optional[float] = None,
+        budget: float | None = None,
         mode: ScoringMode = ScoringMode.AVG,
     ) -> RoutingDecision:
         """Select the best provider(s) for a query using enhanced scoring."""
@@ -428,7 +437,7 @@ class UnifiedRouter(RouterBase[RouterConfig]):
         self,
         query: SearchQuery,
         features: QueryFeatures,
-        providers: List[str],
+        providers: list[str],
     ) -> str:
         """Automatically determine the best execution strategy."""
         # Use cascade for:
@@ -451,7 +460,9 @@ class UnifiedRouter(RouterBase[RouterConfig]):
         # Default to parallel execution
         return "parallel"
 
-    def _update_circuit_breakers(self, results: Dict[str, ProviderExecutionResult]) -> None:
+    def _update_circuit_breakers(
+        self, results: dict[str, ProviderExecutionResult]
+    ) -> None:
         """Update circuit breaker states based on execution results."""
         for provider_name, result in results.items():
             circuit_breaker = self._circuit_breakers.get(provider_name)
@@ -464,9 +475,9 @@ class UnifiedRouter(RouterBase[RouterConfig]):
     def _select_with_budget(
         self,
         query: SearchQuery,
-        provider_scores: List[ProviderScore],
+        provider_scores: list[ProviderScore],
         budget: float,
-    ) -> List[str]:
+    ) -> list[str]:
         """Select providers considering budget constraints."""
         score_dict = {
             score.provider_name: score.weighted_score for score in provider_scores
@@ -476,8 +487,8 @@ class UnifiedRouter(RouterBase[RouterConfig]):
         )
 
     def _select_by_score_threshold(
-        self, provider_scores: List[ProviderScore]
-    ) -> List[str]:
+        self, provider_scores: list[ProviderScore]
+    ) -> list[str]:
         """Select providers based on score threshold and confidence."""
         if not provider_scores:
             return []
@@ -506,8 +517,8 @@ class UnifiedRouter(RouterBase[RouterConfig]):
 
     def _calculate_overall_confidence(
         self,
-        selected_providers: List[str],
-        provider_scores: List[ProviderScore],
+        selected_providers: list[str],
+        provider_scores: list[ProviderScore],
     ) -> float:
         """Calculate overall confidence in the routing decision."""
         if not selected_providers:
@@ -547,7 +558,7 @@ class UnifiedRouter(RouterBase[RouterConfig]):
 
         return sum(confidences) / len(confidences)
 
-    def _calculate_variance(self, values: List[float]) -> float:
+    def _calculate_variance(self, values: list[float]) -> float:
         """Calculate variance of a list of values."""
         if not values:
             return 0.0
@@ -556,9 +567,9 @@ class UnifiedRouter(RouterBase[RouterConfig]):
 
     def _generate_decision_explanation(
         self,
-        selected_providers: List[str],
-        provider_scores: List[ProviderScore],
-        budget: Optional[float],
+        selected_providers: list[str],
+        provider_scores: list[ProviderScore],
+        budget: float | None,
     ) -> str:
         """Generate explanation for the routing decision."""
         parts = [f"Selected {len(selected_providers)} provider(s):"]
@@ -601,7 +612,7 @@ class UnifiedRouter(RouterBase[RouterConfig]):
         """Update performance metrics for a provider."""
         self.performance_metrics[provider_name] = metrics
 
-    def get_provider_ranking(self, features: QueryFeatures) -> List[ProviderScore]:
+    def get_provider_ranking(self, features: QueryFeatures) -> list[ProviderScore]:
         """Get ranking of all providers for given query features."""
         scores = []
 
@@ -611,8 +622,8 @@ class UnifiedRouter(RouterBase[RouterConfig]):
 
         scores.sort(key=lambda x: x.weighted_score, reverse=True)
         return scores
-        
-    def get_metrics(self) -> Dict[str, Any]:
+
+    def get_metrics(self) -> dict[str, Any]:
         """Get current router metrics."""
         # Add some derived metrics
         self.metrics["provider_count"] = len(self.providers)
@@ -623,9 +634,9 @@ class UnifiedRouter(RouterBase[RouterConfig]):
             name: {"open": cb.is_open, "failure_count": cb.failure_count}
             for name, cb in self._circuit_breakers.items()
         }
-        
+
         return self.metrics
-        
+
     def reset_metrics(self) -> None:
         """Reset router metrics."""
         self.metrics = {
@@ -637,24 +648,32 @@ class UnifiedRouter(RouterBase[RouterConfig]):
             "avg_routing_time_ms": 0.0,
             "provider_selection_counts": {},
         }
-        
-    async def check_health(self) -> Tuple[HealthStatus, str]:
+
+    async def check_health(self) -> tuple[HealthStatus, str]:
         """Check health of the router."""
         if not self.initialized:
             return HealthStatus.UNHEALTHY, "Router not initialized"
-            
+
         # Check circuit breakers status
         open_circuits = sum(1 for cb in self._circuit_breakers.values() if cb.is_open)
         total_circuits = len(self._circuit_breakers)
-        
+
         if open_circuits == total_circuits and total_circuits > 0:
-            return HealthStatus.UNHEALTHY, f"All circuit breakers open ({open_circuits}/{total_circuits})"
-        elif open_circuits > 0:
-            return HealthStatus.DEGRADED, f"Some circuit breakers open ({open_circuits}/{total_circuits})"
-            
+            return (
+                HealthStatus.UNHEALTHY,
+                f"All circuit breakers open ({open_circuits}/{total_circuits})",
+            )
+        if open_circuits > 0:
+            return (
+                HealthStatus.DEGRADED,
+                f"Some circuit breakers open ({open_circuits}/{total_circuits})",
+            )
+
         return HealthStatus.HEALTHY, "Router is healthy"
-        
-    async def _do_execute(self, *args: Any, **kwargs: Any) -> Dict[str, ProviderExecutionResult]:
+
+    async def _do_execute(
+        self, *args: Any, **kwargs: Any
+    ) -> dict[str, ProviderExecutionResult]:
         """Execute the router with the given arguments."""
         # Extract query from args or kwargs
         query = None
@@ -664,12 +683,12 @@ class UnifiedRouter(RouterBase[RouterConfig]):
             query = kwargs["query"]
         else:
             raise ValueError("No SearchQuery provided to execute")
-            
+
         # Extract other parameters
         providers = kwargs.get("providers", self.providers)
-        budget = kwargs.get("budget", None)
-        strategy = kwargs.get("strategy", None)
-        
+        budget = kwargs.get("budget")
+        strategy = kwargs.get("strategy")
+
         # Execute routing
         return await self.route_and_execute(query, providers, budget, strategy)
 
@@ -681,10 +700,10 @@ class ParallelExecutionStrategy(ExecutionStrategy):
         self,
         query: SearchQuery,
         features: QueryFeatures,
-        providers: Dict[str, SearchProviderProtocol],
-        selected_providers: List[str],
+        providers: dict[str, SearchProviderProtocol],
+        selected_providers: list[str],
         timeout_config: TimeoutConfig,
-    ) -> Dict[str, ProviderExecutionResult]:
+    ) -> dict[str, ProviderExecutionResult]:
         """Execute all providers in parallel."""
         provider_tasks = {}
         results = {}
@@ -762,7 +781,7 @@ class ParallelExecutionStrategy(ExecutionStrategy):
 class CascadeExecutionStrategy(ExecutionStrategy):
     """Execute providers in cascade with fallback support."""
 
-    def __init__(self, policy: Optional[CascadeExecutionPolicy] = None):
+    def __init__(self, policy: CascadeExecutionPolicy | None = None):
         """Initialize cascade strategy with optional policy."""
         self.policy = policy or CascadeExecutionPolicy()
 
@@ -770,10 +789,10 @@ class CascadeExecutionStrategy(ExecutionStrategy):
         self,
         query: SearchQuery,
         features: QueryFeatures,
-        providers: Dict[str, SearchProviderProtocol],
-        selected_providers: List[str],
+        providers: dict[str, SearchProviderProtocol],
+        selected_providers: list[str],
         timeout_config: TimeoutConfig,
-    ) -> Dict[str, ProviderExecutionResult]:
+    ) -> dict[str, ProviderExecutionResult]:
         """Execute providers in cascade mode."""
         results = {}
         execution_order = selected_providers  # Can be customized based on performance

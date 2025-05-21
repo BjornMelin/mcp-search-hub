@@ -2,12 +2,11 @@
 
 import datetime
 import time
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any
 
 from ..models.base import HealthStatus
 from ..models.component import ResultMergerBase
 from ..models.config import MergerConfig
-from ..models.interfaces import ResultMergerProtocol
 from ..models.results import SearchResponse, SearchResult
 from ..utils.logging import get_logger
 from .deduplication import remove_duplicates
@@ -57,7 +56,7 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
     def __init__(
         self,
         name: str = "result_merger",
-        config: Optional[MergerConfig] = None,
+        config: MergerConfig | None = None,
     ):
         """Initialize the merger with configuration options."""
         # If no config is provided, create a default one
@@ -69,15 +68,15 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
                 credibility_enabled=True,
                 consensus_weight=0.5,
             )
-            
+
         super().__init__(name, config)
-        
+
         # Initialize provider weights
         self.provider_weights = config.provider_weights or self.DEFAULT_WEIGHTS
         self.recency_enabled = config.recency_enabled
         self.credibility_enabled = config.credibility_enabled
         self.max_results = config.max_results
-        
+
         # Merger metrics
         self.metrics = {
             "total_merges": 0,
@@ -87,31 +86,33 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
             "avg_deduplication_ratio": 0.0,
             "last_merge_time": None,
         }
-        
+
         self.initialized = False
 
     async def initialize(self) -> None:
         """Initialize the merger component."""
         await super().initialize()
         self.initialized = True
-        logger.info(f"Initialized ResultMerger component with {len(self.provider_weights)} provider weights")
+        logger.info(
+            f"Initialized ResultMerger component with {len(self.provider_weights)} provider weights"
+        )
 
     async def merge_results(
         self,
-        provider_results: Dict[str, SearchResponse | List[SearchResult]],
-        max_results: Optional[int] = None,
+        provider_results: dict[str, SearchResponse | list[SearchResult]],
+        max_results: int | None = None,
         raw_content: bool = False,
-        use_content_similarity: Optional[bool] = None,
-    ) -> List[SearchResult]:
+        use_content_similarity: bool | None = None,
+    ) -> list[SearchResult]:
         """Merge results from multiple providers into a unified ranked list."""
         start_time = time.time()
-        
+
         if not provider_results:
             return []
-            
+
         if max_results is None:
             max_results = self.config.max_results
-            
+
         if use_content_similarity is None:
             use_content_similarity = self.config.use_content_similarity
 
@@ -124,7 +125,7 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
                 results = response.results
             else:
                 results = response
-                
+
             total_input_results += len(results)
 
             # Ensure source is set and enrich metadata
@@ -149,7 +150,7 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
 
         # Rank the results
         ranked_results = self._rank_results(deduplicated, provider_results)
-        
+
         # Update metrics
         self._update_metrics(
             total_input_results=total_input_results,
@@ -161,7 +162,7 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
         # Return only the requested number
         return ranked_results[:max_results]
 
-    def _merge_raw_content(self, results: List[SearchResult]) -> List[SearchResult]:
+    def _merge_raw_content(self, results: list[SearchResult]) -> list[SearchResult]:
         """Merge results with the same URL, preferring those with raw content."""
         # Group by URL
         url_groups = {}
@@ -191,9 +192,9 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
 
     def _rank_results(
         self,
-        results: List[SearchResult],
-        provider_results: Dict[str, SearchResponse | List[SearchResult]],
-    ) -> List[SearchResult]:
+        results: list[SearchResult],
+        provider_results: dict[str, SearchResponse | list[SearchResult]],
+    ) -> list[SearchResult]:
         """Rank results using provider quality, recency, and other factors."""
         if not results:
             return []
@@ -289,53 +290,50 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
         return sorted(
             results, key=lambda x: x.metadata.get("combined_score", 0.0), reverse=True
         )
-        
+
     def _update_metrics(
-        self, 
-        total_input_results: int, 
-        deduplicated_count: int, 
+        self,
+        total_input_results: int,
+        deduplicated_count: int,
         final_count: int,
-        duration: float
+        duration: float,
     ) -> None:
         """Update merger metrics."""
         self.metrics["total_merges"] += 1
         self.metrics["total_input_results"] += total_input_results
         self.metrics["total_output_results"] += final_count
         self.metrics["last_merge_time"] = time.time()
-        
+
         # Calculate deduplication ratio
         if total_input_results > 0:
             dedup_ratio = 1.0 - (deduplicated_count / total_input_results)
-            
+
             # Update with moving average
             prev_avg = self.metrics.get("avg_deduplication_ratio", 0.0)
             prev_count = self.metrics["total_merges"] - 1
             self.metrics["avg_deduplication_ratio"] = (
-                (prev_avg * prev_count + dedup_ratio) / 
-                self.metrics["total_merges"]
-            )
-            
+                prev_avg * prev_count + dedup_ratio
+            ) / self.metrics["total_merges"]
+
         # Update avg merge time with moving average
         prev_avg = self.metrics.get("avg_merge_time_ms", 0.0)
         prev_count = self.metrics["total_merges"] - 1
         self.metrics["avg_merge_time_ms"] = (
-            (prev_avg * prev_count + duration * 1000) / 
-            self.metrics["total_merges"]
-        )
-        
-    def get_metrics(self) -> Dict[str, Any]:
+            prev_avg * prev_count + duration * 1000
+        ) / self.metrics["total_merges"]
+
+    def get_metrics(self) -> dict[str, Any]:
         """Get merger metrics."""
         metrics = dict(self.metrics)
-        
+
         # Add derived metrics
         if self.metrics["total_merges"] > 0:
             metrics["avg_results_per_merge"] = (
-                self.metrics["total_output_results"] / 
-                self.metrics["total_merges"]
+                self.metrics["total_output_results"] / self.metrics["total_merges"]
             )
-        
+
         return metrics
-        
+
     def reset_metrics(self) -> None:
         """Reset all metrics."""
         self.metrics = {
@@ -346,21 +344,21 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
             "avg_deduplication_ratio": 0.0,
             "last_merge_time": None,
         }
-    
-    async def check_health(self) -> Tuple[HealthStatus, str]:
+
+    async def check_health(self) -> tuple[HealthStatus, str]:
         """Check component health."""
         if not self.initialized:
             return HealthStatus.UNHEALTHY, "ResultMerger not initialized"
-            
+
         return HealthStatus.HEALTHY, "ResultMerger is healthy"
-        
+
     async def process(
         self,
-        provider_results: Dict[str, SearchResponse | List[SearchResult]],
-        max_results: Optional[int] = None,
+        provider_results: dict[str, SearchResponse | list[SearchResult]],
+        max_results: int | None = None,
         raw_content: bool = False,
-        use_content_similarity: Optional[bool] = None,
-    ) -> List[SearchResult]:
+        use_content_similarity: bool | None = None,
+    ) -> list[SearchResult]:
         """Process search results - alias for merge_results."""
         return await self.merge_results(
             provider_results,
@@ -368,8 +366,8 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
             raw_content,
             use_content_similarity,
         )
-        
-    async def _do_execute(self, *args: Any, **kwargs: Any) -> List[SearchResult]:
+
+    async def _do_execute(self, *args: Any, **kwargs: Any) -> list[SearchResult]:
         """Execute the merger with the given arguments."""
         # Extract provider_results from args or kwargs
         provider_results = None
@@ -379,16 +377,15 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
             provider_results = kwargs["provider_results"]
         else:
             raise ValueError("No provider_results provided to execute")
-            
+
         # Extract other parameters
         max_results = kwargs.get("max_results", self.config.max_results)
         raw_content = kwargs.get("raw_content", False)
-        use_content_similarity = kwargs.get("use_content_similarity", self.config.use_content_similarity)
-        
+        use_content_similarity = kwargs.get(
+            "use_content_similarity", self.config.use_content_similarity
+        )
+
         # Execute merger
         return await self.merge_results(
-            provider_results, 
-            max_results, 
-            raw_content, 
-            use_content_similarity
+            provider_results, max_results, raw_content, use_content_similarity
         )

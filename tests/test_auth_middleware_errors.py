@@ -1,9 +1,7 @@
 """Tests for authentication middleware error handling."""
 
 import pytest
-from fastmcp import Context
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from mcp_search_hub.middleware.auth import AuthMiddleware
 from mcp_search_hub.utils.errors import AuthenticationError, http_error_response
@@ -118,10 +116,10 @@ async def test_error_to_http_response():
     """Test converting AuthenticationError to HTTP response."""
     # Create authentication error
     error = AuthenticationError(message="Test authentication error")
-    
+
     # Convert to HTTP response
     response = http_error_response(error)
-    
+
     # Verify response structure
     assert response["error_type"] == "AuthenticationError"
     assert response["message"] == "Test authentication error"

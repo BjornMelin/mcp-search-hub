@@ -6,9 +6,10 @@ import logging
 import os
 import random
 import time
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -27,10 +28,8 @@ class ExperimentVariant(BaseModel):
     weight: float = Field(
         1.0, description="Relative weight for random assignment (0.0-1.0)"
     )
-    config: Dict[str, Any] = Field(
-        ..., description="Configuration for this variant"
-    )
-    metadata: Dict[str, Any] = Field(
+    config: dict[str, Any] = Field(..., description="Configuration for this variant")
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for this variant"
     )
 
@@ -40,15 +39,13 @@ class ExperimentResult(BaseModel):
 
     variant_id: str = Field(..., description="ID of the variant that was tested")
     query: str = Field(..., description="The search query text")
-    response: Optional[SearchResponse] = Field(
+    response: SearchResponse | None = Field(
         None, description="The search response from the variant"
     )
-    metrics: Dict[str, float] = Field(
+    metrics: dict[str, float] = Field(
         default_factory=dict, description="Performance metrics for this variant"
     )
-    error: Optional[str] = Field(
-        None, description="Error message if the variant failed"
-    )
+    error: str | None = Field(None, description="Error message if the variant failed")
     latency_ms: float = Field(..., description="Execution time in milliseconds")
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(), description="When the test was run"
@@ -61,20 +58,16 @@ class Experiment(BaseModel):
     id: str = Field(..., description="Unique identifier for this experiment")
     name: str = Field(..., description="Human-readable name for this experiment")
     description: str = Field("", description="Description of what is being tested")
-    variants: List[ExperimentVariant] = Field(
-        ..., description="Variants to test"
-    )
+    variants: list[ExperimentVariant] = Field(..., description="Variants to test")
     active: bool = Field(True, description="Whether this experiment is active")
-    start_date: Optional[datetime] = Field(
+    start_date: datetime | None = Field(
         None, description="When this experiment started"
     )
-    end_date: Optional[datetime] = Field(
-        None, description="When this experiment will end"
-    )
+    end_date: datetime | None = Field(None, description="When this experiment will end")
     traffic_percentage: float = Field(
         100.0, description="Percentage of traffic to include in the test (0-100)"
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for this experiment"
     )
 
@@ -92,7 +85,7 @@ class ABTestingManager:
 
     def __init__(
         self,
-        storage_dir: Optional[str] = None,
+        storage_dir: str | None = None,
         assignment_strategy: Assignment = Assignment.DETERMINISTIC,
         enable_shadow_testing: bool = True,
     ):
@@ -108,8 +101,8 @@ class ABTestingManager:
         )
         self.assignment_strategy = assignment_strategy
         self.enable_shadow_testing = enable_shadow_testing
-        self.experiments: Dict[str, Experiment] = {}
-        self.results: Dict[str, List[ExperimentResult]] = {}
+        self.experiments: dict[str, Experiment] = {}
+        self.results: dict[str, list[ExperimentResult]] = {}
         self._initialize()
 
     def _initialize(self):
@@ -126,7 +119,7 @@ class ABTestingManager:
         for filename in os.listdir(experiment_path):
             if filename.endswith(".json"):
                 try:
-                    with open(os.path.join(experiment_path, filename), "r") as f:
+                    with open(os.path.join(experiment_path, filename)) as f:
                         experiment_data = json.load(f)
                         experiment = Experiment(**experiment_data)
                         self.experiments[experiment.id] = experiment
@@ -140,9 +133,7 @@ class ABTestingManager:
         os.makedirs(experiment_path, exist_ok=True)
 
         try:
-            with open(
-                os.path.join(experiment_path, f"{experiment.id}.json"), "w"
-            ) as f:
+            with open(os.path.join(experiment_path, f"{experiment.id}.json"), "w") as f:
                 f.write(experiment.model_dump_json(indent=2))
             logger.info(f"Saved experiment: {experiment.id}")
         except Exception as e:
@@ -162,7 +153,7 @@ class ABTestingManager:
                 result_copy = result.model_copy(deep=True)
                 result_copy.response = None
                 f.write(result_copy.model_dump_json(indent=2))
-            
+
             # Add to in-memory results
             if experiment_id not in self.results:
                 self.results[experiment_id] = []
@@ -171,12 +162,12 @@ class ABTestingManager:
             logger.error(f"Error saving result for experiment {experiment_id}: {e}")
 
     def create_experiment(
-        self, 
-        name: str, 
-        variants: List[Dict[str, Any]],
+        self,
+        name: str,
+        variants: list[dict[str, Any]],
         description: str = "",
         traffic_percentage: float = 100.0,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Experiment:
         """Create a new A/B test experiment.
 
@@ -191,8 +182,10 @@ class ABTestingManager:
             The created experiment
         """
         # Generate a unique ID based on name and time
-        experiment_id = f"exp_{hashlib.md5(f'{name}_{time.time()}'.encode()).hexdigest()[:8]}"
-        
+        experiment_id = (
+            f"exp_{hashlib.md5(f'{name}_{time.time()}'.encode()).hexdigest()[:8]}"
+        )
+
         # Create the experiment variants
         experiment_variants = []
         for i, variant_data in enumerate(variants):
@@ -201,7 +194,7 @@ class ABTestingManager:
             variant_weight = variant_data.get("weight", 1.0)
             variant_config = variant_data.get("config", {})
             variant_metadata = variant_data.get("metadata", {})
-            
+
             experiment_variants.append(
                 ExperimentVariant(
                     id=variant_id,
@@ -211,7 +204,7 @@ class ABTestingManager:
                     metadata=variant_metadata,
                 )
             )
-        
+
         # Create the experiment
         experiment = Experiment(
             id=experiment_id,
@@ -224,14 +217,14 @@ class ABTestingManager:
             traffic_percentage=traffic_percentage,
             metadata=metadata or {},
         )
-        
+
         # Save the experiment
         self.experiments[experiment_id] = experiment
         self._save_experiment(experiment)
-        
+
         return experiment
 
-    def get_experiment(self, experiment_id: str) -> Optional[Experiment]:
+    def get_experiment(self, experiment_id: str) -> Experiment | None:
         """Get experiment by ID.
 
         Args:
@@ -242,9 +235,7 @@ class ABTestingManager:
         """
         return self.experiments.get(experiment_id)
 
-    def list_experiments(
-        self, active_only: bool = False
-    ) -> List[Experiment]:
+    def list_experiments(self, active_only: bool = False) -> list[Experiment]:
         """List all experiments.
 
         Args:
@@ -269,7 +260,7 @@ class ABTestingManager:
         experiment = self.get_experiment(experiment_id)
         if not experiment:
             return False
-        
+
         experiment.active = True
         self._save_experiment(experiment)
         return True
@@ -286,17 +277,17 @@ class ABTestingManager:
         experiment = self.get_experiment(experiment_id)
         if not experiment:
             return False
-        
+
         experiment.active = False
         experiment.end_date = datetime.now()
         self._save_experiment(experiment)
         return True
 
     def assign_variant(
-        self, 
-        experiment: Experiment, 
+        self,
+        experiment: Experiment,
         query: SearchQuery,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> ExperimentVariant:
         """Assign a variant based on the assignment strategy.
 
@@ -315,13 +306,13 @@ class ABTestingManager:
             total_weight = sum(weights)
             normalized_weights = [w / total_weight for w in weights]
             return random.choices(experiment.variants, weights=normalized_weights)[0]
-        
-        elif self.assignment_strategy == Assignment.USER_ID and user_id:
+
+        if self.assignment_strategy == Assignment.USER_ID and user_id:
             # Deterministic assignment based on user ID
             hash_val = int(hashlib.md5(user_id.encode()).hexdigest(), 16)
             # Normalize to 0-1 range
-            normalized_val = hash_val / (2 ** 128)
-            
+            normalized_val = hash_val / (2**128)
+
             # Map to a variant based on weights
             cumulative_weight = 0
             total_weight = sum(v.weight for v in experiment.variants)
@@ -329,27 +320,27 @@ class ABTestingManager:
                 cumulative_weight += variant.weight / total_weight
                 if normalized_val < cumulative_weight:
                     return variant
-            
+
             # Fallback to last variant
             return experiment.variants[-1]
-        
-        else:  # Default to deterministic based on query
-            # Deterministic assignment based on query
-            query_hash = hashlib.md5(query.query.encode()).hexdigest()
-            hash_val = int(query_hash, 16)
-            # Normalize to 0-1 range
-            normalized_val = hash_val / (2 ** 128)
-            
-            # Map to a variant based on weights
-            cumulative_weight = 0
-            total_weight = sum(v.weight for v in experiment.variants)
-            for variant in experiment.variants:
-                cumulative_weight += variant.weight / total_weight
-                if normalized_val < cumulative_weight:
-                    return variant
-            
-            # Fallback to last variant
-            return experiment.variants[-1]
+
+        # Default to deterministic based on query
+        # Deterministic assignment based on query
+        query_hash = hashlib.md5(query.query.encode()).hexdigest()
+        hash_val = int(query_hash, 16)
+        # Normalize to 0-1 range
+        normalized_val = hash_val / (2**128)
+
+        # Map to a variant based on weights
+        cumulative_weight = 0
+        total_weight = sum(v.weight for v in experiment.variants)
+        for variant in experiment.variants:
+            cumulative_weight += variant.weight / total_weight
+            if normalized_val < cumulative_weight:
+                return variant
+
+        # Fallback to last variant
+        return experiment.variants[-1]
 
     def should_include_in_experiment(
         self, experiment: Experiment, query: SearchQuery
@@ -366,14 +357,14 @@ class ABTestingManager:
         # Check if experiment is active
         if not experiment.active:
             return False
-        
+
         # Check date range
         now = datetime.now()
         if experiment.start_date and now < experiment.start_date:
             return False
         if experiment.end_date and now > experiment.end_date:
             return False
-        
+
         # Apply traffic percentage
         if experiment.traffic_percentage < 100.0:
             # Generate a consistent hash for the query
@@ -381,19 +372,19 @@ class ABTestingManager:
             hash_val = int(query_hash, 16)
             # Normalize to 0-100 range
             normalized_val = (hash_val % 100) + (hash_val % 100) / 100
-            
+
             # Check if within traffic percentage
             return normalized_val < experiment.traffic_percentage
-        
+
         return True
 
     async def process_query(
         self,
         query: SearchQuery,
         experiment_id: str,
-        execute_fn: Callable[[SearchQuery, Dict[str, Any]], SearchResponse],
-        user_id: Optional[str] = None,
-    ) -> Tuple[SearchResponse, Optional[ExperimentResult]]:
+        execute_fn: Callable[[SearchQuery, dict[str, Any]], SearchResponse],
+        user_id: str | None = None,
+    ) -> tuple[SearchResponse, ExperimentResult | None]:
         """Process a query using the appropriate experiment variant.
 
         Args:
@@ -410,16 +401,16 @@ class ABTestingManager:
             logger.warning(f"Experiment {experiment_id} not found")
             # Execute with default config and return
             return await execute_fn(query, {}), None
-        
+
         # Check if query should be included in experiment
         if not self.should_include_in_experiment(experiment, query):
             # Execute with default variant and return
             default_variant = experiment.variants[0]  # Use first variant as default
             return await execute_fn(query, default_variant.config), None
-        
+
         # Assign variant
         variant = self.assign_variant(experiment, query, user_id)
-        
+
         # Execute the variant
         start_time = time.time()
         try:
@@ -429,10 +420,10 @@ class ABTestingManager:
             logger.error(f"Error executing variant {variant.id}: {e}")
             response = None
             error = str(e)
-        
+
         # Calculate latency
         latency_ms = (time.time() - start_time) * 1000
-        
+
         # Create experiment result
         result = ExperimentResult(
             variant_id=variant.id,
@@ -445,18 +436,18 @@ class ABTestingManager:
             error=error,
             latency_ms=latency_ms,
         )
-        
+
         # Save result
         self._save_result(experiment_id, result)
-        
+
         return response or SearchResponse(results=[]), result
 
     async def run_shadow_test(
         self,
         query: SearchQuery,
         experiment_id: str,
-        execute_fn: Callable[[SearchQuery, Dict[str, Any]], SearchResponse],
-        user_id: Optional[str] = None,
+        execute_fn: Callable[[SearchQuery, dict[str, Any]], SearchResponse],
+        user_id: str | None = None,
     ) -> None:
         """Run a shadow test for an experiment without affecting user results.
 
@@ -468,16 +459,16 @@ class ABTestingManager:
         """
         if not self.enable_shadow_testing:
             return
-        
+
         experiment = self.get_experiment(experiment_id)
         if not experiment:
             logger.warning(f"Experiment {experiment_id} not found for shadow testing")
             return
-        
+
         # Check if query should be included in experiment
         if not self.should_include_in_experiment(experiment, query):
             return
-        
+
         # Run all variants as shadow tests
         for variant in experiment.variants:
             # Execute the variant
@@ -489,10 +480,10 @@ class ABTestingManager:
                 logger.error(f"Error in shadow test for variant {variant.id}: {e}")
                 response = None
                 error = str(e)
-            
+
             # Calculate latency
             latency_ms = (time.time() - start_time) * 1000
-            
+
             # Create experiment result
             result = ExperimentResult(
                 variant_id=variant.id,
@@ -506,13 +497,13 @@ class ABTestingManager:
                 error=error,
                 latency_ms=latency_ms,
             )
-            
+
             # Save result
             self._save_result(experiment_id, result)
 
     def get_results(
         self, experiment_id: str, limit: int = 1000
-    ) -> List[ExperimentResult]:
+    ) -> list[ExperimentResult]:
         """Get results for an experiment.
 
         Args:
@@ -525,9 +516,7 @@ class ABTestingManager:
         results = self.results.get(experiment_id, [])
         return results[-limit:] if limit < len(results) else results
 
-    def analyze_experiment(
-        self, experiment_id: str
-    ) -> Dict[str, Any]:
+    def analyze_experiment(self, experiment_id: str) -> dict[str, Any]:
         """Analyze the results of an experiment.
 
         Args:
@@ -539,40 +528,40 @@ class ABTestingManager:
         experiment = self.get_experiment(experiment_id)
         if not experiment:
             return {"error": f"Experiment {experiment_id} not found"}
-        
+
         results = self.get_results(experiment_id)
         if not results:
             return {"error": f"No results found for experiment {experiment_id}"}
-        
+
         # Group results by variant
         variant_results = {}
         for variant in experiment.variants:
             variant_results[variant.id] = [
                 r for r in results if r.variant_id == variant.id
             ]
-        
+
         # Calculate metrics for each variant
         metrics = {}
         for variant_id, variant_results_list in variant_results.items():
             if not variant_results_list:
                 metrics[variant_id] = {"error": "No results"}
                 continue
-            
+
             # Calculate average latency
             latencies = [r.latency_ms for r in variant_results_list]
             avg_latency = sum(latencies) / len(latencies)
-            
+
             # Calculate result counts
             result_counts = [
                 len(r.response.results) if r.response else 0
                 for r in variant_results_list
             ]
             avg_result_count = sum(result_counts) / len(result_counts)
-            
+
             # Calculate error rate
             error_count = sum(1 for r in variant_results_list if r.error)
             error_rate = error_count / len(variant_results_list)
-            
+
             # Calculate other metrics (can be expanded)
             metrics[variant_id] = {
                 "count": len(variant_results_list),
@@ -584,7 +573,7 @@ class ABTestingManager:
                 "p95_latency_ms": np.percentile(latencies, 95),
                 "p99_latency_ms": np.percentile(latencies, 99),
             }
-        
+
         # Create summary
         summary = {
             "experiment_id": experiment_id,
@@ -595,5 +584,5 @@ class ABTestingManager:
             "end_date": experiment.end_date,
             "active": experiment.active,
         }
-        
+
         return summary

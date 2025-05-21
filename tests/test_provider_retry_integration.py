@@ -33,12 +33,18 @@ class TestProviderRetryIntegration:
             assert issubclass(provider_class, BaseMCPProvider), (
                 f"{provider_class.__name__} should inherit from BaseMCPProvider"
             )
-            
+
             # Create an instance with mocked dependencies to verify method availability
-            with patch(f"mcp_search_hub.providers.{provider_class.__name__.lower()}.GenericMCPProvider"):
+            with patch(
+                f"mcp_search_hub.providers.{provider_class.__name__.lower()}.GenericMCPProvider"
+            ):
                 provider = provider_class(api_key="test_key")
-                assert hasattr(provider, "with_retry"), f"{provider_class.__name__} should have with_retry method"
-                assert hasattr(provider, "get_retry_config"), f"{provider_class.__name__} should have get_retry_config method"
+                assert hasattr(provider, "with_retry"), (
+                    f"{provider_class.__name__} should have with_retry method"
+                )
+                assert hasattr(provider, "get_retry_config"), (
+                    f"{provider_class.__name__} should have get_retry_config method"
+                )
 
 
 class TestBaseMCPProviderRetry:
@@ -48,7 +54,10 @@ class TestBaseMCPProviderRetry:
     async def test_base_search_with_retry(self):
         """Test that search calls are wrapped with retry logic."""
         # Create a provider with mock configuration
-        with patch("mcp_search_hub.providers.generic_mcp.GenericMCPProvider.__init__", return_value=None):
+        with patch(
+            "mcp_search_hub.providers.generic_mcp.GenericMCPProvider.__init__",
+            return_value=None,
+        ):
             provider = LinkupMCPProvider(api_key="test_key")
             provider.name = "test_provider"
             provider.RETRY_ENABLED = True
@@ -60,14 +69,18 @@ class TestBaseMCPProviderRetry:
             # Create a mock decorator that captures the function being decorated
             def mock_with_retry(func):
                 retry_spy(func.__name__)
-                return func  # Just return the original function without actual retry logic
+                return (
+                    func  # Just return the original function without actual retry logic
+                )
 
             provider.with_retry = mock_with_retry
 
             # We need to patch both the superclass search and the provider's search to avoid recursion
-            with patch("mcp_search_hub.providers.base_mcp.BaseMCPProvider.search") as mock_base_search:
+            with patch(
+                "mcp_search_hub.providers.base_mcp.BaseMCPProvider.search"
+            ) as mock_base_search:
                 mock_base_search.return_value = {"results": []}
-                
+
                 # Mock the actual search implementation to return a result
                 with patch("mcp_search_hub.providers.base_mcp.SearchProvider.search"):
                     # Call the search method
@@ -110,7 +123,7 @@ class TestProviderRetryConfigurations:
                     base_delay=2.0,
                     max_delay=30.0,
                     exponential_base=2.5,
-                    jitter=0.2
+                    jitter=0.2,
                 ),
                 "retry_enabled": True,
             }
@@ -118,7 +131,7 @@ class TestProviderRetryConfigurations:
             # Create provider instance with mocked dependencies
             with patch(
                 f"mcp_search_hub.providers.{provider_class.__name__.lower()}.GenericMCPProvider.__init__",
-                return_value=None
+                return_value=None,
             ):
                 provider = provider_class(api_key="test_key")
                 provider._retry_config = RetryConfig(
@@ -126,9 +139,9 @@ class TestProviderRetryConfigurations:
                     base_delay=2.0,
                     max_delay=30.0,
                     exponential_base=2.5,
-                    jitter=0.2
+                    jitter=0.2,
                 )
-                
+
                 # Get retry config
                 retry_config = provider.get_retry_config()
 
@@ -150,22 +163,24 @@ class TestRetryInvocationWithErrors:
         with patch("mcp_search_hub.utils.retry.asyncio.sleep", return_value=None):
             # Create a test provider class that extends BaseMCPProvider
             with patch.multiple(
-                "mcp_search_hub.providers.base_mcp.BaseMCPProvider", 
-                __init__=MagicMock(return_value=None),  # Skip BaseMCPProvider initialization
-                __abstractmethods__=set()  # Allow instantiation of abstract class
+                "mcp_search_hub.providers.base_mcp.BaseMCPProvider",
+                __init__=MagicMock(
+                    return_value=None
+                ),  # Skip BaseMCPProvider initialization
+                __abstractmethods__=set(),  # Allow instantiation of abstract class
             ):
                 # Create a test provider
                 provider = BaseMCPProvider("test_provider")  # type: ignore
                 provider.RETRY_ENABLED = True
-                
+
                 # Set up retry config
                 provider.get_retry_config = lambda: RetryConfig(
                     max_retries=2, base_delay=0.01, jitter=False
                 )
-                
+
                 # Track API call count
                 call_count = 0
-                
+
                 # Mock the API function that would be retried
                 async def api_function(query):
                     nonlocal call_count
@@ -173,13 +188,13 @@ class TestRetryInvocationWithErrors:
                     if call_count <= 2:
                         raise httpx.TimeoutException("API timeout")
                     return {"results": [{"title": query}]}
-                
+
                 # Use the provider's with_retry method
                 retry_function = provider.with_retry(api_function)
-                
+
                 # Call the function with retry
                 result = await retry_function("test query")
-                
+
                 # Verify it was called the expected number of times
                 assert call_count == 3  # Initial + 2 retries
                 assert result == {"results": [{"title": "test query"}]}
@@ -191,22 +206,22 @@ class TestRetryInvocationWithErrors:
         with patch("mcp_search_hub.utils.retry.asyncio.sleep", return_value=None):
             # Create a test provider class that extends BaseMCPProvider
             with patch.multiple(
-                "mcp_search_hub.providers.base_mcp.BaseMCPProvider", 
+                "mcp_search_hub.providers.base_mcp.BaseMCPProvider",
                 __init__=MagicMock(return_value=None),
-                __abstractmethods__=set()
+                __abstractmethods__=set(),
             ):
                 # Create a test provider
                 provider = BaseMCPProvider("test_provider")  # type: ignore
                 provider.RETRY_ENABLED = True
-                
+
                 # Set up retry config
                 provider.get_retry_config = lambda: RetryConfig(
                     max_retries=2, base_delay=0.01, jitter=False
                 )
-                
+
                 # Track API call count
                 call_count = 0
-                
+
                 # Mock the API function that would be retried
                 async def api_function(query):
                     nonlocal call_count
@@ -214,13 +229,13 @@ class TestRetryInvocationWithErrors:
                     if call_count <= 2:
                         raise httpx.ConnectError("Connection refused")
                     return {"results": [{"title": query}]}
-                
+
                 # Use the provider's with_retry method
                 retry_function = provider.with_retry(api_function)
-                
+
                 # Call the function with retry
                 result = await retry_function("test query")
-                
+
                 # Verify it was called the expected number of times
                 assert call_count == 3  # Initial + 2 retries
                 assert result == {"results": [{"title": "test query"}]}
@@ -232,22 +247,22 @@ class TestRetryInvocationWithErrors:
         with patch("mcp_search_hub.utils.retry.asyncio.sleep", return_value=None):
             # Create a test provider class that extends BaseMCPProvider
             with patch.multiple(
-                "mcp_search_hub.providers.base_mcp.BaseMCPProvider", 
+                "mcp_search_hub.providers.base_mcp.BaseMCPProvider",
                 __init__=MagicMock(return_value=None),
-                __abstractmethods__=set()
+                __abstractmethods__=set(),
             ):
                 # Create a test provider
                 provider = BaseMCPProvider("test_provider")  # type: ignore
                 provider.RETRY_ENABLED = True
-                
+
                 # Set up retry config
                 provider.get_retry_config = lambda: RetryConfig(
                     max_retries=2, base_delay=0.01, jitter=False
                 )
-                
+
                 # Track API call count
                 call_count = 0
-                
+
                 # Mock the API function that would be retried
                 async def api_function(query):
                     nonlocal call_count
@@ -261,13 +276,13 @@ class TestRetryInvocationWithErrors:
                             response=response,
                         )
                     return {"results": [{"title": query}]}
-                
+
                 # Use the provider's with_retry method
                 retry_function = provider.with_retry(api_function)
-                
+
                 # Call the function with retry
                 result = await retry_function("test query")
-                
+
                 # Verify it was called the expected number of times
                 assert call_count == 3  # Initial + 2 retries
                 assert result == {"results": [{"title": "test query"}]}
@@ -279,22 +294,22 @@ class TestRetryInvocationWithErrors:
         with patch("mcp_search_hub.utils.retry.asyncio.sleep", return_value=None):
             # Create a test provider class that extends BaseMCPProvider
             with patch.multiple(
-                "mcp_search_hub.providers.base_mcp.BaseMCPProvider", 
+                "mcp_search_hub.providers.base_mcp.BaseMCPProvider",
                 __init__=MagicMock(return_value=None),
-                __abstractmethods__=set()
+                __abstractmethods__=set(),
             ):
                 # Create a test provider
                 provider = BaseMCPProvider("test_provider")  # type: ignore
                 provider.RETRY_ENABLED = True
-                
+
                 # Set up retry config
                 provider.get_retry_config = lambda: RetryConfig(
                     max_retries=2, base_delay=0.01, jitter=False
                 )
-                
+
                 # Track API call count
                 call_count = 0
-                
+
                 # Mock the API function that would be retried
                 async def api_function(query):
                     nonlocal call_count
@@ -304,18 +319,18 @@ class TestRetryInvocationWithErrors:
                         response.status_code = 429
                         response.headers = {"Retry-After": "1"}
                         raise httpx.HTTPStatusError(
-                            "Too Many Requests", 
-                            request=MagicMock(), 
+                            "Too Many Requests",
+                            request=MagicMock(),
                             response=response,
                         )
                     return {"results": [{"title": query}]}
-                
+
                 # Use the provider's with_retry method
                 retry_function = provider.with_retry(api_function)
-                
+
                 # Call the function with retry
                 result = await retry_function("test query")
-                
+
                 # Verify it was called the expected number of times
                 assert call_count == 3  # Initial + 2 retries
                 assert result == {"results": [{"title": "test query"}]}
@@ -327,22 +342,22 @@ class TestRetryInvocationWithErrors:
         with patch("mcp_search_hub.utils.retry.asyncio.sleep", return_value=None):
             # Create a test provider class that extends BaseMCPProvider
             with patch.multiple(
-                "mcp_search_hub.providers.base_mcp.BaseMCPProvider", 
+                "mcp_search_hub.providers.base_mcp.BaseMCPProvider",
                 __init__=MagicMock(return_value=None),
-                __abstractmethods__=set()
+                __abstractmethods__=set(),
             ):
                 # Create a test provider
                 provider = BaseMCPProvider("test_provider")  # type: ignore
                 provider.RETRY_ENABLED = True
-                
+
                 # Set up retry config
                 provider.get_retry_config = lambda: RetryConfig(
                     max_retries=2, base_delay=0.01, jitter=False
                 )
-                
+
                 # Track API call count
                 call_count = 0
-                
+
                 # Mock the API function that would be retried
                 async def api_function(query):
                     nonlocal call_count
@@ -353,14 +368,14 @@ class TestRetryInvocationWithErrors:
                     raise httpx.HTTPStatusError(
                         "Bad Request", request=MagicMock(), response=response
                     )
-                
+
                 # Use the provider's with_retry method
                 retry_function = provider.with_retry(api_function)
-                
+
                 # Call the function with retry
                 with pytest.raises(httpx.HTTPStatusError):
                     await retry_function("test query")
-                
+
                 # Verify it was only called once (no retries)
                 assert call_count == 1
 
@@ -386,7 +401,7 @@ class TestEexaMCPProviderRetry:
                 return {"results": [{"title": "Exa result"}]}
 
             mock_search.side_effect = side_effect
-            
+
             # Set up provider with mocked search method
             mock_provider = MagicMock()
             mock_provider.search = mock_search
@@ -394,11 +409,11 @@ class TestEexaMCPProviderRetry:
 
             # Create provider with the required configuration
             provider = ExaMCPProvider(api_key="test_key")
-            
+
             # Override retry_enabled and config for testing
             provider.RETRY_ENABLED = True
             provider._retry_config = RetryConfig(max_retries=3, base_delay=0.01)
-            
+
             # Ensure with_retry calls the original with our mock
             original_with_retry = BaseMCPProvider.with_retry
             provider.with_retry = lambda f: original_with_retry.__get__(provider)(f)
