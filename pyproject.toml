@@ -9,12 +9,20 @@ description = "FastMCP 2.0 server integrating multiple search providers"
 authors = [{ name = "Bjorn Melin" }]
 requires-python = ">=3.11"
 dependencies = [
-    "fastmcp>=2.3.4",
-    "pydantic>=2.11.0",
+    "fastmcp>=2.3.5",
+    "pydantic>=2.11.4",
     "httpx>=0.28.1",
     "uvicorn>=0.34.2",
     "python-dotenv>=1.1.0",
-    "w3lib>=2.2.1",
+    "mcp>=1.9.0",
+    "w3lib>=2.3.1",
+    "rapidfuzz>=3.13.0",
+    "scikit-learn>=1.6.1",
+    "numpy>=1.24.3",
+    "sentence-transformers>=4.1.0",
+    "torch>=2.0.0",
+    "dateparser>=1.2.1",
+    "redis>=6.1.0",
 ]
 
 [project.scripts]
@@ -26,6 +34,13 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=5.0.0",
     "ruff>=0.8.0",
+]
+
+ml = [
+    "diskcache>=5.6.3",  # For disk-based embedding caching
+    "onnx>=1.15.0",      # For ONNX model export and inference
+    "onnxruntime>=1.17.0",  # For ONNX runtime
+    "openvino>=2023.3.0",   # For OpenVINO inference acceleration
 ]
 
 [tool.setuptools]
