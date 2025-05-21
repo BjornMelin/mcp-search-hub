@@ -1,21 +1,204 @@
 """Duplicate removal with fuzzy matching support."""
 
 import re
+import time
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from rapidfuzz import fuzz
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from w3lib.url import canonicalize_url
 
+from ..models.base import HealthStatus
+from ..models.component import ResultProcessorBase
+from ..models.config import ResultProcessorConfig
+from ..models.interfaces import ResultProcessorProtocol
 from ..models.results import SearchResult
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class DuplicateRemover(ResultProcessorBase[ResultProcessorConfig]):
+    """Component for removing duplicate search results."""
+    
+    def __init__(
+        self,
+        name: str = "deduplicator",
+        config: Optional[ResultProcessorConfig] = None,
+    ):
+        """Initialize the duplicate remover."""
+        # If no config is provided, create a default one
+        if config is None:
+            config = ResultProcessorConfig(
+                name=name,
+                fuzzy_url_threshold=92.0,
+                content_similarity_threshold=0.85,
+                use_content_similarity=True,
+            )
+            
+        super().__init__(name, config)
+        
+        # Initialize metrics
+        self.metrics = {
+            "total_deduplication_runs": 0,
+            "total_input_results": 0,
+            "total_output_results": 0,
+            "avg_deduplication_ratio": 0.0,
+            "avg_processing_time_ms": 0.0,
+            "last_run_time": None,
+        }
+        
+        self.initialized = False
+        
+    async def initialize(self) -> None:
+        """Initialize the deduplicator component."""
+        await super().initialize()
+        self.initialized = True
+        logger.info(f"Initialized DuplicateRemover component")
+    
+    def process_results(
+        self,
+        results: List[SearchResult],
+        fuzzy_url_threshold: Optional[float] = None,
+        content_similarity_threshold: Optional[float] = None,
+        use_content_similarity: Optional[bool] = None,
+    ) -> List[SearchResult]:
+        """
+        Process search results to remove duplicates.
+        
+        Args:
+            results: List of search results to deduplicate
+            fuzzy_url_threshold: Threshold for fuzzy URL matching (0-100)
+            content_similarity_threshold: Threshold for content similarity (0.0-1.0)
+            use_content_similarity: Whether to use content similarity for deduplication
+            
+        Returns:
+            Deduplicated search results
+        """
+        start_time = time.time()
+        
+        # Use defaults from config if not specified
+        if fuzzy_url_threshold is None:
+            fuzzy_url_threshold = self.config.fuzzy_url_threshold
+            
+        if content_similarity_threshold is None:
+            content_similarity_threshold = self.config.content_similarity_threshold
+            
+        if use_content_similarity is None:
+            use_content_similarity = self.config.use_content_similarity
+            
+        # Perform deduplication
+        output_results = remove_duplicates(
+            results=results,
+            fuzzy_url_threshold=fuzzy_url_threshold,
+            content_similarity_threshold=content_similarity_threshold,
+            use_content_similarity=use_content_similarity,
+        )
+        
+        # Update metrics
+        self._update_metrics(
+            input_count=len(results),
+            output_count=len(output_results),
+            duration=time.time() - start_time,
+        )
+        
+        return output_results
+    
+    def _update_metrics(
+        self,
+        input_count: int,
+        output_count: int,
+        duration: float,
+    ) -> None:
+        """Update component metrics."""
+        self.metrics["total_deduplication_runs"] += 1
+        self.metrics["total_input_results"] += input_count
+        self.metrics["total_output_results"] += output_count
+        self.metrics["last_run_time"] = time.time()
+        
+        # Calculate deduplication ratio
+        if input_count > 0:
+            dedup_ratio = 1.0 - (output_count / input_count)
+            
+            # Update with moving average
+            prev_avg = self.metrics.get("avg_deduplication_ratio", 0.0)
+            prev_count = self.metrics["total_deduplication_runs"] - 1
+            self.metrics["avg_deduplication_ratio"] = (
+                (prev_avg * prev_count + dedup_ratio) / 
+                self.metrics["total_deduplication_runs"]
+            )
+            
+        # Update avg processing time with moving average
+        prev_avg = self.metrics.get("avg_processing_time_ms", 0.0)
+        prev_count = self.metrics["total_deduplication_runs"] - 1
+        self.metrics["avg_processing_time_ms"] = (
+            (prev_avg * prev_count + duration * 1000) / 
+            self.metrics["total_deduplication_runs"]
+        )
+        
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get component metrics."""
+        metrics = dict(self.metrics)
+        
+        # Add derived metrics
+        if self.metrics["total_deduplication_runs"] > 0:
+            metrics["avg_removed_per_run"] = (
+                (self.metrics["total_input_results"] - self.metrics["total_output_results"]) / 
+                self.metrics["total_deduplication_runs"]
+            )
+            
+        return metrics
+        
+    def reset_metrics(self) -> None:
+        """Reset all metrics."""
+        self.metrics = {
+            "total_deduplication_runs": 0,
+            "total_input_results": 0,
+            "total_output_results": 0,
+            "avg_deduplication_ratio": 0.0,
+            "avg_processing_time_ms": 0.0,
+            "last_run_time": None,
+        }
+        
+    async def check_health(self) -> Tuple[HealthStatus, str]:
+        """Check component health."""
+        if not self.initialized:
+            return HealthStatus.UNHEALTHY, "DuplicateRemover not initialized"
+            
+        return HealthStatus.HEALTHY, "DuplicateRemover is healthy"
+        
+    async def _do_execute(self, *args: Any, **kwargs: Any) -> List[SearchResult]:
+        """Execute the processor with the given arguments."""
+        # Extract results from args or kwargs
+        results = None
+        if args and isinstance(args[0], list):
+            results = args[0]
+        elif "results" in kwargs:
+            results = kwargs["results"]
+        else:
+            raise ValueError("No results provided to execute")
+            
+        # Extract other parameters
+        fuzzy_url_threshold = kwargs.get("fuzzy_url_threshold", self.config.fuzzy_url_threshold)
+        content_similarity_threshold = kwargs.get("content_similarity_threshold", self.config.content_similarity_threshold)
+        use_content_similarity = kwargs.get("use_content_similarity", self.config.use_content_similarity)
+        
+        # Process results
+        return self.process_results(
+            results, 
+            fuzzy_url_threshold, 
+            content_similarity_threshold, 
+            use_content_similarity
+        )
 
 
 def remove_duplicates(
-    results: list[SearchResult],
+    results: List[SearchResult],
     fuzzy_url_threshold: float = 92.0,
     content_similarity_threshold: float = 0.85,
     use_content_similarity: bool = True,
-) -> list[SearchResult]:
+) -> List[SearchResult]:
     """Remove duplicate results based on URL and content similarity."""
     if not results:
         return []
@@ -120,11 +303,11 @@ def _merge_metadata(target: SearchResult, source: SearchResult) -> None:
 
 
 def _apply_fuzzy_matching(
-    results: list[SearchResult],
+    results: List[SearchResult],
     threshold: float = 92.0,
     use_content_similarity: bool = True,
     content_threshold: float = 0.85,
-) -> list[SearchResult]:
+) -> List[SearchResult]:
     """Apply fuzzy matching to find near-duplicates."""
     # Sort by score to prioritize higher-scored results
     sorted_results = sorted(results, key=lambda x: x.score, reverse=True)
@@ -193,8 +376,9 @@ def _apply_fuzzy_matching(
                     final_indices.add(i)
 
             return [kept_results[i] for i in final_indices]
-        except Exception:
+        except Exception as e:
             # If vectorization fails, just return the URL-deduplicated results
+            logger.warning(f"Content similarity check failed: {e}")
             pass
 
     # Return URL-deduplicated results

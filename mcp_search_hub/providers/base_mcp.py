@@ -20,7 +20,17 @@ from mcp.client.stdio import stdio_client
 from ..models.base import HealthStatus
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
-from ..utils.errors import ProviderError
+from ..utils.errors import (
+    NetworkConnectionError,
+    NetworkTimeoutError,
+    ProviderAuthenticationError,
+    ProviderError,
+    ProviderInitializationError,
+    ProviderQuotaExceededError,
+    ProviderRateLimitError,
+    ProviderServiceError,
+    ProviderTimeoutError,
+)
 from .base import SearchProvider
 from .budget_tracker import BudgetConfig, budget_tracker_manager
 from .rate_limiter import RateLimitConfig, rate_limiter_manager
@@ -126,7 +136,11 @@ class BaseMCPProvider(SearchProvider):
             self.api_key = None
 
         if not self.api_key:
-            raise ValueError(f"{self.name} API key is required")
+            raise ProviderAuthenticationError(
+                provider=self.name,
+                message=f"{self.name} API key is required",
+                details={"env_var": env_var_name}
+            )
 
     def _get_default_command(self) -> str:
         """Get the default command based on server type."""
@@ -134,7 +148,11 @@ class BaseMCPProvider(SearchProvider):
             return "npx"
         if self.server_type == ServerType.PYTHON:
             return sys.executable
-        raise ValueError(f"Unsupported server type: {self.server_type}")
+        raise ProviderInitializationError(
+            provider=self.name,
+            message=f"Unsupported server type: {self.server_type}",
+            details={"component": "server_type", "server_type": str(self.server_type)}
+        )
 
     async def initialize(self) -> None:
         """Initialize the connection to the MCP server."""
@@ -149,7 +167,11 @@ class BaseMCPProvider(SearchProvider):
                 # Verify installation was successful
                 is_installed = await self._check_installation()
                 if not is_installed:
-                    raise ProviderError(f"Failed to install {self.name} MCP server")
+                    raise ProviderInitializationError(
+                        provider=self.name,
+                        message=f"Failed to install {self.name} MCP server",
+                        details={"component": "installation"}
+                    )
 
             # Connect to the server
             logger.info(f"Connecting to {self.name} MCP server...")
@@ -162,23 +184,63 @@ class BaseMCPProvider(SearchProvider):
             # Verify tools are available
             tools = await self.session.list_tools()
             if not tools:
-                raise ProviderError(f"No tools available from {self.name} MCP server")
+                raise ProviderInitializationError(
+                    provider=self.name,
+                    message=f"No tools available from {self.name} MCP server",
+                    details={"component": "tools"}
+                )
 
             tool_names = [tool.name for tool in tools]
             if self.tool_name not in tool_names:
-                raise ProviderError(
-                    f"Required tool '{self.tool_name}' not available in {self.name} MCP server. "
-                    f"Available tools: {', '.join(tool_names)}"
+                raise ProviderInitializationError(
+                    provider=self.name,
+                    message=f"Required tool '{self.tool_name}' not available in {self.name} MCP server",
+                    details={
+                        "component": "tools",
+                        "required_tool": self.tool_name,
+                        "available_tools": tool_names
+                    }
                 )
 
             logger.info(f"Successfully connected to {self.name} MCP server")
+
+        except ProviderError:
+            # If it's already a ProviderError, just cleanup and re-raise
+            logger.error(f"Provider error while initializing {self.name} MCP server")
+            # Cleanup any partial initialization
+            await self._cleanup()
+            raise
 
         except Exception as e:
             logger.error(f"Error initializing {self.name} MCP server: {str(e)}")
             # Cleanup any partial initialization
             await self._cleanup()
-            raise ProviderError(
-                f"Failed to initialize {self.name} MCP server: {str(e)}"
+
+            # Map common exceptions to specific provider errors
+            if isinstance(e, ConnectionError | subprocess.SubprocessError):
+                raise NetworkConnectionError(
+                    message=f"Failed to connect to {self.name} MCP server: {str(e)}",
+                    original_error=e,
+                    details={"provider": self.name}
+                )
+            if isinstance(e, TimeoutError):
+                raise NetworkTimeoutError(
+                    message=f"Connection to {self.name} MCP server timed out",
+                    timeout=self.INSTALLATION_CHECK_TIMEOUT,
+                    original_error=e,
+                    details={"provider": self.name}
+                )
+            if "auth" in str(e).lower() or "unauthorized" in str(e).lower() or "api key" in str(e).lower():
+                raise ProviderAuthenticationError(
+                    provider=self.name,
+                    message=f"Authentication failed for {self.name} MCP server: {str(e)}",
+                    original_error=e
+                )
+            # Generic provider initialization error for unhandled cases
+            raise ProviderInitializationError.from_exception(
+                e,
+                provider=self.name,
+                message=f"Failed to initialize {self.name} MCP server"
             )
 
     async def _check_installation(self) -> bool:
@@ -228,8 +290,10 @@ class BaseMCPProvider(SearchProvider):
         if self.server_type == ServerType.NODE_JS:
             package_name = self.args[0] if self.args else None
             if not package_name:
-                raise ProviderError(
-                    f"Cannot install {self.name}: no package name specified"
+                raise ProviderInitializationError(
+                    provider=self.name,
+                    message=f"Cannot install {self.name}: no package name specified",
+                    details={"component": "installation", "server_type": "nodejs"}
                 )
 
             cmd = ["npm", "install", "-g", package_name]
@@ -237,15 +301,19 @@ class BaseMCPProvider(SearchProvider):
         elif self.server_type == ServerType.PYTHON:
             module_name = self.args[1] if len(self.args) > 1 else None
             if not module_name:
-                raise ProviderError(
-                    f"Cannot install {self.name}: no module name specified"
+                raise ProviderInitializationError(
+                    provider=self.name,
+                    message=f"Cannot install {self.name}: no module name specified",
+                    details={"component": "installation", "server_type": "python"}
                 )
 
             cmd = [sys.executable, "-m", "pip", "install", module_name]
 
         else:
-            raise ProviderError(
-                f"Cannot install {self.name}: unsupported server type {self.server_type}"
+            raise ProviderInitializationError(
+                provider=self.name,
+                message=f"Cannot install {self.name}: unsupported server type {self.server_type}",
+                details={"component": "installation", "server_type": str(self.server_type)}
             )
 
         logger.info(f"Installing {self.name} MCP server: {' '.join(cmd)}")
@@ -259,8 +327,15 @@ class BaseMCPProvider(SearchProvider):
 
         if process.returncode != 0:
             error_msg = stderr.decode() if stderr else "Unknown installation error"
-            raise ProviderError(
-                f"Failed to install {self.name} MCP server: {error_msg}"
+            raise ProviderInitializationError(
+                provider=self.name,
+                message=f"Failed to install {self.name} MCP server",
+                details={
+                    "component": "installation",
+                    "error_message": error_msg,
+                    "returncode": process.returncode,
+                    "command": " ".join(cmd)
+                }
             )
 
         logger.info(f"Successfully installed {self.name} MCP server")
@@ -283,17 +358,32 @@ class BaseMCPProvider(SearchProvider):
 
         Returns:
             SearchResponse: The search results
+
+        Raises:
+            ProviderInitializationError: If the provider is not initialized
+            ProviderRateLimitError: If provider rate limits are exceeded
+            QueryBudgetExceededError: If query would exceed budget constraints
+            ProviderQuotaExceededError: If provider budget is exceeded
+            ProviderTimeoutError: If the search operation times out
+            ProviderError: For other provider-specific errors
         """
         if not self.session:
-            await self.initialize()
+            try:
+                await self.initialize()
+            except ProviderError as e:
+                # Convert to SearchResponse with error
+                return SearchResponse(
+                    results=[],
+                    query=query.query,
+                    total_results=0,
+                    provider=self.name,
+                    error=str(e),
+                )
 
         if not self.session:
-            return SearchResponse(
-                results=[],
-                query=query.query,
-                total_results=0,
+            raise ProviderInitializationError(
                 provider=self.name,
-                error=f"Failed to initialize {self.name} MCP server",
+                message=f"Failed to initialize {self.name} MCP server"
             )
 
         # Generate a unique request ID for tracking
@@ -302,12 +392,12 @@ class BaseMCPProvider(SearchProvider):
         # Check rate limits
         rate_limited = not await self.rate_limiter.wait_if_limited(request_id)
         if rate_limited:
-            return SearchResponse(
-                results=[],
-                query=query.query,
-                total_results=0,
+            cooldown = self.rate_limiter.get_cooldown_remaining()
+            raise ProviderRateLimitError(
                 provider=self.name,
-                error=f"Rate limit exceeded for {self.name} provider",
+                limit_type="requests_per_minute",
+                retry_after=cooldown,
+                details=self.rate_limiter.get_current_usage()
             )
 
         # Estimate cost
@@ -317,12 +407,16 @@ class BaseMCPProvider(SearchProvider):
         if query.budget is not None and estimated_cost > Decimal(str(query.budget)):
             # Release the rate limit token
             await self.rate_limiter.release(request_id)
-            return SearchResponse(
-                results=[],
+
+            from ..utils.errors import QueryBudgetExceededError
+            raise QueryBudgetExceededError(
                 query=query.query,
-                total_results=0,
-                provider=self.name,
-                error=f"Estimated cost {estimated_cost} exceeds budget {query.budget}",
+                budget=float(query.budget),
+                estimated_cost=float(estimated_cost),
+                details={
+                    "provider": self.name,
+                    "query_components": len(query.query.split())
+                }
             )
 
         # Check provider-level budget
@@ -330,12 +424,17 @@ class BaseMCPProvider(SearchProvider):
         if budget_exceeded:
             # Release the rate limit token
             await self.rate_limiter.release(request_id)
-            return SearchResponse(
-                results=[],
-                query=query.query,
-                total_results=0,
+
+            budget_info = self.budget_tracker.get_remaining_budget()
+            quota_type = "daily" if budget_info["daily_remaining"] <= 0 else "monthly"
+
+            raise ProviderQuotaExceededError(
                 provider=self.name,
-                error=f"Provider budget exceeded for {self.name}",
+                quota_type=quota_type,
+                details={
+                    "budget_info": budget_info,
+                    "estimated_cost": float(estimated_cost)
+                }
             )
 
         start_time = asyncio.get_event_loop().time()
@@ -382,14 +481,22 @@ class BaseMCPProvider(SearchProvider):
             await self.rate_limiter.release(request_id)
 
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
-            return SearchResponse(
-                results=[],
-                query=query.query,
-                total_results=0,
+
+            # Raise a proper ProviderTimeoutError
+            raise ProviderTimeoutError(
                 provider=self.name,
-                error=f"Search timed out after {query.timeout_ms}ms",
-                timing_ms=execution_time,
+                operation="search",
+                timeout=query.timeout_ms / 1000,
+                details={
+                    "query": query.query,
+                    "execution_time_ms": execution_time
+                }
             )
+
+        except ProviderError:
+            # If it's already a ProviderError, just release the token and re-raise
+            await self.rate_limiter.release(request_id)
+            raise
 
         except Exception as e:
             # Release the rate limit token
@@ -397,13 +504,23 @@ class BaseMCPProvider(SearchProvider):
 
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
             logger.error(f"Error executing {self.name} search: {str(e)}")
-            return SearchResponse(
-                results=[],
-                query=query.query,
-                total_results=0,
+
+            # Map common exceptions to specific provider errors
+            if isinstance(e, ConnectionError | subprocess.SubprocessError):
+                raise NetworkConnectionError(
+                    message=f"Failed to connect to {self.name} MCP server during search: {str(e)}",
+                    url=self.name,
+                    original_error=e,
+                    details={"provider": self.name, "query": query.query}
+                )
+            # Create a generic provider service error for other exceptions
+            raise ProviderServiceError.from_exception(
+                e,
                 provider=self.name,
-                error=f"Search failed: {str(e)}",
-                timing_ms=execution_time,
+                details={
+                    "query": query.query,
+                    "execution_time_ms": execution_time
+                }
             )
 
     def _calculate_actual_cost(
@@ -514,6 +631,10 @@ class BaseMCPProvider(SearchProvider):
         if not self.session:
             try:
                 await self.initialize()
+            except ProviderError as e:
+                # Use the specific error message but keep it classified by error type
+                error_type = e.__class__.__name__
+                return HealthStatus.FAILED, f"{error_type}: {str(e)}"
             except Exception as e:
                 return HealthStatus.FAILED, f"Failed to initialize: {str(e)}"
 
@@ -540,9 +661,10 @@ class BaseMCPProvider(SearchProvider):
 
             # Check rate limit status
             if self.rate_limiter.is_in_cooldown():
+                cooldown = self.rate_limiter.get_cooldown_remaining()
                 return (
                     HealthStatus.DEGRADED,
-                    f"{self.name} is rate limited and in cooldown",
+                    f"{self.name} is rate limited and in cooldown for {cooldown:.1f}s",
                 )
 
             # Check budget status
@@ -556,7 +678,13 @@ class BaseMCPProvider(SearchProvider):
             return HealthStatus.OK, f"{self.name} MCP server is operational"
 
         except TimeoutError:
-            return HealthStatus.DEGRADED, "Health check timed out"
+            return HealthStatus.DEGRADED, f"Health check timed out after {self.HEALTH_CHECK_TIMEOUT}s"
+
+        except ProviderError as e:
+            # Use the specific error message but keep it classified by error type
+            error_type = e.__class__.__name__
+            logger.error(f"{error_type} checking {self.name} MCP server status: {str(e)}")
+            return HealthStatus.FAILED, f"Health check failed: {error_type}: {str(e)}"
 
         except Exception as e:
             logger.error(f"Error checking {self.name} MCP server status: {str(e)}")

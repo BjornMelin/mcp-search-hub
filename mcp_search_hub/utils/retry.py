@@ -10,7 +10,14 @@ from typing import Any, TypeVar, cast
 
 import httpx
 
-from ..utils.errors import ProviderTimeoutError, SearchError
+from ..utils.errors import (
+    NetworkConnectionError,
+    NetworkTimeoutError,
+    ProviderRateLimitError,
+    ProviderServiceError,
+    ProviderTimeoutError,
+    SearchError,
+)
 from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -37,6 +44,8 @@ RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ConnectionError,
     TimeoutError,
     ProviderTimeoutError,
+    NetworkConnectionError,
+    NetworkTimeoutError,
 )
 
 
@@ -103,10 +112,31 @@ def is_retryable_exception(exc: Exception) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code in RETRYABLE_STATUS_CODES
 
-    # Check if it's a search error that might be retryable
+    # Check for specific provider error types that are retryable
+    if isinstance(exc, ProviderTimeoutError):
+        return True
+
+    # Rate limits are retryable
+    if isinstance(exc, ProviderRateLimitError):
+        return True
+
+    # Network errors are generally retryable
+    if isinstance(exc, NetworkConnectionError | NetworkTimeoutError):
+        return True
+
+    # Service errors can be retryable if they're temporary
+    if isinstance(exc, ProviderServiceError):
+        # Check the status code if available
+        if hasattr(exc, 'status_code') and exc.status_code in RETRYABLE_STATUS_CODES:
+            return True
+        # Check for temporary indicators in message
+        if any(keyword in str(exc).lower() for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"]):
+            return True
+
+    # For general SearchErrors, be more cautious
     if isinstance(exc, SearchError):
         # Only retry if it's a temporary error
-        return "temporary" in str(exc).lower() or "timeout" in str(exc).lower()
+        return any(keyword in str(exc).lower() for keyword in ["temporary", "timeout", "retry", "overloaded", "busy"])
 
     return False
 
@@ -123,8 +153,43 @@ def format_exception_for_log(exc: Exception) -> str:
     exception_type = type(exc).__name__
     exception_details = str(exc)
 
+    # Handle SearchError and subclasses with detailed formatting
+    if isinstance(exc, SearchError):
+        details_str = ""
+
+        # Add provider information if available
+        if hasattr(exc, 'provider') and exc.provider:
+            details_str += f" [Provider: {exc.provider}]"
+
+        # Add status code if available
+        if hasattr(exc, 'status_code'):
+            details_str += f" [Status: {exc.status_code}]"
+
+        # Add operation information for timeout errors
+        if isinstance(exc, ProviderTimeoutError) and hasattr(exc, 'details'):
+            if 'operation' in exc.details:
+                details_str += f" [Operation: {exc.details['operation']}]"
+            if 'timeout_seconds' in exc.details:
+                details_str += f" [Timeout: {exc.details['timeout_seconds']}s]"
+
+        # Add rate limit information
+        if isinstance(exc, ProviderRateLimitError) and hasattr(exc, 'details'):
+            if 'limit_type' in exc.details:
+                details_str += f" [Limit: {exc.details['limit_type']}]"
+            if 'retry_after_seconds' in exc.details:
+                details_str += f" [Retry-After: {exc.details['retry_after_seconds']}s]"
+
+        # If we have details, include them
+        if details_str:
+            exception_details = f"{exception_details}{details_str}"
+
+        # Include original error type if wrapped
+        if hasattr(exc, 'original_error') and exc.original_error:
+            orig_type = type(exc.original_error).__name__
+            exception_details = f"{exception_details} (Original: {orig_type}: {str(exc.original_error)})"
+
     # Add HTTP status code if available
-    if isinstance(exc, httpx.HTTPStatusError):
+    elif isinstance(exc, httpx.HTTPStatusError):
         status_code = exc.response.status_code
         reason = exc.response.reason_phrase
         exception_details = f"HTTP {status_code} {reason}: {exception_details}"

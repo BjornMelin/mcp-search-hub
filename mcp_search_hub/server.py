@@ -386,11 +386,42 @@ class SearchServer:
 
                     # Use the provider's invoke_tool method
                     return await provider.invoke_tool(original_tool_name, tool_params)
+                    
                 except Exception as e:
-                    ctx.error(
-                        f"Error invoking {provider_name} tool {original_tool_name}: {e}"
+                    # Convert to appropriate provider error if needed
+                    from .utils.errors import (
+                        ProviderError, 
+                        ProviderTimeoutError, 
+                        ProviderRateLimitError,
+                        ProviderServiceError
                     )
-                    raise
+                    
+                    if not isinstance(e, ProviderError):
+                        # Wrap in appropriate provider error
+                        if "time" in str(e).lower() or "timeout" in str(e).lower():
+                            error = ProviderTimeoutError(
+                                provider=provider_name,
+                                operation=original_tool_name,
+                                original_error=e
+                            )
+                        elif "rate" in str(e).lower() or "limit" in str(e).lower():
+                            error = ProviderRateLimitError(
+                                provider=provider_name,
+                                original_error=e
+                            )
+                        else:
+                            error = ProviderServiceError(
+                                provider=provider_name,
+                                message=f"Error invoking {provider_name} tool {original_tool_name}",
+                                original_error=e
+                            )
+                        
+                        ctx.error(f"{error.__class__.__name__}: {str(error)}")
+                        raise error
+                    else:
+                        # Pass through provider errors
+                        ctx.error(f"{e.__class__.__name__}: {str(e)}")
+                        raise
 
             # Process through middleware
             return await self.middleware_manager.process_tool_request(
@@ -431,15 +462,28 @@ class SearchServer:
                 return JSONResponse(content=response.model_dump(mode="json"))
 
             except Exception as e:
-                import traceback
-
-                return JSONResponse(
-                    content={
-                        "error": str(e),
-                        "trace": traceback.format_exc(),
-                    },
-                    status_code=500,
-                )
+                from .utils.errors import SearchError, http_error_response
+                
+                if isinstance(e, SearchError):
+                    # Use the appropriate status code and error format
+                    error_response = http_error_response(e)
+                    return JSONResponse(
+                        content=error_response,
+                        status_code=e.status_code,
+                    )
+                else:
+                    # Generic error handling
+                    import traceback
+                    logger.error(f"Unhandled error in search_combined: {str(e)}")
+                    
+                    return JSONResponse(
+                        content=http_error_response(
+                            e,
+                            status_code=500,
+                            trace=traceback.format_exc() if self.settings.debug else None,
+                        ),
+                        status_code=500,
+                    )
 
         @app.get("/health")
         async def health_check(request: Request) -> JSONResponse:
