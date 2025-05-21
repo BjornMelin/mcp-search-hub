@@ -12,11 +12,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .config import get_settings
-from .middleware.auth import AuthMiddleware
-from .middleware.base import MiddlewareManager
-from .middleware.logging import LoggingMiddleware
-from .middleware.rate_limit import RateLimitMiddleware
-from .middleware.retry import RetryMiddleware
+from .middleware import (
+    AuthMiddleware,
+    ErrorHandlerMiddleware,
+    LoggingMiddleware,
+    MiddlewareManager,
+    RateLimitMiddleware,
+    RetryMiddleware,
+)
 from .models.base import HealthResponse, HealthStatus, MetricsResponse, ProviderStatus
 from .models.query import SearchQuery
 from .models.results import CombinedSearchResponse, SearchResponse
@@ -122,8 +125,19 @@ class SearchServer:
     def _setup_middleware(self):
         """Set up and configure middleware components."""
         middleware_config = self.settings.middleware
+        
+        # Add error handler middleware (runs first - lowest order value)
+        if middleware_config.error_handler.enabled:
+            self.middleware_manager.add_middleware(
+                ErrorHandlerMiddleware,
+                enabled=middleware_config.error_handler.enabled,
+                order=middleware_config.error_handler.order,
+                include_traceback=middleware_config.error_handler.include_traceback,
+                redact_sensitive_data=middleware_config.error_handler.redact_sensitive_data,
+            )
+            logger.info("Error handler middleware initialized")
 
-        # Add logging middleware (runs first)
+        # Add logging middleware
         if middleware_config.logging.enabled:
             self.middleware_manager.add_middleware(
                 LoggingMiddleware,
