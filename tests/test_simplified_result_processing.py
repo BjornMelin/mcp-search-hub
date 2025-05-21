@@ -1,21 +1,15 @@
 """Tests for simplified result processing system."""
 
 import datetime
-import re
-from urllib.parse import urlparse
 
-import pytest
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-from mcp_search_hub.models.results import SearchResponse, SearchResult
+from mcp_search_hub.models.results import SearchResult
 from mcp_search_hub.result_processing.deduplication import (
     _apply_fuzzy_matching,
     _normalize_url,
     remove_duplicates,
 )
-from mcp_search_hub.result_processing.metadata_enrichment import enrich_result_metadata
 from mcp_search_hub.result_processing.merger import ResultMerger
+from mcp_search_hub.result_processing.metadata_enrichment import enrich_result_metadata
 
 
 class TestDeduplication:
@@ -35,7 +29,10 @@ class TestDeduplication:
             ("https://app.example.com/page", "app.example.com/page"),
             # Remove tracking parameters
             ("https://example.com/page?utm_source=google", "example.com/page"),
-            ("https://example.com/page?id=123&utm_source=google", "example.com/page?id=123"),
+            (
+                "https://example.com/page?id=123&utm_source=google",
+                "example.com/page?id=123",
+            ),
             # Remove URL fragments
             ("https://example.com/page#section", "example.com/page"),
             # Remove trailing slashes
@@ -94,7 +91,6 @@ class TestDeduplication:
                 score=0.85,
                 metadata={"published_date": "2023-05-15"},
             ),
-
             # Group 2: Unique result
             SearchResult(
                 title="Unique Result",
@@ -107,7 +103,7 @@ class TestDeduplication:
 
         deduplicated = remove_duplicates(results)
         assert len(deduplicated) == 2  # Should have 2 unique results
-        
+
         # Check metadata was merged from the duplicate
         result = [r for r in deduplicated if r.url == "https://example.com/article"][0]
         assert result.score == 0.95  # Kept the higher score
@@ -126,26 +122,27 @@ class TestMetadataEnrichment:
             snippet="Published May 15, 2023. This comprehensive guide covers Python.",
             source="provider1",
             score=0.9,
-            raw_content="# Python Programming Guide 2023\n\n" + " ".join(["word"] * 500),
+            raw_content="# Python Programming Guide 2023\n\n"
+            + " ".join(["word"] * 500),
         )
-        
+
         # Apply enrichment
         enrich_result_metadata(result)
-        
+
         # Verify domain extraction
         assert "source_domain" in result.metadata
         assert result.metadata["source_domain"] == "python-tips.org"
         assert "organization" in result.metadata
-        
+
         # The test date might not be detected with the simplified pattern
         # We're only checking for basic organization and content metrics
-        
+
         # Verify content metrics
         assert "word_count" in result.metadata
         assert result.metadata["word_count"] > 450  # Should count ~500 words
         assert "reading_time" in result.metadata
         assert result.metadata["reading_time"] >= 2  # ~2-3 minutes at 225 wpm
-        
+
         # Verify citation generation
         assert "citation" in result.metadata
         assert "Python Programming Guide" in result.metadata["citation"]
@@ -158,10 +155,10 @@ class TestResultMerger:
     def test_result_ranking(self):
         """Test ranking with multiple factors."""
         merger = ResultMerger()
-        
+
         # Get current date for testing
         today = datetime.datetime.now().date()
-        
+
         # Create test results with different characteristics
         results = [
             # Result from good provider, recent
@@ -184,27 +181,29 @@ class TestResultMerger:
                 source="linkup",  # Top provider
                 score=0.9,
                 metadata={
-                    "published_date": (today - datetime.timedelta(days=100)).isoformat(),
+                    "published_date": (
+                        today - datetime.timedelta(days=100)
+                    ).isoformat(),
                     "source_domain": "example.com",
                 },
             ),
         ]
-        
+
         # Create provider results dictionary
         provider_results = {
-            "exa": [results[0]], 
+            "exa": [results[0]],
             "linkup": [results[1]],
         }
-        
+
         # Rank the results
         ranked = merger._rank_results(results, provider_results)
-        
+
         # Verify scoring factors are present
         for result in ranked:
             assert "combined_score" in result.metadata
             assert "provider_weight" in result.metadata
             assert "consensus_boost" in result.metadata
-        
+
         # Recent result from good provider with high credibility should rank higher
         # despite the top provider having a higher base weight
         assert ranked[0].url == "https://nih.gov/recent"
@@ -214,7 +213,7 @@ class TestResultMerger:
     def test_merge_results(self):
         """Test the complete merger pipeline."""
         merger = ResultMerger()
-        
+
         # Create results from different providers
         provider1_results = [
             SearchResult(
@@ -234,7 +233,7 @@ class TestResultMerger:
                 metadata={"author": "John Smith"},
             ),
         ]
-        
+
         provider2_results = [
             SearchResult(
                 title="Provider 2 Result",
@@ -252,19 +251,19 @@ class TestResultMerger:
                 metadata={"published_date": "2023-05-10"},
             ),
         ]
-        
+
         # Create provider results dictionary
         provider_results = {
             "linkup": provider1_results,
             "exa": provider2_results,
         }
-        
+
         # Run merger pipeline
         merged = merger.merge_results(provider_results, max_results=3)
-        
+
         # Should have at least 2 unique results (deduplication combines duplicates)
         assert len(merged) >= 2
-        
+
         # Duplicate should be merged with metadata from both sources
         duplicate = [r for r in merged if r.url == "https://example.com/duplicate"]
         assert len(duplicate) == 1

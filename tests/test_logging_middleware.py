@@ -285,9 +285,7 @@ class TestLoggingMiddleware:
             tool_request = {"tool_name": "test_tool"}
             tool_response = {"status": "success", "data": {"result": "test"}}
 
-            await middleware.process_response(
-                tool_response, tool_request, mock_context
-            )
+            await middleware.process_response(tool_response, tool_request, mock_context)
 
             # Check logger was called
             assert mock_logger.info.called
@@ -347,9 +345,7 @@ class TestLoggingMiddleware:
             circular_ref = {}
             circular_ref["self"] = circular_ref
 
-            await middleware.process_response(
-                circular_ref, tool_request, mock_context
-            )
+            await middleware.process_response(circular_ref, tool_request, mock_context)
 
             # Check logger was called
             assert mock_logger.info.called

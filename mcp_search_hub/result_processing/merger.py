@@ -1,7 +1,6 @@
 """Result merger and ranking functions."""
 
 import datetime
-from typing import Dict, List, Optional, Union
 
 from ..models.results import SearchResponse, SearchResult
 from .deduplication import remove_duplicates
@@ -48,7 +47,7 @@ class ResultMerger:
 
     def __init__(
         self,
-        provider_weights: Optional[Dict[str, float]] = None,
+        provider_weights: dict[str, float] | None = None,
         recency_enabled: bool = True,
         credibility_enabled: bool = True,
     ):
@@ -59,11 +58,11 @@ class ResultMerger:
 
     def merge_results(
         self,
-        provider_results: Dict[str, Union[SearchResponse, List[SearchResult]]],
+        provider_results: dict[str, SearchResponse | list[SearchResult]],
         max_results: int = 10,
         raw_content: bool = False,
         use_content_similarity: bool = True,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Merge results from multiple providers into a unified ranked list."""
         if not provider_results:
             return []
@@ -101,7 +100,7 @@ class ResultMerger:
         # Return only the requested number
         return ranked_results[:max_results]
 
-    def _merge_raw_content(self, results: List[SearchResult]) -> List[SearchResult]:
+    def _merge_raw_content(self, results: list[SearchResult]) -> list[SearchResult]:
         """Merge results with the same URL, preferring those with raw content."""
         # Group by URL
         url_groups = {}
@@ -131,9 +130,9 @@ class ResultMerger:
 
     def _rank_results(
         self,
-        results: List[SearchResult],
-        provider_results: Dict[str, Union[SearchResponse, List[SearchResult]]],
-    ) -> List[SearchResult]:
+        results: list[SearchResult],
+        provider_results: dict[str, SearchResponse | list[SearchResult]],
+    ) -> list[SearchResult]:
         """Rank results using provider quality, recency, and other factors."""
         if not results:
             return []

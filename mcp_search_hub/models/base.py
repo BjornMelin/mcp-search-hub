@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HealthStatus(str, Enum):
@@ -21,6 +21,14 @@ class ProviderStatus(BaseModel):
     health: HealthStatus
     status: bool
     message: str | None = None
+    rate_limited: bool = Field(
+        False, description="Whether the provider is rate limited"
+    )
+    budget_exceeded: bool = Field(
+        False, description="Whether the provider's budget is exceeded"
+    )
+    rate_limits: dict | None = Field(None, description="Rate limit information")
+    budget: dict | None = Field(None, description="Budget information")
 
 
 class HealthResponse(BaseModel):
@@ -51,3 +59,14 @@ class ErrorResponse(BaseModel):
     message: str
     status_code: int
     details: dict[str, Any] | None = None
+
+
+class UsageStatsResponse(BaseModel):
+    """Usage statistics response."""
+
+    provider_stats: dict[str, dict[str, Any]]
+    rate_limited_providers: list[str] = []
+    budget_exceeded_providers: list[str] = []
+    total_daily_cost: float = 0.0
+    total_monthly_cost: float = 0.0
+    total_remaining_budget: float = 0.0

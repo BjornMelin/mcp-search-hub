@@ -1,7 +1,5 @@
 """Tests for enhanced deduplication functionality."""
 
-import pytest
-
 from mcp_search_hub.models.results import SearchResult
 from mcp_search_hub.result_processing.deduplication import (
     _content_based_deduplication,
@@ -118,11 +116,13 @@ def test_fuzzy_url_deduplication():
     # Test with high threshold (should keep more results)
     high_threshold_results = _fuzzy_url_deduplication(results, threshold=95.0)
     assert len(high_threshold_results) == 2  # Original + Different
-    
+
     # Test with lower threshold (should remove more duplicates)
     low_threshold_results = _fuzzy_url_deduplication(results, threshold=80.0)
-    assert len(low_threshold_results) == 2  # Only keep highest score of similar group + Different
-    
+    assert (
+        len(low_threshold_results) == 2
+    )  # Only keep highest score of similar group + Different
+
     # Verify we're keeping the highest scored result
     urls = [r.url for r in low_threshold_results]
     assert "https://example.com/article" in urls
@@ -159,13 +159,15 @@ def test_content_based_deduplication():
     # Test with high threshold (should keep more results)
     high_threshold_results = _content_based_deduplication(results, threshold=0.95)
     assert len(high_threshold_results) == 3  # Should keep all
-    
+
     # Test with lower threshold (should merge similar content)
     low_threshold_results = _content_based_deduplication(results, threshold=0.75)
     assert len(low_threshold_results) == 2  # Should merge the Python guides
-    
+
     # Verify we're keeping the highest scored of similar content
-    assert any(r.url == "https://example.com/python-guide" for r in low_threshold_results)
+    assert any(
+        r.url == "https://example.com/python-guide" for r in low_threshold_results
+    )
     assert any(r.url == "https://example.com/javascript" for r in low_threshold_results)
 
 
@@ -188,7 +190,6 @@ def test_remove_duplicates_full_pipeline():
             source="provider2",
             score=0.85,
         ),
-        
         # Group 2: Different URLs, similar content
         SearchResult(
             title="Python Tutorial",
@@ -204,7 +205,6 @@ def test_remove_duplicates_full_pipeline():
             source="provider3",
             score=0.92,
         ),
-        
         # Group 3: Unique result
         SearchResult(
             title="JavaScript Basics",
@@ -214,7 +214,7 @@ def test_remove_duplicates_full_pipeline():
             score=0.88,
         ),
     ]
-    
+
     # Test the complete pipeline
     deduplicated = remove_duplicates(
         results,
@@ -222,24 +222,24 @@ def test_remove_duplicates_full_pipeline():
         content_similarity_threshold=0.95,  # Use higher threshold to match expected behavior
         use_content_similarity=True,
     )
-    
+
     # Should have at least 3 results (including highest scored ones)
     # Note: With current thresholds, may not deduplicate content-only similar items
     assert len(deduplicated) >= 3
-    
+
     # Check that we preserved the highest-scoring results from each group
     urls = [r.url for r in deduplicated]
     assert "https://example.com/article" in urls  # Group 1
     assert "https://site2.com/python-guide" in urls  # Group 2 (higher score)
     assert "https://javascript.info/basics" in urls  # Group 3
-    
+
     # Test without content similarity
     url_only_dedup = remove_duplicates(
         results,
         fuzzy_url_threshold=90.0,
         use_content_similarity=False,
     )
-    
+
     # Should only deduplicate URL-similar results, not content-similar ones
     assert len(url_only_dedup) == 4
 
@@ -265,13 +265,13 @@ def test_metadata_preservation():
             metadata={"published_date": "2023-05-15"},
         ),
     ]
-    
+
     # Apply deduplication
     deduplicated = remove_duplicates(results)
-    
+
     # Should keep only one result (the higher-scored one)
     assert len(deduplicated) == 1
-    
+
     # Check that metadata from both results was merged
     result = deduplicated[0]
     assert result.score == 0.95  # Kept the higher-scored result

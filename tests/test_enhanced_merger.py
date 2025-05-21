@@ -1,9 +1,6 @@
 """Tests for enhanced result merger functionality."""
 
 import datetime
-from typing import Dict, List
-
-import pytest
 
 from mcp_search_hub.models.results import SearchResponse, SearchResult
 from mcp_search_hub.result_processing.merger import ResultMerger
@@ -12,7 +9,7 @@ from mcp_search_hub.result_processing.merger import ResultMerger
 def test_extract_metadata():
     """Test the metadata extraction functionality."""
     merger = ResultMerger()
-    
+
     # Create a test result with minimal metadata
     result = SearchResult(
         title="Article from March 15, 2023",
@@ -21,18 +18,18 @@ def test_extract_metadata():
         source="provider1",
         score=0.9,
     )
-    
+
     # Extract metadata
     merger._extract_metadata(result)
-    
+
     # Check domain extraction
     assert result.metadata.get("source_domain") == "example.com"
-    
+
     # Check date extraction
     assert "published_date" in result.metadata
     extracted_date = result.metadata["published_date"]
     assert "2023-03-15" in extracted_date
-    
+
     # Check credibility scoring
     assert "credibility_score" in result.metadata
     assert result.metadata["credibility_score"] == 0.7  # Default score
@@ -41,7 +38,7 @@ def test_extract_metadata():
 def test_credibility_scoring():
     """Test the credibility scoring with various domains."""
     merger = ResultMerger()
-    
+
     # Create results with different domains
     results = [
         # Tier 1: Academic/government
@@ -84,11 +81,11 @@ def test_credibility_scoring():
             score=0.9,
         ),
     ]
-    
+
     # Extract metadata for all results
     for result in results:
         merger._extract_metadata(result)
-    
+
     # Verify credibility scores
     assert results[0].metadata["credibility_score"] == 1.0  # .edu domain
     assert results[1].metadata["credibility_score"] == 1.0  # nih.gov domain
@@ -101,10 +98,10 @@ def test_recency_boosting():
     """Test that recency boosting is correctly applied to results with dates."""
     # Create a merger with recency enabled
     merger = ResultMerger(recency_enabled=True)
-    
+
     # Get current date for relative calculations
     today = datetime.datetime.now().date()
-    
+
     # Create results with different dates
     results = [
         # Very recent (within 7 days)
@@ -152,19 +149,19 @@ def test_recency_boosting():
             },
         ),
     ]
-    
+
     # Create a mock provider result for the rank_results method
     provider_results = {"provider1": results}
-    
+
     # Rank the results
     ranked = merger._rank_results(results, provider_results)
-    
+
     # Check that recency boosts were applied
     assert ranked[0].metadata.get("recency_boost") == 1.3  # Very recent
     assert ranked[1].metadata.get("recency_boost") == 1.15  # Recent
     assert ranked[2].metadata.get("recency_boost") == 1.05  # Somewhat recent
     assert "recency_boost" not in ranked[3].metadata  # Old (no boost)
-    
+
     # Verify order
     assert ranked[0].title == "Very Recent"
     assert ranked[1].title == "Recent"
@@ -176,7 +173,7 @@ def test_consensus_boosting():
     """Test that consensus boosting works for results from multiple providers."""
     # Create a merger
     merger = ResultMerger()
-    
+
     # Create results that appear in multiple providers
     common_result = SearchResult(
         title="Common Result",
@@ -185,7 +182,7 @@ def test_consensus_boosting():
         source="provider1",
         score=0.9,
     )
-    
+
     common_result_variant = SearchResult(
         title="Common Result Variant",
         url="https://example.com/common",  # Same URL, different title/source
@@ -193,7 +190,7 @@ def test_consensus_boosting():
         source="provider2",
         score=0.85,
     )
-    
+
     unique_result = SearchResult(
         title="Unique Result",
         url="https://example.com/unique",
@@ -201,26 +198,34 @@ def test_consensus_boosting():
         source="provider1",
         score=0.9,
     )
-    
+
     # Create provider results dictionary
     provider_results = {
         "provider1": [common_result, unique_result],
         "provider2": [common_result_variant],
-        "provider3": []  # Empty provider to test edge cases
+        "provider3": [],  # Empty provider to test edge cases
     }
-    
+
     # Collect all results for ranking
     all_results = [common_result, common_result_variant, unique_result]
-    
+
     # Rank the results
     ranked = merger._rank_results(all_results, provider_results)
-    
+
     # Check consensus factors and boosts
-    assert ranked[0].metadata["consensus_factor"] == 2/3  # Appears in 2 of 3 providers
+    assert (
+        ranked[0].metadata["consensus_factor"] == 2 / 3
+    )  # Appears in 2 of 3 providers
     assert ranked[0].metadata["consensus_boost"] > 1.0  # Should get a boost
-    assert ranked[2].metadata["consensus_factor"] == 1/3  # Appears in 1 of 3 providers
-    assert ranked[2].metadata["consensus_boost"] > 1.0 and ranked[2].metadata["consensus_boost"] < ranked[0].metadata["consensus_boost"]
-    
+    assert (
+        ranked[2].metadata["consensus_factor"] == 1 / 3
+    )  # Appears in 1 of 3 providers
+    assert (
+        ranked[2].metadata["consensus_boost"] > 1.0
+        and ranked[2].metadata["consensus_boost"]
+        < ranked[0].metadata["consensus_boost"]
+    )
+
     # Verify that common result ranks higher than unique, despite same score
     assert ranked[0].url == "https://example.com/common"
 
@@ -232,10 +237,10 @@ def test_combined_ranking_factors():
         recency_enabled=True,
         credibility_enabled=True,
     )
-    
+
     # Get current date for relative calculations
     today = datetime.datetime.now().date()
-    
+
     # Create diverse results to test various factors together
     results = [
         # Result with high credibility, recent, from good provider
@@ -275,7 +280,7 @@ def test_combined_ranking_factors():
             },
         ),
     ]
-    
+
     # Create a mock provider result for the rank_results method
     # Ensure each result appears in only its provider
     provider_results = {
@@ -283,7 +288,7 @@ def test_combined_ranking_factors():
         "linkup": [results[1]],
         "firecrawl": [results[2]],
     }
-    
+
     # Add duplicate result to simulate consensus (appears in 2 providers)
     consensus_result = SearchResult(
         title="Consensus Result",
@@ -304,40 +309,42 @@ def test_combined_ranking_factors():
         score=0.85,
     )
     results.append(consensus_variant)
-    
+
     # Update provider results to include consensus result
     provider_results["linkup"].append(consensus_result)
     provider_results["exa"].append(consensus_variant)
-    
+
     # Extract metadata for all results
     for result in results:
         merger._extract_metadata(result)
-    
+
     # Rank the results
     ranked = merger._rank_results(results, provider_results)
-    
+
     # Print scores for debugging (these are stored in metadata)
     scores = [(r.title, r.metadata.get("combined_score")) for r in ranked]
-    
+
     # Verify that all ranking factors are present in the metadata
     for result in ranked:
         assert "provider_weight" in result.metadata
         assert "consensus_factor" in result.metadata
         assert "consensus_boost" in result.metadata
         assert "combined_score" in result.metadata
-        
+
         # Check domain and credibility
         assert "source_domain" in result.metadata
-        
+
         # Check factors that might not be present in all results
         if "nih.gov" in result.url:
             assert result.metadata.get("credibility_score") == 1.0
-            
+
         if "days_old" in result.metadata and result.metadata["days_old"] <= 7:
             assert "recency_boost" in result.metadata
-    
+
     # Check that there's at least one result with consensus boost
-    boosted_results = [r for r in ranked if r.metadata.get("consensus_boost", 1.0) > 1.0]
+    boosted_results = [
+        r for r in ranked if r.metadata.get("consensus_boost", 1.0) > 1.0
+    ]
     assert len(boosted_results) > 0
 
 
@@ -348,10 +355,10 @@ def test_merge_results_complete_pipeline():
         recency_enabled=True,
         credibility_enabled=True,
     )
-    
+
     # Get current date for relative calculations
     today = datetime.datetime.now().date()
-    
+
     # Create provider results
     provider1_results = [
         SearchResult(
@@ -387,7 +394,7 @@ def test_merge_results_complete_pipeline():
             },
         ),
     ]
-    
+
     provider2_results = [
         SearchResult(
             title="Provider 2 Result C",
@@ -421,18 +428,18 @@ def test_merge_results_complete_pipeline():
             },
         ),
     ]
-    
+
     # Create provider results dictionary with different formats
     provider_results = {
         "linkup": SearchResponse(
             results=provider1_results,
             provider="linkup",
             query="test query",
-            total_results=len(provider1_results)
+            total_results=len(provider1_results),
         ),
         "exa": provider2_results,
     }
-    
+
     # Run complete pipeline
     merged_results = merger.merge_results(
         provider_results,
@@ -440,23 +447,23 @@ def test_merge_results_complete_pipeline():
         raw_content=True,
         use_content_similarity=True,
     )
-    
+
     # Verify results
     # Different content similarity thresholds may result in different numbers of results
     # but we should at least have the most important ones
     assert len(merged_results) >= 3  # At minimum the top results should be present
-    
+
     # Check that duplicate was properly merged
     duplicate = [r for r in merged_results if r.url == "https://example.com/duplicate"]
     assert len(duplicate) == 1
-    
+
     # Check that some metadata was merged
     dup_result = duplicate[0]
     assert dup_result.raw_content == "Raw content from provider 1"
     assert dup_result.metadata.get("author") == "John Doe"
     # Note: word_count will be recalculated based on the raw content
     assert "word_count" in dup_result.metadata
-    
+
     # Check that similar content was deduplicated if threshold was appropriate
     all_urls = [r.url for r in merged_results]
     if "https://other-domain.com/similar" not in all_urls:
