@@ -26,6 +26,14 @@ class SearchQuery(BaseModel):
     raw_content: bool = Field(
         False, description="Whether to include raw content in search results"
     )
+    routing_strategy: str | None = Field(
+        None,
+        description="Execution strategy: 'parallel' (faster) or 'cascade' (more reliable)",
+    )
+    routing_hints: str | None = Field(
+        None,
+        description="Natural language guidance for routing decisions (e.g., 'prioritize recent news')",
+    )
 
 
 class QueryFeatures(BaseModel):
