@@ -212,9 +212,19 @@ class RetryMiddlewareConfig(BaseModel):
     skip_paths: list[str] = ["/health", "/metrics"]
 
 
+class ErrorHandlerMiddlewareConfig(BaseModel):
+    """Configuration for error handler middleware."""
+
+    enabled: bool = True
+    order: int = 0  # Should run first to catch all errors
+    include_traceback: bool = False
+    redact_sensitive_data: bool = True
+
+
 class MiddlewareConfig(BaseModel):
     """Configuration for middleware components."""
 
+    error_handler: ErrorHandlerMiddlewareConfig = ErrorHandlerMiddlewareConfig()  # Error handler
     logging: LoggingMiddlewareConfig = LoggingMiddlewareConfig()  # Logging middleware
     auth: AuthMiddlewareConfig = AuthMiddlewareConfig()  # Auth middleware
     rate_limit: RateLimitMiddlewareConfig = (

@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from ..utils.errors import ConfigurationError, SearchError
 from ..utils.logging import get_logger
 
 # Type definitions
@@ -103,6 +104,10 @@ class BaseMiddleware(abc.ABC):
 
         Returns:
             The response from downstream
+
+        Raises:
+            SearchError: If a standardized error occurs during processing
+            Exception: If any other exception occurs
         """
         if not self.enabled:
             return await call_next(request)
@@ -117,8 +122,18 @@ class BaseMiddleware(abc.ABC):
             # Process response (post-processing)
             return await self.process_response(response, request, context)
         except Exception as e:
-            self.logger.error(f"Error in middleware {self.name}: {str(e)}")
-            raise  # Re-raise for error handling middleware to catch
+            # Log with appropriate level based on error type            
+            if isinstance(e, SearchError):
+                log_method = self.logger.warning
+                if e.status_code >= 500:
+                    log_method = self.logger.error
+            else:
+                log_method = self.logger.error
+                
+            log_method(f"Error in middleware {self.name}: {str(e)}", exc_info=True)
+            
+            # Re-raise for error handling middleware to catch
+            raise
 
 
 class MiddlewareManager:
@@ -140,11 +155,23 @@ class MiddlewareManager:
         Args:
             middleware_class: Middleware class to instantiate
             **options: Options to pass to the middleware constructor
+            
+        Raises:
+            ConfigurationError: If there's an issue with middleware configuration
         """
-        middleware = middleware_class(**options)
-        self.middlewares.append(middleware)
-        # Re-sort middleware by order
-        self.middlewares.sort(key=lambda m: m.order)
+        try:
+            middleware = middleware_class(**options)
+            self.middlewares.append(middleware)
+            # Re-sort middleware by order
+            self.middlewares.sort(key=lambda m: m.order)
+            logger.info(f"Added middleware {middleware_class.__name__} with order {middleware.order}")
+        except Exception as e:
+            # Convert initialization error to configuration error for consistency
+            raise ConfigurationError(
+                message=f"Failed to initialize middleware {middleware_class.__name__}: {str(e)}",
+                details={"options": str(options)},
+                original_error=e
+            )
 
     def add_http_middleware(
         self, middleware_class: type[BaseHTTPMiddleware], **options
