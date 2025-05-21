@@ -9,10 +9,18 @@ Most high-priority tasks for the initial MVP release have been completed. We sti
 ### 1. Code Quality Improvements (Critical for MVP) ⭐⭐⭐
 
 - [ ] Apply consistent architectural patterns across all modules
-  - [ ] Review provider modules for pattern consistency
+  - [x] Review provider modules for pattern consistency
+    - [x] Standardize retry logic in provider modules
+    - [x] Document architectural patterns in consistent-architectural-patterns.md
   - [ ] Ensure uniform error handling approaches
   - [ ] Standardize configuration loading patterns
   - [ ] Align initialization sequences across components
+  
+- [x] Ensure proper use of Pydantic 2.0 across the codebase
+  - [x] Audit all model definitions for Pydantic 2.0 compatibility
+  - [x] Update validation patterns to use Pydantic 2.0 features
+  - [x] Standardize model configuration and field definitions
+  - [x] Review serialization/deserialization patterns
   
 - [x] Standardize error handling and exception patterns
   - [x] Create custom exception hierarchy in utils/errors.py

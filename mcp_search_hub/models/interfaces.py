@@ -7,7 +7,13 @@ consistent interfaces.
 """
 
 from abc import abstractmethod
-from typing import Any, AsyncIterator, Awaitable, Dict, List, Optional, Protocol, Tuple, TypeVar, runtime_checkable
+from collections.abc import AsyncIterator
+from typing import (
+    Any,
+    Protocol,
+    TypeVar,
+    runtime_checkable,
+)
 
 from .base import HealthStatus
 from .config import ComponentConfig
@@ -18,7 +24,7 @@ from .results import SearchResponse, SearchResult
 T = TypeVar("T")
 ConfigT = TypeVar("ConfigT", bound="ComponentConfig")
 ResultT = TypeVar("ResultT")
-MetricsT = TypeVar("MetricsT", bound=Dict[str, Any])
+MetricsT = TypeVar("MetricsT", bound=dict[str, Any])
 
 
 @runtime_checkable
@@ -46,7 +52,7 @@ class HealthCheck(Protocol):
     """Health checking protocol for components."""
 
     @abstractmethod
-    async def check_health(self) -> Tuple[HealthStatus, str]:
+    async def check_health(self) -> tuple[HealthStatus, str]:
         """
         Check the health status of the component.
 
@@ -131,7 +137,9 @@ class AsyncExecutable(Protocol[T]):
         ...
 
     @abstractmethod
-    async def execute_with_timeout(self, timeout_ms: int, *args: Any, **kwargs: Any) -> T:
+    async def execute_with_timeout(
+        self, timeout_ms: int, *args: Any, **kwargs: Any
+    ) -> T:
         """
         Execute with a specific timeout.
 
@@ -164,7 +172,7 @@ class ErrorBoundary(Protocol):
     """Protocol for components with standardized error handling."""
 
     @abstractmethod
-    def handle_error(self, error: Exception) -> Tuple[bool, str]:
+    def handle_error(self, error: Exception) -> tuple[bool, str]:
         """
         Handle an error that occurred during component operation.
 
@@ -192,6 +200,7 @@ class ErrorBoundary(Protocol):
 
 # Provider-specific interfaces
 
+
 @runtime_checkable
 class SearchProviderProtocol(
     ServiceLifecycle,
@@ -218,7 +227,7 @@ class SearchProviderProtocol(
         ...
 
     @abstractmethod
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """
         Return provider capabilities.
 
@@ -241,7 +250,7 @@ class SearchProviderProtocol(
         ...
 
     @abstractmethod
-    async def check_status(self) -> Tuple[HealthStatus, str]:
+    async def check_status(self) -> tuple[HealthStatus, str]:
         """
         Check the status of the provider.
 
@@ -254,6 +263,7 @@ class SearchProviderProtocol(
 
 # Router-specific interfaces
 
+
 @runtime_checkable
 class ExecutionStrategyProtocol(Protocol):
     """Protocol for execution strategies in the router."""
@@ -262,10 +272,10 @@ class ExecutionStrategyProtocol(Protocol):
     async def execute(
         self,
         query: SearchQuery,
-        providers: Dict[str, SearchProviderProtocol],
-        selected_providers: List[str],
+        providers: dict[str, SearchProviderProtocol],
+        selected_providers: list[str],
         timeout_ms: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute providers according to the strategy.
 
@@ -320,8 +330,8 @@ class RouterProtocol(
     async def route(
         self,
         query: SearchQuery,
-        providers: Dict[str, SearchProviderProtocol],
-    ) -> List[str]:
+        providers: dict[str, SearchProviderProtocol],
+    ) -> list[str]:
         """
         Route a query to appropriate providers.
 
@@ -338,8 +348,8 @@ class RouterProtocol(
     async def route_and_execute(
         self,
         query: SearchQuery,
-        providers: Dict[str, SearchProviderProtocol],
-    ) -> Dict[str, Any]:
+        providers: dict[str, SearchProviderProtocol],
+    ) -> dict[str, Any]:
         """
         Route query to providers and execute.
 
@@ -355,6 +365,7 @@ class RouterProtocol(
 
 # Result processing interfaces
 
+
 @runtime_checkable
 class ResultProcessorProtocol(Protocol):
     """Protocol for result processors."""
@@ -362,8 +373,8 @@ class ResultProcessorProtocol(Protocol):
     @abstractmethod
     def process_results(
         self,
-        results: List[SearchResult],
-    ) -> List[SearchResult]:
+        results: list[SearchResult],
+    ) -> list[SearchResult]:
         """
         Process search results.
 
@@ -387,9 +398,9 @@ class ResultMergerProtocol(
     @abstractmethod
     def merge_results(
         self,
-        provider_results: Dict[str, SearchResponse],
+        provider_results: dict[str, SearchResponse],
         max_results: int = 10,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Merge results from multiple providers into a unified ranked list.
 

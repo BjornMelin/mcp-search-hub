@@ -8,7 +8,7 @@ as base classes for concrete component implementations.
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, cast
+from typing import Any, Generic, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
@@ -16,15 +16,7 @@ from ..utils.logging import get_logger
 from .base import HealthStatus
 from .config import ComponentConfig
 from .interfaces import (
-    AsyncExecutable,
-    ConfigurableComponent,
-    ErrorBoundary,
     HealthCheck,
-    MetricsProvider,
-    ResultMergerProtocol,
-    ResultProcessorProtocol,
-    RouterProtocol,
-    SearchProviderProtocol,
     ServiceLifecycle,
 )
 
@@ -32,7 +24,7 @@ from .interfaces import (
 T = TypeVar("T")
 ConfigT = TypeVar("ConfigT", bound="ComponentConfig")
 ResultT = TypeVar("ResultT")
-MetricsT = TypeVar("MetricsT", bound=Dict[str, Any])
+MetricsT = TypeVar("MetricsT", bound=dict[str, Any])
 
 logger = get_logger(__name__)
 
@@ -64,7 +56,7 @@ class Component(ABC, ServiceLifecycle, HealthCheck):
         await self.cleanup()
         await self.initialize()
 
-    async def check_health(self) -> Tuple[HealthStatus, str]:
+    async def check_health(self) -> tuple[HealthStatus, str]:
         """Check component health status with basic implementation."""
         if not self.initialized:
             return HealthStatus.UNHEALTHY, "Component not initialized"
@@ -82,7 +74,7 @@ class Component(ABC, ServiceLifecycle, HealthCheck):
     async def _perform_health_check(self) -> None:
         """
         Perform component-specific health check.
-        
+
         Override this method in subclasses to implement custom health checking.
         """
         # Default implementation just sets status to healthy
@@ -99,7 +91,7 @@ class Component(ABC, ServiceLifecycle, HealthCheck):
 class ConfigurableComponentBase(Component, Generic[ConfigT]):
     """Base class for components that can be configured."""
 
-    def __init__(self, name: str, config: Optional[ConfigT] = None):
+    def __init__(self, name: str, config: ConfigT | None = None):
         """Initialize with optional configuration."""
         super().__init__(name)
         self.config = config
@@ -140,13 +132,13 @@ class AsyncExecutableBase(Component, Generic[ResultT]):
     def __init__(self, name: str):
         """Initialize executable component."""
         super().__init__(name)
-        self.running_task: Optional[asyncio.Task] = None
+        self.running_task: asyncio.Task | None = None
 
     async def execute(self, *args: Any, **kwargs: Any) -> ResultT:
         """Execute the component's primary function."""
         if not self.initialized:
             await self.initialize()
-        
+
         return await self._do_execute(*args, **kwargs)
 
     async def execute_with_timeout(
@@ -192,41 +184,41 @@ class ErrorBoundaryBase(Component):
     def __init__(self, name: str):
         """Initialize error handling component."""
         super().__init__(name)
-        self.last_error: Optional[Exception] = None
+        self.last_error: Exception | None = None
         self.error_count = 0
 
-    def handle_error(self, error: Exception) -> Tuple[bool, str]:
+    def handle_error(self, error: Exception) -> tuple[bool, str]:
         """
         Handle an error that occurred during component operation.
-        
+
         Args:
             error: The exception that occurred
-        
+
         Returns:
             Tuple of (should_retry, error_message)
         """
         self.last_error = error
         self.error_count += 1
-        
+
         # Determine if this error is retryable
         should_retry = self.is_error_retryable(error)
         error_message = str(error)
-        
+
         logger.error(
             f"Component {self.name} error: {error_message} (retryable: {should_retry})"
         )
-        
+
         return should_retry, error_message
 
     def is_error_retryable(self, error: Exception) -> bool:
         """
         Determine if an error can be retried.
-        
+
         Default implementation treats connection/timeout errors as retryable.
         Subclasses should override for more specific logic.
         """
         error_name = error.__class__.__name__
-        
+
         # Common retryable errors
         retryable_errors = [
             "ConnectionError",
@@ -236,7 +228,7 @@ class ErrorBoundaryBase(Component):
             "RateLimitError",
             "TemporaryServerError",
         ]
-        
+
         return any(name in error_name for name in retryable_errors)
 
 
@@ -249,12 +241,12 @@ class CompleteComponentBase(
 ):
     """
     Comprehensive base class that implements all core interfaces.
-    
+
     This class combines configuration, metrics, execution, and error handling
     functionality into a single base class for convenience.
     """
 
-    def __init__(self, name: str, config: Optional[ConfigT] = None):
+    def __init__(self, name: str, config: ConfigT | None = None):
         """Initialize complete component with all capabilities."""
         # Call all parent initializers
         Component.__init__(self, name)
@@ -271,7 +263,7 @@ class ComponentMetrics(BaseModel):
     successful_calls: int = Field(0, description="Successful calls")
     failed_calls: int = Field(0, description="Failed calls")
     avg_duration_ms: float = Field(0.0, description="Average execution duration in ms")
-    last_execution_time: Optional[float] = Field(
+    last_execution_time: float | None = Field(
         None, description="Last execution timestamp"
     )
     error_rate: float = Field(0.0, description="Error rate (0-1)")
@@ -279,40 +271,35 @@ class ComponentMetrics(BaseModel):
 
 # Specific component type base classes
 
+
 class SearchProviderBase(
-    CompleteComponentBase[ConfigT, Any, Dict[str, Any]],
+    CompleteComponentBase[ConfigT, Any, dict[str, Any]],
     Generic[ConfigT],
 ):
     """Base class for search providers with all capabilities."""
 
-    async def check_status(self) -> Tuple[HealthStatus, str]:
+    async def check_status(self) -> tuple[HealthStatus, str]:
         """Check the provider's status."""
         # Override with provider-specific implementation
         return await self.check_health()
 
 
 class RouterBase(
-    CompleteComponentBase[ConfigT, Any, Dict[str, Any]],
+    CompleteComponentBase[ConfigT, Any, dict[str, Any]],
     Generic[ConfigT],
 ):
     """Base class for routers with all capabilities."""
 
-    pass
-
 
 class ResultProcessorBase(
-    CompleteComponentBase[ConfigT, List[Any], Dict[str, Any]],
+    CompleteComponentBase[ConfigT, list[Any], dict[str, Any]],
     Generic[ConfigT],
 ):
     """Base class for result processors with all capabilities."""
 
-    pass
-
 
 class ResultMergerBase(
-    CompleteComponentBase[ConfigT, List[Any], Dict[str, Any]],
+    CompleteComponentBase[ConfigT, list[Any], dict[str, Any]],
     Generic[ConfigT],
 ):
     """Base class for result mergers with all capabilities."""
-
-    pass
