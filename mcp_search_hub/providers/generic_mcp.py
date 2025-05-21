@@ -1,6 +1,7 @@
 """Generic MCP provider implementation using configuration."""
 
 import logging
+from decimal import Decimal
 from typing import Any
 
 from ..models.query import SearchQuery
@@ -19,6 +20,11 @@ class GenericMCPProvider(BaseMCPProvider):
         if not config:
             raise ValueError(f"Unknown provider: {provider_name}")
 
+        # Get provider-specific rate limiting and budget configuration
+        rate_limit_config = config.get("rate_limits", None)
+        budget_config = config.get("budget", None)
+        self.base_cost = config.get("base_cost", Decimal("0.01"))
+
         super().__init__(
             name=provider_name,
             api_key=api_key,
@@ -27,6 +33,8 @@ class GenericMCPProvider(BaseMCPProvider):
             args=config.get("args", [config["package"]]),
             tool_name=config["tool_name"],
             api_timeout=config["timeout"],
+            rate_limit_config=rate_limit_config,
+            budget_config=budget_config,
         )
 
     def _prepare_search_params(self, query: SearchQuery) -> dict[str, Any]:
@@ -270,6 +278,8 @@ class GenericMCPProvider(BaseMCPProvider):
             "supports_advanced_search": True,
             "max_results_per_query": 10,
             "features": ["search", "content_extraction"],
+            "rate_limit_info": self.rate_limiter.get_current_usage(),
+            "budget_info": self.budget_tracker.get_usage_report(),
         }
 
         # Provider-specific capabilities
@@ -353,7 +363,21 @@ class GenericMCPProvider(BaseMCPProvider):
 
     def estimate_cost(self, query: SearchQuery) -> float:
         """Estimate the cost of a search query."""
-        # Provider-specific pricing (approximate)
+        # Provider-specific pricing based on configuration
+        base_cost = float(self.base_cost)
+
+        # Add result count cost
+        results_cost = query.max_results * 0.0005
+
+        # Add advanced features cost
+        if query.advanced:
+            results_cost *= 1.2
+
+        # Add raw content cost
+        if query.raw_content:
+            results_cost *= 1.5
+
+        # Provider-specific adjustments
         if self.name == "exa":
             base_cost = 0.015
             results_cost = query.max_results * 0.0005
@@ -396,4 +420,24 @@ class GenericMCPProvider(BaseMCPProvider):
             return search_cost + results_cost
 
         # Default fallback
-        return 0.01
+        return base_cost + results_cost
+
+    def _calculate_actual_cost(
+        self, query: SearchQuery, results: list[SearchResult]
+    ) -> Decimal:
+        """Calculate the actual cost based on the results."""
+        # Use the provider-specific calculation but convert to Decimal
+        base_estimated_cost = Decimal(str(self.estimate_cost(query)))
+
+        # Adjust based on actual result count
+        if not results:
+            return base_estimated_cost * Decimal("0.5")
+
+        if len(results) < query.max_results:
+            result_ratio = max(
+                Decimal("0.75"),
+                Decimal(str(len(results))) / Decimal(str(query.max_results)),
+            )
+            return base_estimated_cost * result_ratio
+
+        return base_estimated_cost

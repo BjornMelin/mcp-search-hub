@@ -1,7 +1,6 @@
 """Duplicate removal with fuzzy matching support."""
 
 import re
-from typing import List
 
 from rapidfuzz import fuzz
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -121,11 +120,11 @@ def _merge_metadata(target: SearchResult, source: SearchResult) -> None:
 
 
 def _apply_fuzzy_matching(
-    results: List[SearchResult],
+    results: list[SearchResult],
     threshold: float = 92.0,
     use_content_similarity: bool = True,
     content_threshold: float = 0.85,
-) -> List[SearchResult]:
+) -> list[SearchResult]:
     """Apply fuzzy matching to find near-duplicates."""
     # Sort by score to prioritize higher-scored results
     sorted_results = sorted(results, key=lambda x: x.score, reverse=True)

@@ -9,6 +9,8 @@ import logging
 import os
 import subprocess
 import sys
+import uuid
+from decimal import Decimal
 from enum import Enum
 from typing import Any
 
@@ -20,6 +22,8 @@ from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
 from ..utils.errors import ProviderError
 from .base import SearchProvider
+from .budget_tracker import BudgetConfig, budget_tracker_manager
+from .rate_limiter import RateLimitConfig, rate_limiter_manager
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,7 @@ class BaseMCPProvider(SearchProvider):
     - Session management and initialization
     - Tool invocation and standardized search functionality
     - Provider state and health checking
+    - Rate limiting and budget tracking
     """
 
     # Constants for installation and health check
@@ -59,6 +64,8 @@ class BaseMCPProvider(SearchProvider):
         additional_env: dict[str, str] | None = None,
         tool_name: str = "web_search",
         api_timeout: int = 30000,
+        rate_limit_config: RateLimitConfig | None = None,
+        budget_config: BudgetConfig | None = None,
     ):
         """
         Initialize the MCP provider with configuration.
@@ -73,6 +80,8 @@ class BaseMCPProvider(SearchProvider):
             additional_env: Additional environment variables to pass to the server
             tool_name: The name of the search tool to invoke
             api_timeout: The timeout for API calls in milliseconds
+            rate_limit_config: Configuration for rate limiting
+            budget_config: Configuration for budget tracking
         """
         self.name = name
         self._configure_api_key(api_key, env_var_name)
@@ -97,6 +106,14 @@ class BaseMCPProvider(SearchProvider):
             command=self.command,
             args=self.args,
             env=self.env,
+        )
+
+        # Initialize rate limiter and budget tracker
+        self.rate_limiter = rate_limiter_manager.get_limiter(
+            f"{self.name}", config=rate_limit_config
+        )
+        self.budget_tracker = budget_tracker_manager.get_tracker(
+            f"{self.name}", config=budget_config
         )
 
     def _configure_api_key(self, api_key: str | None, env_var_name: str | None) -> None:
@@ -279,6 +296,48 @@ class BaseMCPProvider(SearchProvider):
                 error=f"Failed to initialize {self.name} MCP server",
             )
 
+        # Generate a unique request ID for tracking
+        request_id = str(uuid.uuid4())
+
+        # Check rate limits
+        rate_limited = not await self.rate_limiter.wait_if_limited(request_id)
+        if rate_limited:
+            return SearchResponse(
+                results=[],
+                query=query.query,
+                total_results=0,
+                provider=self.name,
+                error=f"Rate limit exceeded for {self.name} provider",
+            )
+
+        # Estimate cost
+        estimated_cost = Decimal(str(self.estimate_cost(query)))
+
+        # Check budget if a budget constraint is specified
+        if query.budget is not None and estimated_cost > Decimal(str(query.budget)):
+            # Release the rate limit token
+            await self.rate_limiter.release(request_id)
+            return SearchResponse(
+                results=[],
+                query=query.query,
+                total_results=0,
+                provider=self.name,
+                error=f"Estimated cost {estimated_cost} exceeds budget {query.budget}",
+            )
+
+        # Check provider-level budget
+        budget_exceeded = not await self.budget_tracker.check_budget(estimated_cost)
+        if budget_exceeded:
+            # Release the rate limit token
+            await self.rate_limiter.release(request_id)
+            return SearchResponse(
+                results=[],
+                query=query.query,
+                total_results=0,
+                provider=self.name,
+                error=f"Provider budget exceeded for {self.name}",
+            )
+
         start_time = asyncio.get_event_loop().time()
 
         try:
@@ -297,15 +356,31 @@ class BaseMCPProvider(SearchProvider):
             # Calculate execution time
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
 
-            return SearchResponse(
+            # Calculate actual cost based on result size
+            actual_cost = self._calculate_actual_cost(query, search_results)
+
+            # Record the cost
+            await self.budget_tracker.record_cost(actual_cost)
+
+            # Create response with cost information
+            response = SearchResponse(
                 results=search_results,
                 query=query.query,
                 total_results=len(search_results),
                 provider=self.name,
                 timing_ms=execution_time,
+                cost=float(actual_cost),
             )
 
+            # Release the rate limit token
+            await self.rate_limiter.release(request_id)
+
+            return response
+
         except TimeoutError:
+            # Release the rate limit token
+            await self.rate_limiter.release(request_id)
+
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
             return SearchResponse(
                 results=[],
@@ -317,6 +392,9 @@ class BaseMCPProvider(SearchProvider):
             )
 
         except Exception as e:
+            # Release the rate limit token
+            await self.rate_limiter.release(request_id)
+
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
             logger.error(f"Error executing {self.name} search: {str(e)}")
             return SearchResponse(
@@ -327,6 +405,40 @@ class BaseMCPProvider(SearchProvider):
                 error=f"Search failed: {str(e)}",
                 timing_ms=execution_time,
             )
+
+    def _calculate_actual_cost(
+        self, query: SearchQuery, results: list[SearchResult]
+    ) -> Decimal:
+        """
+        Calculate the actual cost of a search based on results.
+
+        This may differ from the estimated cost because the actual
+        number of results may be different from the requested number.
+
+        Args:
+            query: The search query
+            results: The search results
+
+        Returns:
+            Decimal: The actual cost in USD
+        """
+        # By default, use the estimated cost but adjust for actual result count
+        base_cost = Decimal(str(self.estimate_cost(query)))
+
+        # If there are no results, only charge half the base cost
+        if not results:
+            return base_cost * Decimal("0.5")
+
+        # If we have fewer results than requested, adjust proportionally
+        if len(results) < query.max_results:
+            # Still charge at least 75% of the estimate
+            result_ratio = max(
+                Decimal("0.75"),
+                Decimal(str(len(results))) / Decimal(str(query.max_results)),
+            )
+            return base_cost * result_ratio
+
+        return base_cost
 
     def _prepare_search_params(self, query: SearchQuery) -> dict[str, Any]:
         """
@@ -426,6 +538,21 @@ class BaseMCPProvider(SearchProvider):
                     f"Required tool '{self.tool_name}' not available",
                 )
 
+            # Check rate limit status
+            if self.rate_limiter.is_in_cooldown():
+                return (
+                    HealthStatus.DEGRADED,
+                    f"{self.name} is rate limited and in cooldown",
+                )
+
+            # Check budget status
+            budget_remaining = self.budget_tracker.get_remaining_budget()
+            if budget_remaining["daily_remaining"] <= Decimal("0"):
+                return (
+                    HealthStatus.DEGRADED,
+                    f"{self.name} has exhausted its daily budget",
+                )
+
             return HealthStatus.OK, f"{self.name} MCP server is operational"
 
         except TimeoutError:
@@ -449,6 +576,16 @@ class BaseMCPProvider(SearchProvider):
         # Default implementation assuming a basic cost model
         # Override in specific providers with more accurate cost models
         return 0.01  # $0.01 per query as a baseline
+
+    def get_usage_statistics(self) -> dict[str, Any]:
+        """Get rate limit and budget usage statistics for this provider."""
+        return {
+            "rate_limits": self.rate_limiter.get_current_usage(),
+            "rate_limits_remaining": self.rate_limiter.get_remaining_quota(),
+            "budget": self.budget_tracker.get_usage_report(),
+            "budget_remaining": self.budget_tracker.get_remaining_budget(),
+            "is_rate_limited": self.rate_limiter.is_in_cooldown(),
+        }
 
     async def __aenter__(self):
         """Context manager entry."""

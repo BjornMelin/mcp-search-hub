@@ -615,18 +615,34 @@ All these tools are available directly through MCP Search Hub - no separate serv
 
 ### Testing
 
-Run the tests with pytest:
+MCP Search Hub includes a comprehensive testing suite with unit tests, integration tests, and performance benchmarks:
 
 ```bash
-# Run all tests
+# Run all tests (excluding benchmarks)
 uv run pytest
 
 # Run with coverage
-uv run pytest --cov=mcp_search_hub
+uv run pytest --cov=mcp_search_hub --cov-report=html
 
 # Run specific tests
 uv run pytest tests/test_analyzer.py
+
+# Run end-to-end integration tests
+uv run pytest tests/test_end_to_end.py
+
+# Run performance benchmarks
+uv run pytest -m benchmark
+# OR use the dedicated benchmark script
+python scripts/run_benchmarks.py --all
 ```
+
+The test suite includes specialized coverage for:
+- Router tests for both parallel and cascade modes
+- End-to-end tests with mocked provider responses
+- Performance benchmarks for key components
+- CI integration via GitHub Actions
+
+For detailed information on testing, see the [Tests README](tests/README.md).
 
 ### Code Quality
 

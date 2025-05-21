@@ -1,8 +1,7 @@
 """Tests for unified router implementation including both parallel and cascade modes."""
 
 import asyncio
-import time
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -72,7 +71,6 @@ class MockScorer(ProviderScorer):
 
     def score_provider(self, provider_name, provider, features, metrics):
         """Return a fixed score."""
-        from mcp_search_hub.models.router import ProviderScore
 
         return ProviderScore(
             provider_name=provider_name,
@@ -220,9 +218,13 @@ async def test_parallel_execution_with_mixed_results(mock_providers):
     timeout_config = TimeoutConfig()
 
     # Make one provider fail and another delay
-    mock_providers["provider1"].search = AsyncMock(side_effect=Exception("Test failure"))
+    mock_providers["provider1"].search = AsyncMock(
+        side_effect=Exception("Test failure")
+    )
     mock_providers["provider2"]._delay = 0.1  # Short delay that should complete
-    mock_providers["provider3"].search = AsyncMock(return_value=mock_providers["provider3"].response)
+    mock_providers["provider3"].search = AsyncMock(
+        return_value=mock_providers["provider3"].response
+    )
 
     results = await strategy.execute(
         query=query,
@@ -234,15 +236,15 @@ async def test_parallel_execution_with_mixed_results(mock_providers):
 
     # All providers should have results
     assert len(results) == len(mock_providers)
-    
+
     # Provider1 should fail
     assert results["provider1"].success is False
     assert "Test failure" in results["provider1"].error
-    
+
     # Provider2 should succeed with delay
     assert results["provider2"].success is True
     assert results["provider2"].response is not None
-    
+
     # Provider3 should succeed
     assert results["provider3"].success is True
     assert results["provider3"].response is not None
@@ -252,10 +254,10 @@ async def test_parallel_execution_with_mixed_results(mock_providers):
 async def test_parallel_execution_content_type_adaptability(mock_providers):
     """Test how parallel execution adapts to different content types."""
     strategy = ParallelExecutionStrategy()
-    
+
     # Test with different content types
     content_types = ["general", "news", "academic", "code", "web_content"]
-    
+
     for content_type in content_types:
         query = SearchQuery(query=f"test {content_type}")
         features = QueryFeatures(
@@ -292,18 +294,18 @@ async def test_parallel_execution_content_type_adaptability(mock_providers):
 async def test_parallel_execution_dynamic_timeout(mock_providers):
     """Test parallel execution with dynamic timeout calculation."""
     strategy = ParallelExecutionStrategy()
-    
+
     # Test with varying complexity
     complexities = [0.1, 0.5, 0.9]
     timeout_config = TimeoutConfig(
         base_timeout_ms=2000,
         min_timeout_ms=1000,
         max_timeout_ms=5000,
-        complexity_factor=1.5
+        complexity_factor=1.5,
     )
-    
+
     timeout_times = []
-    
+
     for complexity in complexities:
         query = SearchQuery(query="test")
         features = QueryFeatures(
@@ -317,11 +319,15 @@ async def test_parallel_execution_dynamic_timeout(mock_providers):
         )
 
         # Mock the _calculate_timeout method to capture the calculated timeout
-        with patch.object(ParallelExecutionStrategy, '_calculate_timeout', wraps=strategy._calculate_timeout) as mock_timeout:
+        with patch.object(
+            ParallelExecutionStrategy,
+            "_calculate_timeout",
+            wraps=strategy._calculate_timeout,
+        ) as mock_timeout:
             # Reset provider mocks
             for provider in mock_providers.values():
                 provider.search = AsyncMock(return_value=provider.response)
-                
+
             await strategy.execute(
                 query=query,
                 features=features,
@@ -329,10 +335,10 @@ async def test_parallel_execution_dynamic_timeout(mock_providers):
                 selected_providers=list(mock_providers.keys()),
                 timeout_config=timeout_config,
             )
-            
+
             # Get the timeout value that was calculated
             timeout_times.append(mock_timeout.return_value)
-    
+
     # Higher complexity should result in longer timeouts
     assert timeout_times[0] < timeout_times[1] < timeout_times[2]
 
@@ -364,7 +370,7 @@ async def test_cascade_execution_strategy(mock_providers):
     # With default policy, cascade should stop after first success
     assert len(results) >= 1
     assert any(result.success for result in results.values())
-    
+
     # Verify only first provider was actually executed
     first_provider = list(mock_providers.keys())[0]
     assert first_provider in results
@@ -380,7 +386,7 @@ async def test_cascade_execution_with_custom_policy(mock_providers):
         min_successful_providers=2,
         secondary_delay_ms=100,
     )
-    
+
     strategy = CascadeExecutionStrategy(policy=custom_policy)
     query = SearchQuery(query="test")
     features = QueryFeatures(
@@ -397,11 +403,12 @@ async def test_cascade_execution_with_custom_policy(mock_providers):
     # Reset and update provider mocks to track execution
     provider_executions = []
     for name, provider in mock_providers.items():
+
         async def mock_search(query, provider_name=name):
             provider_executions.append(provider_name)
             await asyncio.sleep(0.01)  # Small delay to ensure order
             return mock_providers[provider_name].response
-        
+
         provider.search = AsyncMock(side_effect=mock_search)
 
     results = await strategy.execute(
@@ -415,7 +422,7 @@ async def test_cascade_execution_with_custom_policy(mock_providers):
     # With the custom policy, we should continue after success until min_successful_providers
     assert len(results) == len(mock_providers)
     assert sum(1 for r in results.values() if r.success) >= 2
-    
+
     # All providers should have been executed in order
     assert len(provider_executions) == len(mock_providers)
     assert provider_executions == list(mock_providers.keys())
@@ -429,7 +436,7 @@ async def test_cascade_execution_stops_after_min_success(mock_providers):
         cascade_on_success=True,
         min_successful_providers=2,
     )
-    
+
     strategy = CascadeExecutionStrategy(policy=policy)
     query = SearchQuery(query="test")
     features = QueryFeatures(
@@ -445,12 +452,13 @@ async def test_cascade_execution_stops_after_min_success(mock_providers):
 
     # Track provider executions
     executed_providers = set()
-    
+
     for name, provider in mock_providers.items():
+
         async def mock_search(query, provider_name=name):
             executed_providers.add(provider_name)
             return mock_providers[provider_name].response
-        
+
         provider.search = AsyncMock(side_effect=mock_search)
 
     results = await strategy.execute(
@@ -471,26 +479,41 @@ async def test_cascade_execution_stops_after_min_success(mock_providers):
 async def test_cascade_execution_dynamic_timeout(mock_providers):
     """Test cascade execution with dynamic timeout for different query types."""
     strategy = CascadeExecutionStrategy()
-    
+
     # Test various query types that affect timeout calculation
     test_cases = [
         # Simple query (should have shorter timeout)
-        {"complexity": 0.2, "time_sensitivity": 0.1, "contains_question": False, "expected_timeout_factor": 1.0},
+        {
+            "complexity": 0.2,
+            "time_sensitivity": 0.1,
+            "contains_question": False,
+            "expected_timeout_factor": 1.0,
+        },
         # Complex query (should have longer timeout)
-        {"complexity": 0.9, "time_sensitivity": 0.1, "contains_question": True, "expected_timeout_factor": 1.5},
+        {
+            "complexity": 0.9,
+            "time_sensitivity": 0.1,
+            "contains_question": True,
+            "expected_timeout_factor": 1.5,
+        },
         # Time-sensitive query (should have shorter timeout despite complexity)
-        {"complexity": 0.7, "time_sensitivity": 0.9, "contains_question": False, "expected_timeout_factor": 1.0},
+        {
+            "complexity": 0.7,
+            "time_sensitivity": 0.9,
+            "contains_question": False,
+            "expected_timeout_factor": 1.0,
+        },
     ]
-    
+
     timeout_config = TimeoutConfig(
         base_timeout_ms=2000,
         min_timeout_ms=1000,
         max_timeout_ms=5000,
         complexity_factor=1.5,
     )
-    
+
     timeouts = []
-    
+
     for i, case in enumerate(test_cases):
         features = QueryFeatures(
             length=10,
@@ -501,27 +524,33 @@ async def test_cascade_execution_dynamic_timeout(mock_providers):
             factual_nature=0.5,
             contains_question=case["contains_question"],
         )
-        
+
         # Mock the dynamic timeout calculation to capture the value
-        with patch.object(CascadeExecutionStrategy, '_calculate_dynamic_timeout', wraps=strategy._calculate_dynamic_timeout) as mock_timeout:
+        with patch.object(
+            CascadeExecutionStrategy,
+            "_calculate_dynamic_timeout",
+            wraps=strategy._calculate_dynamic_timeout,
+        ) as mock_timeout:
             # Reset provider mocks
             for provider in mock_providers.values():
                 provider.search = AsyncMock(return_value=provider.response)
-                
+
             await strategy.execute(
                 query=SearchQuery(query="test"),
                 features=features,
                 providers=mock_providers,
-                selected_providers=[list(mock_providers.keys())[0]],  # Just need one provider
+                selected_providers=[
+                    list(mock_providers.keys())[0]
+                ],  # Just need one provider
                 timeout_config=timeout_config,
             )
-            
+
             # Store the timeout that was calculated
             timeouts.append(mock_timeout.return_value)
-    
+
     # Complex queries with questions should get longer timeouts
     assert timeouts[1] > timeouts[0]
-    
+
     # Time-sensitive queries should get shorter timeouts
     assert timeouts[2] < timeouts[1]
 

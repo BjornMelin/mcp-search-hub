@@ -5,17 +5,13 @@ invocations when certain types of transient failures occur.
 """
 
 import asyncio
-import json
 import random
-import time
-from typing import Any, Dict, List, Optional, Set, Tuple, Type
+from typing import Any
 
 import httpx
 from fastmcp import Context
 from starlette.requests import Request
-from starlette.responses import Response
 
-from ..config import get_settings
 from ..utils.errors import ProviderTimeoutError, SearchError
 from ..utils.logging import get_logger
 from .base import BaseMiddleware
@@ -23,7 +19,7 @@ from .base import BaseMiddleware
 logger = get_logger(__name__)
 
 # Retryable HTTP status codes
-RETRYABLE_STATUS_CODES: Set[int] = {
+RETRYABLE_STATUS_CODES: set[int] = {
     408,  # Request Timeout
     429,  # Too Many Requests
     500,  # Internal Server Error
@@ -33,7 +29,7 @@ RETRYABLE_STATUS_CODES: Set[int] = {
 }
 
 # Retryable exception types
-RETRYABLE_EXCEPTIONS: Tuple[Type[Exception], ...] = (
+RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     httpx.TimeoutException,
     httpx.ConnectError,
     httpx.RemoteProtocolError,
@@ -81,9 +77,7 @@ class RetryMiddleware(BaseMiddleware):
             Delay in seconds
         """
         # Exponential backoff calculation
-        delay = min(
-            self.base_delay * (self.exponential_base**attempt), self.max_delay
-        )
+        delay = min(self.base_delay * (self.exponential_base**attempt), self.max_delay)
 
         if self.jitter:
             # Add ±25% jitter to avoid thundering herd problems
@@ -112,9 +106,7 @@ class RetryMiddleware(BaseMiddleware):
         # Check if it's a search error that might be retryable
         if isinstance(exc, SearchError):
             # Only retry if it's a temporary error
-            return (
-                "temporary" in str(exc).lower() or "timeout" in str(exc).lower()
-            )
+            return "temporary" in str(exc).lower() or "timeout" in str(exc).lower()
 
         return False
 
@@ -136,7 +128,7 @@ class RetryMiddleware(BaseMiddleware):
         return True
 
     async def process_request(
-        self, request: Any, context: Optional[Context] = None
+        self, request: Any, context: Context | None = None
     ) -> Any:
         """Process the incoming request (pre-processing).
 
@@ -163,7 +155,7 @@ class RetryMiddleware(BaseMiddleware):
         return request
 
     async def process_response(
-        self, response: Any, request: Any, context: Optional[Context] = None
+        self, response: Any, request: Any, context: Context | None = None
     ) -> Any:
         """Process the outgoing response (post-processing).
 
@@ -184,7 +176,7 @@ class RetryMiddleware(BaseMiddleware):
         self,
         request: Any,
         call_next: callable,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> Any:
         """Execute the middleware with retry logic.
 

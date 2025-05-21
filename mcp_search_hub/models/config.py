@@ -1,6 +1,5 @@
 """Configuration models."""
 
-
 from pydantic import BaseModel, SecretStr
 
 

@@ -30,6 +30,13 @@ class SearchResponse(BaseModel):
     provider: str = Field(..., description="Provider name")
     timing_ms: float | None = Field(None, description="Search time in milliseconds")
     error: str | None = Field(None, description="Error message if something went wrong")
+    cost: float | None = Field(None, description="Cost of the search in USD")
+    rate_limited: bool = Field(
+        False, description="Whether the provider was rate limited"
+    )
+    budget_exceeded: bool = Field(
+        False, description="Whether the provider budget was exceeded"
+    )
 
 
 class CombinedSearchResponse(BaseModel):
@@ -39,5 +46,14 @@ class CombinedSearchResponse(BaseModel):
     query: str = Field(..., description="Original query")
     providers_used: list[str] = Field(..., description="Providers used for the search")
     total_results: int = Field(..., description="Total number of results")
-    total_cost: float = Field(..., description="Total cost of the search")
+    total_cost: float = Field(0.0, description="Total cost of the search")
     timing_ms: float = Field(..., description="Total search time in milliseconds")
+    provider_costs: dict[str, float] = Field(
+        default_factory=dict, description="Cost breakdown by provider"
+    )
+    rate_limited_providers: list[str] = Field(
+        default_factory=list, description="Providers that were rate limited"
+    )
+    budget_exceeded_providers: list[str] = Field(
+        default_factory=list, description="Providers that exceeded their budget"
+    )

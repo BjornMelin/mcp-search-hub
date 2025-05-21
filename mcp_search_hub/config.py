@@ -56,7 +56,7 @@ def get_settings() -> Settings:
         if sensitive_headers_str
         else []
     )
-    
+
     # Parse comma-separated retry skip paths from environment
     retry_skip_paths_str = os.getenv("RETRY_SKIP_PATHS", "/health,/metrics")
     retry_skip_paths = (
@@ -101,7 +101,8 @@ def get_settings() -> Settings:
             redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
             redis_enabled=os.getenv("REDIS_CACHE_ENABLED", "false").lower() == "true",
             prefix=os.getenv("CACHE_PREFIX", "search:"),
-            fingerprint_enabled=os.getenv("CACHE_FINGERPRINT_ENABLED", "true").lower() == "true",
+            fingerprint_enabled=os.getenv("CACHE_FINGERPRINT_ENABLED", "true").lower()
+            == "true",
             clean_interval=int(os.getenv("CACHE_CLEAN_INTERVAL", "600")),
         ),
         default_budget=(

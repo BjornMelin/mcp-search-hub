@@ -34,12 +34,12 @@ logger = logging.getLogger(__name__)
 
 class MiddlewareHTTPWrapper(BaseHTTPMiddleware):
     """HTTP middleware wrapper for the middleware manager."""
-    
+
     def __init__(self, app, middleware_manager):
         """Initialize with app and middleware manager."""
         super().__init__(app)
         self.middleware_manager = middleware_manager
-        
+
     async def dispatch(self, request, call_next):
         """Process HTTP request through middleware manager."""
         return await self.middleware_manager.process_http_request(request, call_next)
@@ -51,10 +51,10 @@ class SearchServer:
     def __init__(self):
         # Initialize settings
         self.settings = get_settings()
-        
+
         # Initialize middleware manager
         self.middleware_manager = MiddlewareManager()
-        
+
         # Initialize FastMCP server
         self.mcp = FastMCP(
             name="MCP Search Hub",
@@ -83,7 +83,7 @@ class SearchServer:
         )
 
         self.merger = ResultMerger()
-        
+
         # Initialize cache (either legacy or tiered)
         if self.settings.cache.redis_enabled:
             # Use tiered cache with Redis
@@ -95,19 +95,21 @@ class SearchServer:
                 prefix=self.settings.cache.prefix,
                 fingerprint_enabled=self.settings.cache.fingerprint_enabled,
             )
-            
+
             if self.cache.redis_enabled:
-                logger.info(f"Initialized tiered cache with Redis at {self.settings.cache.redis_url}")
+                logger.info(
+                    f"Initialized tiered cache with Redis at {self.settings.cache.redis_url}"
+                )
             else:
                 logger.warning(
-                    f"Redis not available, falling back to memory-only cache. "
-                    f"Install the 'redis' package to enable Redis caching."
+                    "Redis not available, falling back to memory-only cache. "
+                    "Install the 'redis' package to enable Redis caching."
                 )
         else:
             # Use legacy memory-only cache
             self.cache = QueryCache(ttl=self.settings.cache_ttl)
             logger.info("Initialized memory-only cache")
-            
+
         self.metrics = MetricsTracker()
 
         # Register tools and custom routes
@@ -116,11 +118,11 @@ class SearchServer:
 
         # Provider tools will be registered when the server starts
         self._provider_tools_registered = False
-        
+
     def _setup_middleware(self):
         """Set up and configure middleware components."""
         middleware_config = self.settings.middleware
-        
+
         # Add logging middleware (runs first)
         if middleware_config.logging.enabled:
             self.middleware_manager.add_middleware(
@@ -134,7 +136,7 @@ class SearchServer:
                 max_body_size=middleware_config.logging.max_body_size,
             )
             logger.info("Logging middleware initialized")
-        
+
         # Add authentication middleware
         if middleware_config.auth.enabled:
             self.middleware_manager.add_middleware(
@@ -145,7 +147,7 @@ class SearchServer:
                 skip_auth_paths=middleware_config.auth.skip_auth_paths,
             )
             logger.info("Authentication middleware initialized")
-        
+
         # Add rate limiting middleware
         if middleware_config.rate_limit.enabled:
             self.middleware_manager.add_middleware(
@@ -159,7 +161,7 @@ class SearchServer:
                 skip_paths=middleware_config.rate_limit.skip_paths,
             )
             logger.info("Rate limit middleware initialized")
-            
+
         # Add retry middleware
         if middleware_config.retry.enabled:
             self.middleware_manager.add_middleware(
@@ -174,9 +176,11 @@ class SearchServer:
                 skip_paths=middleware_config.retry.skip_paths,
             )
             logger.info("Retry middleware initialized")
-            
+
         # Apply HTTP middleware to the FastMCP app
-        self.mcp.http_app.add_middleware(MiddlewareHTTPWrapper, middleware_manager=self.middleware_manager)
+        self.mcp.http_app.add_middleware(
+            MiddlewareHTTPWrapper, middleware_manager=self.middleware_manager
+        )
 
     def _initialize_providers(self) -> dict[str, SearchProvider]:
         """Initialize providers from configuration."""
@@ -249,7 +253,7 @@ class SearchServer:
                 "advanced": advanced,
                 "tool_name": "search",  # Include tool name for middleware
             }
-            
+
             # Create handler function
             async def handler(p):
                 # Extract params after middleware processing
@@ -266,10 +270,14 @@ class SearchServer:
 
                 # Use search_with_routing which handles caching internally
                 response = await self.search_with_routing(search_query, request_id, ctx)
-                return SearchResponse(results=response.results, metadata=response.metadata)
-            
+                return SearchResponse(
+                    results=response.results, metadata=response.metadata
+                )
+
             # Process through middleware
-            return await self.middleware_manager.process_tool_request(params, ctx, handler)
+            return await self.middleware_manager.process_tool_request(
+                params, ctx, handler
+            )
 
         # Dynamically register provider-specific tools (deferred to server start)
 
@@ -353,7 +361,7 @@ class SearchServer:
                 "provider_name": provider_name,
                 "original_tool_name": original_tool_name,
             }
-            
+
             # Create handler function
             async def handler(p):
                 request_id = str(uuid.uuid4())
@@ -363,10 +371,19 @@ class SearchServer:
 
                 try:
                     # Remove middleware metadata before invoking the tool
-                    tool_params = {k: v for k, v in p.items() 
-                                 if k not in ["tool_name", "provider_name", "original_tool_name", 
-                                              "_retry_attempt", "_retryable_request"]}
-                    
+                    tool_params = {
+                        k: v
+                        for k, v in p.items()
+                        if k
+                        not in [
+                            "tool_name",
+                            "provider_name",
+                            "original_tool_name",
+                            "_retry_attempt",
+                            "_retryable_request",
+                        ]
+                    }
+
                     # Use the provider's invoke_tool method
                     return await provider.invoke_tool(original_tool_name, tool_params)
                 except Exception as e:
@@ -374,9 +391,11 @@ class SearchServer:
                         f"Error invoking {provider_name} tool {original_tool_name}: {e}"
                     )
                     raise
-            
+
             # Process through middleware
-            return await self.middleware_manager.process_tool_request(params, ctx, handler)
+            return await self.middleware_manager.process_tool_request(
+                params, ctx, handler
+            )
 
     def _register_custom_routes(self):
         """Register custom FastMCP HTTP routes."""
@@ -428,13 +447,34 @@ class SearchServer:
             # Build provider health status
             provider_health = {}
             for name, provider in self.providers.items():
-                status = provider.check_status()
+                status = await provider.check_status()
                 if status:
+                    # Get rate limit and budget info
+                    is_rate_limited = provider.rate_limiter.is_in_cooldown()
+                    budget_info = provider.budget_tracker.get_usage_report()
+                    budget_exceeded = budget_info.get("daily_percent_used", 0) >= 100
+
+                    status_message = status[1]
+                    health_status = status[0]
+
+                    # Update health status based on rate limits and budget
+                    if is_rate_limited:
+                        status_message = f"{status_message} (RATE LIMITED)"
+                        if health_status != HealthStatus.FAILED:
+                            health_status = HealthStatus.DEGRADED
+
+                    if budget_exceeded:
+                        status_message = f"{status_message} (BUDGET EXCEEDED)"
+                        if health_status != HealthStatus.FAILED:
+                            health_status = HealthStatus.DEGRADED
+
                     provider_health[name] = ProviderStatus(
-                        name=status.name,
-                        health=status.health,
-                        status=status.status,
-                        message=status.message,
+                        name=name,
+                        health=health_status,
+                        status=health_status != HealthStatus.FAILED,
+                        message=status_message,
+                        rate_limited=is_rate_limited,
+                        budget_exceeded=budget_exceeded,
                     )
                 else:
                     provider_health[name] = ProviderStatus(
@@ -515,13 +555,42 @@ class SearchServer:
 
             return JSONResponse(content=response.model_dump(mode="json"))
 
+        @app.get("/usage")
+        async def usage_stats(request: Request) -> JSONResponse:
+            """Provider usage statistics endpoint."""
+            from .utils.usage_stats import UsageStats
+
+            # Get provider status report
+            status_report = UsageStats.get_provider_status_report()
+
+            # Add additional provider info
+            for name, provider in self.providers.items():
+                if name in status_report:
+                    # Add cost tracking info from provider
+                    status_report[name]["cost_tracking"] = {
+                        "base_cost": float(provider.base_cost)
+                        if hasattr(provider, "base_cost")
+                        else 0.01,
+                        "estimated_daily_cost": float(
+                            provider.budget_tracker.state.daily_cost
+                        ),
+                        "estimated_monthly_cost": float(
+                            provider.budget_tracker.state.monthly_cost
+                        ),
+                    }
+
+                    # Add capabilities
+                    status_report[name]["capabilities"] = provider.get_capabilities()
+
+            return JSONResponse(content=status_report)
+
     async def search_with_routing(
         self, search_query: SearchQuery, request_id: str, ctx: Context
     ) -> CombinedSearchResponse:
         """Execute a search using the unified router."""
         # Generate cache key
         cache_key = self.cache.generate_key(search_query)
-        
+
         # Check cache based on the cache implementation type
         cached_result = None
         if isinstance(self.cache, TieredCache):
@@ -530,7 +599,7 @@ class SearchServer:
         else:
             # Legacy QueryCache is synchronous
             cached_result = self.cache.get(cache_key)
-            
+
         if cached_result:
             ctx.info(f"Cache hit for request {request_id}")
             # Track cache hit metric

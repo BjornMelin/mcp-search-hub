@@ -1,12 +1,10 @@
 """Tests for RetryMiddleware."""
 
-import asyncio
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
+import pytest
 from fastmcp import Context
-from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -53,7 +51,9 @@ class TestRetryMiddleware:
     """Tests for the RetryMiddleware class."""
 
     @pytest.mark.asyncio
-    async def test_process_request(self, retry_middleware, mock_request, mock_tool_params):
+    async def test_process_request(
+        self, retry_middleware, mock_request, mock_tool_params
+    ):
         """Test process_request method."""
         # For HTTP request
         processed_request = await retry_middleware.process_request(mock_request)
@@ -72,10 +72,14 @@ class TestRetryMiddleware:
         assert processed_params["_retryable_request"] is True
 
     @pytest.mark.asyncio
-    async def test_process_response(self, retry_middleware, mock_request, mock_tool_params):
+    async def test_process_response(
+        self, retry_middleware, mock_request, mock_tool_params
+    ):
         """Test process_response method."""
         response = Response(content="Test")
-        processed_response = await retry_middleware.process_response(response, mock_request)
+        processed_response = await retry_middleware.process_response(
+            response, mock_request
+        )
         assert processed_response == response
 
     @pytest.mark.asyncio
@@ -85,18 +89,28 @@ class TestRetryMiddleware:
         assert retry_middleware.calculate_delay(0) == 0.01  # base_delay
 
         # Second attempt
-        assert retry_middleware.calculate_delay(1) == 0.02  # base_delay * (exponential_base ** 1)
+        assert (
+            retry_middleware.calculate_delay(1) == 0.02
+        )  # base_delay * (exponential_base ** 1)
 
         # Third attempt
-        assert retry_middleware.calculate_delay(2) == 0.04  # base_delay * (exponential_base ** 2)
+        assert (
+            retry_middleware.calculate_delay(2) == 0.04
+        )  # base_delay * (exponential_base ** 2)
 
     @pytest.mark.asyncio
     async def test_is_retryable_exception(self, retry_middleware):
         """Test is_retryable_exception method."""
         # Retryable exceptions
-        assert retry_middleware.is_retryable_exception(httpx.TimeoutException("timeout"))
-        assert retry_middleware.is_retryable_exception(httpx.ConnectError("connect error"))
-        assert retry_middleware.is_retryable_exception(ConnectionError("connection error"))
+        assert retry_middleware.is_retryable_exception(
+            httpx.TimeoutException("timeout")
+        )
+        assert retry_middleware.is_retryable_exception(
+            httpx.ConnectError("connect error")
+        )
+        assert retry_middleware.is_retryable_exception(
+            ConnectionError("connection error")
+        )
         assert retry_middleware.is_retryable_exception(
             ProviderTimeoutError("provider timeout", "test")
         )
@@ -142,6 +156,7 @@ class TestRetryMiddleware:
     @pytest.mark.asyncio
     async def test_successful_call(self, retry_middleware, mock_request, mock_context):
         """Test middleware with successful call."""
+
         # Mock call_next function that succeeds
         async def call_next(req):
             return Response(content="Success")
@@ -151,7 +166,9 @@ class TestRetryMiddleware:
         assert response.body == b"Success"
 
     @pytest.mark.asyncio
-    async def test_retry_on_retryable_exception(self, retry_middleware, mock_request, mock_context):
+    async def test_retry_on_retryable_exception(
+        self, retry_middleware, mock_request, mock_context
+    ):
         """Test middleware with retryable exception."""
         call_count = 0
 
@@ -173,6 +190,7 @@ class TestRetryMiddleware:
         self, retry_middleware, mock_request, mock_context
     ):
         """Test middleware with non-retryable exception."""
+
         # Mock call_next that fails with non-retryable exception
         async def call_next(req):
             raise ValueError("Non-retryable error")
@@ -182,8 +200,11 @@ class TestRetryMiddleware:
             await retry_middleware(mock_request, call_next, mock_context)
 
     @pytest.mark.asyncio
-    async def test_max_retries_exhausted(self, retry_middleware, mock_request, mock_context):
+    async def test_max_retries_exhausted(
+        self, retry_middleware, mock_request, mock_context
+    ):
         """Test middleware with max retries exhausted."""
+
         # Mock call_next that always fails with retryable exception
         async def call_next(req):
             raise httpx.TimeoutException("Always timeout")
@@ -220,7 +241,9 @@ class TestRetryMiddleware:
         assert call_count == 1  # Should not retry for skipped paths
 
     @pytest.mark.asyncio
-    async def test_tool_params_retry(self, retry_middleware, mock_tool_params, mock_context):
+    async def test_tool_params_retry(
+        self, retry_middleware, mock_tool_params, mock_context
+    ):
         """Test middleware with tool parameters."""
         call_count = 0
 

@@ -324,9 +324,7 @@ async def retry_async(
     if hasattr(func, "__name__") and "http" in func.__name__.lower():
         # Try to find URLs in args or kwargs
         for arg in args:
-            if isinstance(arg, str) and (
-                arg.startswith(("http://", "https://"))
-            ):
+            if isinstance(arg, str) and (arg.startswith(("http://", "https://"))):
                 request_info["url"] = arg
                 break
 

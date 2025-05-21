@@ -157,6 +157,50 @@ The application uses environment variables for configuration:
 - Server: `HOST`, `PORT`
 - Misc: `LOG_LEVEL`, `CACHE_TTL`, `DEFAULT_BUDGET`
 
+### Rate Limiting and Budget Configuration
+
+Provider rate limiting and budget settings are configured in `provider_config.py`:
+
+```python
+"provider_name": {
+    # Rate limits
+    "rate_limits": RateLimitConfig(
+        requests_per_minute=60,   # Maximum requests per minute
+        requests_per_hour=500,    # Maximum requests per hour
+        requests_per_day=5000,    # Maximum requests per day
+        concurrent_requests=10,   # Maximum concurrent requests
+        cooldown_period=5,        # Seconds to wait when rate limited
+    ),
+    # Budget config
+    "budget": BudgetConfig(
+        default_query_budget=Decimal("0.02"),  # Max cost per query
+        daily_budget=Decimal("10.00"),         # Max daily cost
+        monthly_budget=Decimal("150.00"),      # Max monthly cost
+        enforce_budget=True,                   # Whether to enforce budgets
+    ),
+    # Base cost in USD per query
+    "base_cost": Decimal("0.01"),  # Base cost for pricing calculations
+}
+```
+
+The following environment variables can be used to customize rate limiting and budget tracking:
+
+```bash
+# Provider Rate Limits (example for EXA)
+EXA_REQUESTS_PER_MINUTE=60
+EXA_REQUESTS_PER_HOUR=500
+EXA_REQUESTS_PER_DAY=5000
+EXA_CONCURRENT_REQUESTS=10
+EXA_COOLDOWN_PERIOD=5
+
+# Provider Budgets (example for EXA)
+EXA_DEFAULT_QUERY_BUDGET=0.02
+EXA_DAILY_BUDGET=10.00
+EXA_MONTHLY_BUDGET=150.00
+EXA_ENFORCE_BUDGET=true
+EXA_BASE_COST=0.01
+```
+
 ### Provider-Specific Configuration
 
 Each provider requires specific environment variables and may have unique configuration options.

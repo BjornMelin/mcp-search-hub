@@ -6,12 +6,10 @@ from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastmcp import Context
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
 from mcp_search_hub.middleware.rate_limit import RateLimiter, RateLimitMiddleware
-from mcp_search_hub.models.base import ErrorResponse
 
 
 class TestRateLimiter:
@@ -124,7 +122,7 @@ class TestRateLimitMiddleware:
             window=120,
             global_limit=500,
             global_window=30,
-            skip_paths=["/skip1", "/skip2"]
+            skip_paths=["/skip1", "/skip2"],
         )
 
         assert middleware.order == 30

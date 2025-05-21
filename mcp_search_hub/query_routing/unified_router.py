@@ -75,6 +75,18 @@ class UnifiedRouter:
         # Core components
         self.cost_optimizer = CostOptimizer()
         self.scoring_calculator = ScoringCalculator()
+        
+        # Import here to avoid circular imports
+        from .llm_router import LLMQueryRouter, LLM_ROUTER_ENABLED
+        
+        # Initialize LLM router if enabled
+        self.llm_router = None
+        if LLM_ROUTER_ENABLED:
+            try:
+                self.llm_router = LLMQueryRouter(fallback_scorer=self.scoring_calculator)
+                logger.info("LLM query routing enabled")
+            except Exception as e:
+                logger.error(f"Failed to initialize LLM router: {e}")
 
         # Execution strategies
         self._strategies: dict[str, ExecutionStrategy] = {
@@ -84,6 +96,9 @@ class UnifiedRouter:
 
         # Default scorers
         self._scorers: list[ProviderScorer] = [self.scoring_calculator]
+        # Add LLM router as a scorer if available
+        if self.llm_router:
+            self._scorers.append(self.llm_router)
 
         # Circuit breakers for each provider
         self._circuit_breakers: dict[str, CircuitBreaker] = {}
@@ -116,9 +131,47 @@ class UnifiedRouter:
         Returns:
             Dict mapping provider names to execution results
         """
+        # Process routing hints if provided
+        if query.routing_hints:
+            logger.info(f"Processing routing hints: {query.routing_hints}")
+            from .llm_router import RoutingHintParser
+            hint_parser = RoutingHintParser()
+            hint_params = hint_parser.parse_hints(query.routing_hints)
+            
+            # Apply hints for provider selection if no explicit providers specified
+            if not query.providers and "preferred_providers" in hint_params:
+                query.providers = hint_params["preferred_providers"]
+                logger.info(f"Using preferred providers from hints: {query.providers}")
+            
+            # Apply strategy hint if no explicit strategy specified
+            if strategy is None and "strategy" in hint_params:
+                strategy = hint_params["strategy"]
+                logger.info(f"Using strategy from hints: {strategy}")
+        
+        # Use routing_strategy from query if provided
+        if strategy is None and query.routing_strategy:
+            strategy = query.routing_strategy
+        
+        # Use explicitly provided budget if available
+        if budget is None and query.budget is not None:
+            budget = query.budget
+        
         # Select providers based on scoring
         routing_decision = self.select_providers(query, features, budget)
-        selected_providers = routing_decision.selected_providers
+        
+        # If explicit providers were specified, filter the selection
+        if query.providers:
+            # Filter but keep order from scoring
+            filtered_providers = [p for p in routing_decision.selected_providers if p in query.providers]
+            # Add any missing providers that were explicitly requested
+            for p in query.providers:
+                if p not in filtered_providers and p in self.providers:
+                    filtered_providers.append(p)
+            
+            selected_providers = filtered_providers
+            logger.info(f"Using explicitly requested providers: {selected_providers}")
+        else:
+            selected_providers = routing_decision.selected_providers
 
         # Determine execution strategy if not specified
         if strategy is None:

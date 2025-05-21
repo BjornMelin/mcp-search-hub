@@ -1,9 +1,6 @@
 """Tests for metadata enrichment functionality."""
 
-import re
 from datetime import datetime, timedelta
-
-import pytest
 
 from mcp_search_hub.models.results import SearchResult
 from mcp_search_hub.result_processing.metadata_enrichment import (
@@ -31,7 +28,7 @@ def test_extract_and_normalize_date():
     assert result1.metadata.get("month") == 3
     assert result1.metadata.get("day") == 15
     assert result1.metadata.get("human_date") == "March 15, 2023"
-    
+
     # Test with date in snippet
     result2 = SearchResult(
         title="Technology news",
@@ -45,7 +42,7 @@ def test_extract_and_normalize_date():
     assert result2.metadata.get("year") == 2024
     assert result2.metadata.get("month") == 5
     assert result2.metadata.get("day") == 5
-    
+
     # Test with ISO date format
     result3 = SearchResult(
         title="Report",
@@ -59,7 +56,7 @@ def test_extract_and_normalize_date():
     assert result3.metadata.get("year") == 2023
     assert result3.metadata.get("month") == 12
     assert result3.metadata.get("day") == 25
-    
+
     # Test with existing date in metadata
     result4 = SearchResult(
         title="Existing metadata",
@@ -74,7 +71,7 @@ def test_extract_and_normalize_date():
     assert result4.metadata.get("year") == 2022
     assert result4.metadata.get("month") == 11
     assert result4.metadata.get("day") == 30
-    
+
     # Test relative time descriptions
     # Create dates at various time points in the past
     now = datetime.now()
@@ -84,7 +81,7 @@ def test_extract_and_normalize_date():
     weeks_ago = (now - timedelta(days=21)).isoformat()
     months_ago = (now - timedelta(days=100)).isoformat()
     years_ago = (now - timedelta(days=800)).isoformat()
-    
+
     # Hours ago
     result5 = SearchResult(
         title="Recent news",
@@ -97,7 +94,7 @@ def test_extract_and_normalize_date():
     extract_and_normalize_date(result5)
     assert "relative_time" in result5.metadata
     assert "hour" in result5.metadata["relative_time"]
-    
+
     # Yesterday
     result6 = SearchResult(
         title="Yesterday news",
@@ -110,7 +107,7 @@ def test_extract_and_normalize_date():
     extract_and_normalize_date(result6)
     assert "relative_time" in result6.metadata
     assert "Yesterday" in result6.metadata["relative_time"]
-    
+
     # Days ago
     result7 = SearchResult(
         title="Days ago news",
@@ -123,7 +120,7 @@ def test_extract_and_normalize_date():
     extract_and_normalize_date(result7)
     assert "relative_time" in result7.metadata
     assert "days ago" in result7.metadata["relative_time"]
-    
+
     # Weeks ago
     result8 = SearchResult(
         title="Weeks ago news",
@@ -136,7 +133,7 @@ def test_extract_and_normalize_date():
     extract_and_normalize_date(result8)
     assert "relative_time" in result8.metadata
     assert "week" in result8.metadata["relative_time"]
-    
+
     # Months ago
     result9 = SearchResult(
         title="Months ago news",
@@ -149,7 +146,7 @@ def test_extract_and_normalize_date():
     extract_and_normalize_date(result9)
     assert "relative_time" in result9.metadata
     assert "month" in result9.metadata["relative_time"]
-    
+
     # Years ago
     result10 = SearchResult(
         title="Years ago news",
@@ -177,7 +174,7 @@ def test_extract_source_info():
     extract_source_info(result1)
     assert result1.metadata.get("source_domain") == "example.com"
     assert result1.metadata.get("organization") == "Example"
-    
+
     # Test with academic domain
     result2 = SearchResult(
         title="Academic site",
@@ -190,7 +187,7 @@ def test_extract_source_info():
     assert result2.metadata.get("source_domain") == "research.stanford.edu"
     assert "organization" in result2.metadata
     assert "stanford" in result2.metadata["organization"].lower()
-    
+
     # Test with government domain
     result3 = SearchResult(
         title="Government site",
@@ -202,7 +199,7 @@ def test_extract_source_info():
     extract_source_info(result3)
     assert result3.metadata.get("source_domain") == "nih.gov"
     assert "organization" in result3.metadata
-    
+
     # Test with kebab-case domain
     result4 = SearchResult(
         title="Kebab case domain",
@@ -234,7 +231,7 @@ def test_extract_content_metrics():
     assert 4 <= result1.metadata["reading_time"] <= 5  # ~4-5 minutes at 225 wpm
     assert "reading_time_display" in result1.metadata
     assert "minute" in result1.metadata["reading_time_display"]
-    
+
     # Test with snippet only
     result2 = SearchResult(
         title="Article with snippet only",
@@ -248,7 +245,7 @@ def test_extract_content_metrics():
     assert result2.metadata["word_count"] == 50
     assert "reading_time" in result2.metadata
     assert result2.metadata["reading_time"] == 1  # Minimum 1 minute
-    
+
     # Test with images in raw content
     result3 = SearchResult(
         title="Article with images",
@@ -258,7 +255,7 @@ def test_extract_content_metrics():
         score=0.9,
         raw_content=(
             "Text with an <img src='image1.jpg'> embedded image "
-            "and another <img src=\"https://example.com/image2.jpg\"> image. "
+            'and another <img src="https://example.com/image2.jpg"> image. '
             "Also a ![Markdown Image](image3.jpg) syntax."
         ),
     )
@@ -290,7 +287,7 @@ def test_generate_citation():
     assert "Example News" in result1.metadata["citation"]
     assert "2023" in result1.metadata["citation"]
     assert "Jane Smith" in result1.metadata["academic_citation"]
-    
+
     # Test with minimal metadata
     result2 = SearchResult(
         title="Minimal Metadata",
@@ -305,7 +302,7 @@ def test_generate_citation():
     generate_citation(result2)
     assert "citation" in result2.metadata
     assert "minimal.com" in result2.metadata["citation"]
-    
+
     # Test with no extractable metadata
     result3 = SearchResult(
         title="No Metadata",
@@ -339,28 +336,28 @@ def test_enrich_result_metadata_full_pipeline():
             + " ".join(["word"] * 1000)  # Add 1000 more words
         ),
     )
-    
+
     # Run the complete enrichment pipeline
     enrich_result_metadata(result)
-    
+
     # Verify all types of metadata were added
     assert "normalized_date" in result.metadata
     assert result.metadata.get("year") == 2023
     assert result.metadata.get("month") == 5
     assert result.metadata.get("day") == 15
-    
+
     assert "source_domain" in result.metadata
     assert result.metadata.get("source_domain") == "python-tips.org"
     assert "organization" in result.metadata
     assert "Python Tips" in result.metadata.get("organization")
-    
+
     assert "word_count" in result.metadata
     assert result.metadata.get("word_count") > 1000
     assert "reading_time" in result.metadata
     assert result.metadata.get("reading_time") >= 4  # Should be at least 4 minutes
     assert "image_count" in result.metadata
     assert result.metadata.get("image_count") >= 1
-    
+
     assert "citation" in result.metadata
     assert "Python Programming Guide" in result.metadata.get("citation")
     assert "2023" in result.metadata.get("citation")
