@@ -2,14 +2,24 @@
 
 This directory contains example configurations for using MCP Search Hub with various Claude clients.
 
-## Multi-Server Setup
+> **🚀 Quick Setup**: For the fastest setup, use our interactive script: `python scripts/setup_claude_desktop.py`
+> 
+> **📖 Complete Guide**: See [docs/CLAUDE_DESKTOP_SETUP.md](../../docs/CLAUDE_DESKTOP_SETUP.md) for comprehensive instructions
 
-The `multi-server-setup.json` file demonstrates how to configure multiple MCP servers to work together:
+## Recommended Setup (Single Server)
 
-1. **MCP Search Hub**: Provides intelligent multi-provider search aggregation
-2. **Firecrawl MCP**: Official server for advanced web scraping and content extraction
-3. **Perplexity MCP**: Official server for AI-powered research (if available)
-4. **Exa MCP**: Official server for academic content (if available)
+**MCP Search Hub** embeds all official provider MCP servers internally, providing 35+ tools from 5 providers in one unified interface:
+
+- **Tavily**: Web search and extraction (2 tools)
+- **Exa**: Neural search and research (8 tools)  
+- **Linkup**: Deep web search (1 tool)
+- **Firecrawl**: Web scraping and crawling (8 tools)
+- **Perplexity**: AI-powered research (3 tools)
+- **Unified**: Intelligent search routing (2 tools)
+
+## Alternative: Multi-Server Setup
+
+The `multi-server-setup.json` file demonstrates how to configure multiple separate MCP servers to work together, but this is generally not recommended as MCP Search Hub already embeds all official servers.
 
 ### Setup Instructions
 

@@ -2,6 +2,26 @@
 
 🔍 Intelligent multi-provider search aggregation server built on FastMCP 2.0
 
+## Quick Start with Claude Desktop
+
+Get up and running in 5 minutes:
+
+```bash
+# 1. Clone and install
+git clone https://github.com/BjornMelin/mcp-search-hub
+cd mcp-search-hub
+uv pip install -r requirements.txt
+
+# 2. Interactive setup (recommended)
+python scripts/setup_claude_desktop.py
+
+# 3. Or manually configure - see docs/CLAUDE_DESKTOP_SETUP.md
+```
+
+After setup, restart Claude Desktop and ask: *"What MCP tools do you have available?"*
+
+**📖 [Complete Setup Guide](docs/CLAUDE_DESKTOP_SETUP.md)** | **⚡ [Quick Setup Script](scripts/setup_claude_desktop.py)**
+
 ## Features
 
 - Embeds official MCP servers from five leading search providers (Linkup, Exa, Perplexity, Tavily, and Firecrawl) within a unified interface
