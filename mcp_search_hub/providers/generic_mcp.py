@@ -6,8 +6,9 @@ from typing import Any
 
 from ..models.query import SearchQuery
 from ..models.results import SearchResult
+from ..utils.retry import RetryConfig
 from .base_mcp import BaseMCPProvider
-from .provider_config import PROVIDER_CONFIGS
+from .provider_config import PROVIDER_CONFIGS, DEFAULT_RETRY_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +21,11 @@ class GenericMCPProvider(BaseMCPProvider):
         if not config:
             raise ValueError(f"Unknown provider: {provider_name}")
 
-        # Get provider-specific rate limiting and budget configuration
+        # Get provider-specific configurations
         rate_limit_config = config.get("rate_limits", None)
         budget_config = config.get("budget", None)
+        retry_config = config.get("retry_config", DEFAULT_RETRY_CONFIG)
+        retry_enabled = config.get("retry_enabled", True)
         self.base_cost = config.get("base_cost", Decimal("0.01"))
 
         super().__init__(
@@ -36,6 +39,10 @@ class GenericMCPProvider(BaseMCPProvider):
             rate_limit_config=rate_limit_config,
             budget_config=budget_config,
         )
+        
+        # Set retry configuration
+        self.RETRY_ENABLED = retry_enabled
+        self._retry_config = retry_config
 
     def _prepare_search_params(self, query: SearchQuery) -> dict[str, Any]:
         """Prepare parameters for search."""
@@ -272,6 +279,17 @@ class GenericMCPProvider(BaseMCPProvider):
             },
         )
 
+    def get_retry_config(self) -> RetryConfig:
+        """Get retry configuration for this provider.
+        
+        Overrides BaseMCPProvider.get_retry_config to use the 
+        provider-specific configuration.
+        
+        Returns:
+            RetryConfig: Provider-specific retry configuration
+        """
+        return self._retry_config
+    
     def get_capabilities(self) -> dict[str, Any]:
         """Return provider capabilities."""
         # Base capabilities - can be overridden per provider
@@ -283,6 +301,12 @@ class GenericMCPProvider(BaseMCPProvider):
             "features": ["search", "content_extraction"],
             "rate_limit_info": self.rate_limiter.get_current_usage(),
             "budget_info": self.budget_tracker.get_usage_report(),
+            "retry_enabled": self.RETRY_ENABLED,
+            "retry_config": {
+                "max_retries": self._retry_config.max_retries,
+                "base_delay": self._retry_config.base_delay,
+                "max_delay": self._retry_config.max_delay,
+            },
         }
 
         # Provider-specific capabilities

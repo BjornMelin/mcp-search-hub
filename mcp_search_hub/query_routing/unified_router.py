@@ -51,7 +51,7 @@ class ExecutionStrategy(ABC, ExecutionStrategyProtocol):
         """Execute providers according to the strategy."""
 
 
-class ProviderScorer(Protocol, ProviderScorerProtocol):
+class ProviderScorer(ProviderScorerProtocol):
     """Protocol for provider scoring systems."""
 
     def score_provider(

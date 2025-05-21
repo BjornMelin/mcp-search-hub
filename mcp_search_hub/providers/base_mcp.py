@@ -12,11 +12,13 @@ import sys
 import uuid
 from decimal import Decimal
 from enum import Enum
-from typing import Any
+from functools import wraps
+from typing import Any, Callable, TypeVar
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from ..config import get_settings
 from ..models.base import HealthStatus
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse, SearchResult
@@ -31,9 +33,12 @@ from ..utils.errors import (
     ProviderServiceError,
     ProviderTimeoutError,
 )
+from ..utils.retry import RetryConfig, with_exponential_backoff
 from .base import SearchProvider
 from .budget_tracker import BudgetConfig, budget_tracker_manager
 from .rate_limiter import RateLimitConfig, rate_limiter_manager
+
+T = TypeVar("T")  # Generic type for retry decorator
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +61,16 @@ class BaseMCPProvider(SearchProvider):
     - Tool invocation and standardized search functionality
     - Provider state and health checking
     - Rate limiting and budget tracking
+    - Retry logic with exponential backoff
     """
 
     # Constants for installation and health check
     INSTALLATION_RETRY_COUNT = 2
     INSTALLATION_CHECK_TIMEOUT = 10  # seconds
     HEALTH_CHECK_TIMEOUT = 5  # seconds
+    
+    # Retry configuration 
+    RETRY_ENABLED = True
 
     def __init__(
         self,
@@ -723,3 +732,51 @@ class BaseMCPProvider(SearchProvider):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         await self._cleanup()
+        
+    def get_retry_config(self) -> RetryConfig:
+        """Get retry configuration from settings.
+
+        Returns:
+            RetryConfig instance with settings from environment
+        """
+        settings = get_settings()
+        return RetryConfig(
+            max_retries=settings.retry.max_retries,
+            base_delay=settings.retry.base_delay,
+            max_delay=settings.retry.max_delay,
+            exponential_base=settings.retry.exponential_base,
+            jitter=settings.retry.jitter,
+        )
+
+    def with_retry(self, func: Callable[..., T]) -> Callable[..., T]:
+        """
+        Decorator to add retry logic to a method.
+
+        Args:
+            func: The async function to wrap with retry logic
+
+        Returns:
+            Wrapped function with exponential backoff retry
+        """
+        if not self.RETRY_ENABLED:
+            return func
+            
+        return with_exponential_backoff(config=self.get_retry_config())(func)
+        
+    # Override search method to add retry logic
+    async def search(self, query: SearchQuery) -> SearchResponse:
+        """
+        Execute a search with retry logic.
+        
+        This method overrides the base search method to add
+        exponential backoff retry for increased reliability.
+        
+        Args:
+            query: The search query to execute
+            
+        Returns:
+            SearchResponse containing results and metadata
+        """
+        # Use the with_retry decorator to add retry logic
+        search_function = self.with_retry(super().search)
+        return await search_function(query)
