@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mcp-search-hub": {
+      "command": "python",
+      "args": ["-m", "mcp_search_hub.main", "--transport", "stdio"],
+      "env": {
+        "TAVILY_API_KEY": "tvly-your-api-key-here",
+        "EXA_API_KEY": "exa-your-api-key-here",
+        "LINKUP_API_KEY": "lp-your-api-key-here"
+      }
+    }
+  }
+}

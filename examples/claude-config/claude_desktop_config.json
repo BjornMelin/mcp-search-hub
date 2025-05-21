@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "mcp-search-hub": {
+      "command": "python",
+      "args": [
+        "-m",
+        "mcp_search_hub.main",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "_comment": "🔑 REQUIRED: Get API keys from provider websites",
+        "TAVILY_API_KEY": "tvly-your-api-key-here",
+        "EXA_API_KEY": "exa-your-api-key-here",
+        "LINKUP_API_KEY": "lp-your-api-key-here",
+        
+        "_comment": "📝 OPTIONAL: Additional providers (comment out if not needed)",
+        "FIRECRAWL_API_KEY": "fc-your-api-key-here",
+        "PERPLEXITY_API_KEY": "pplx-your-api-key-here",
+        
+        "_comment": "⚙️ OPTIONAL: Advanced settings",
+        "LOG_LEVEL": "INFO",
+        "CACHE_TTL": "300",
+        "DEFAULT_BUDGET": "0.10",
+        
+        "_comment": "⏱️ OPTIONAL: Timeouts (in milliseconds)",
+        "TAVILY_TIMEOUT": "10000",
+        "EXA_TIMEOUT": "15000",
+        "LINKUP_TIMEOUT": "10000",
+        "FIRECRAWL_TIMEOUT": "30000",
+        "PERPLEXITY_TIMEOUT": "20000"
+      }
+    }
+  }
+}
