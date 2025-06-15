@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from ..models.query import QueryFeatures
 from ..models.router import ProviderPerformanceMetrics, ProviderScore
 from ..providers.base import SearchProvider
-from ..utils.cache import TimedCache
+from ..utils.simple_cache import TimedCache
 
 logger = logging.getLogger(__name__)
 

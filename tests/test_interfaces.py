@@ -14,7 +14,7 @@ from mcp_search_hub.models.component import (
     ErrorBoundaryBase,
     MetricsProviderBase,
 )
-from mcp_search_hub.models.config import (
+from mcp_search_hub.config.settings import (
     ComponentConfig,
 )
 from mcp_search_hub.models.interfaces import (

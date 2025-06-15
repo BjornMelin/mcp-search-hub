@@ -4,9 +4,9 @@ import datetime
 import time
 from typing import Any
 
+from ..config.settings import MergerConfig
 from ..models.base import HealthStatus
 from ..models.component import ResultMergerBase
-from ..models.config import MergerConfig
 from ..models.results import SearchResponse, SearchResult
 from ..utils.logging import get_logger
 from .deduplication import remove_duplicates

@@ -11,7 +11,7 @@ from mcp_search_hub.query_routing.llm_router import (
     LLMRoutingResult,
     RoutingHintParser,
 )
-from mcp_search_hub.utils.cache import TimedCache
+from mcp_search_hub.utils.simple_cache import TimedCache
 
 
 class TestLLMQueryRouter:

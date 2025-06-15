@@ -23,9 +23,9 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, cast
 
+from ..config.settings import ComponentConfig
 from ..models.base import HealthStatus
 from ..models.component import SearchProviderBase
-from ..models.config import ComponentConfig
 from ..models.query import SearchQuery
 from ..models.results import SearchResponse
 from ..utils.logging import get_logger

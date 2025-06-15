@@ -16,7 +16,7 @@ from typing import (
 )
 
 from .base import HealthStatus
-from .config import ComponentConfig
+from ..config.settings import ComponentConfig
 from .query import SearchQuery
 from .results import SearchResponse, SearchResult
 

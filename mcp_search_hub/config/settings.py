@@ -1,257 +1,265 @@
-"""Streamlined application settings using standardized configuration patterns."""
+"""Simplified application settings with modern Pydantic v2 patterns."""
 
 from functools import lru_cache
 
-from pydantic import Field, SecretStr
-from pydantic_settings import SettingsConfigDict
-
-from ..models.config import (
-    AuthMiddlewareConfig,
-    CacheConfig,
-    LoggingMiddlewareConfig,
-    MiddlewareConfig,
-    ProviderConfig,
-    ProvidersConfig,
-    RateLimitMiddlewareConfig,
-    RetryConfig,
-    RetryMiddlewareConfig,
-)
-from ..models.config import (
-    Settings as LegacySettings,
-)
-from ..utils.config_loader import ConfigLoader, StandardizedSettings
+from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class AppSettings(StandardizedSettings):
-    """Main application settings with standardized loading patterns."""
+class CacheConfig(BaseModel):
+    """Cache configuration settings."""
 
-    # Server configuration
-    host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8000, description="Server port")
-    log_level: str = Field(default="INFO", description="Logging level")
-    transport: str = Field(default="streamable-http", description="Transport mode")
-
-    # Cache configuration
-    cache_ttl: int = Field(default=3600, description="Legacy cache TTL")
-    cache_memory_ttl: int = Field(default=300, description="Memory cache TTL")
-    cache_redis_ttl: int = Field(default=3600, description="Redis cache TTL")
-    redis_url: str = Field(default="redis://localhost:6379", description="Redis URL")
-    redis_enabled: bool = Field(default=False, description="Enable Redis cache")
-    cache_prefix: str = Field(default="search:", description="Cache key prefix")
-    cache_fingerprint_enabled: bool = Field(
-        default=True, description="Enable cache fingerprinting"
+    redis_url: str = Field(
+        default="redis://localhost:6379", description="Redis connection URL"
     )
-    cache_clean_interval: int = Field(default=600, description="Cache cleanup interval")
-
-    # Budget configuration
-    default_budget: float | None = Field(
-        default=None, description="Default query budget"
+    memory_ttl: int = Field(
+        default=300, ge=0, description="Memory cache TTL in seconds"
+    )
+    redis_ttl: int = Field(default=3600, ge=0, description="Redis cache TTL in seconds")
+    redis_enabled: bool = Field(default=False, description="Enable Redis caching")
+    prefix: str = Field(default="search:", description="Cache key prefix")
+    fingerprint_enabled: bool = Field(
+        default=True, description="Enable semantic fingerprinting"
+    )
+    clean_interval: int = Field(
+        default=600, ge=0, description="Cache cleanup interval in seconds"
     )
 
-    # Retry configuration
-    max_retries: int = Field(default=3, description="Maximum retry attempts")
-    retry_base_delay: float = Field(default=1.0, description="Base retry delay")
-    retry_max_delay: float = Field(default=60.0, description="Maximum retry delay")
-    retry_exponential_base: float = Field(
-        default=2.0, description="Retry exponential base"
-    )
-    retry_jitter: bool = Field(default=True, description="Enable retry jitter")
 
-    # Provider configurations - using standardized loading
-    linkup_api_key: SecretStr = Field(
-        default=SecretStr(""), description="Linkup API key"
-    )
-    linkup_enabled: bool = Field(default=True, description="Enable Linkup provider")
-    linkup_timeout: float = Field(default=5.0, description="Linkup timeout")
+class RetryConfig(BaseModel):
+    """Retry configuration settings."""
 
-    exa_api_key: SecretStr = Field(default=SecretStr(""), description="Exa API key")
-    exa_enabled: bool = Field(default=True, description="Enable Exa provider")
-    exa_timeout: float = Field(default=5.0, description="Exa timeout")
+    max_retries: int = Field(default=3, ge=0, description="Maximum retry attempts")
+    base_delay: float = Field(
+        default=1.0, gt=0, description="Base delay between retries"
+    )
+    max_delay: float = Field(
+        default=60.0, gt=0, description="Maximum delay between retries"
+    )
+    exponential_base: float = Field(
+        default=2.0, gt=1, description="Exponential backoff base"
+    )
+    jitter: bool = Field(default=True, description="Add randomization to retry delays")
 
-    perplexity_api_key: SecretStr = Field(
-        default=SecretStr(""), description="Perplexity API key"
-    )
-    perplexity_enabled: bool = Field(
-        default=True, description="Enable Perplexity provider"
-    )
-    perplexity_timeout: float = Field(default=5.0, description="Perplexity timeout")
 
-    tavily_api_key: SecretStr = Field(
-        default=SecretStr(""), description="Tavily API key"
-    )
-    tavily_enabled: bool = Field(default=True, description="Enable Tavily provider")
-    tavily_timeout: float = Field(default=5.0, description="Tavily timeout")
+class ProviderSettings(BaseModel):
+    """Provider configuration settings."""
 
-    firecrawl_api_key: SecretStr = Field(
-        default=SecretStr(""), description="Firecrawl API key"
+    api_key: SecretStr = Field(
+        default=SecretStr(""), description="API key for the provider"
     )
-    firecrawl_enabled: bool = Field(
-        default=True, description="Enable Firecrawl provider"
-    )
-    firecrawl_timeout: float = Field(default=5.0, description="Firecrawl timeout")
+    enabled: bool = Field(default=True, description="Whether provider is enabled")
+    timeout: float = Field(default=30.0, gt=0, description="Request timeout in seconds")
 
-    # Auth middleware settings
-    auth_api_keys: str = Field(default="", description="Comma-separated API keys")
-    auth_skip_paths: str = Field(
-        default="/health,/metrics,/docs,/redoc,/openapi.json",
-        description="Comma-separated auth skip paths",
-    )
 
-    # Rate limit middleware settings
-    rate_limit: int = Field(default=100, description="Rate limit per window")
-    rate_limit_window: int = Field(default=60, description="Rate limit window")
-    global_rate_limit: int = Field(default=1000, description="Global rate limit")
-    global_rate_limit_window: int = Field(
-        default=60, description="Global rate limit window"
+class ComponentConfig(BaseModel):
+    """Base configuration for components."""
+
+    name: str = Field(description="Component name")
+    enabled: bool = Field(default=True, description="Whether component is enabled")
+    debug: bool = Field(default=False, description="Enable debug mode")
+
+
+class RouterConfig(ComponentConfig):
+    """Router configuration settings."""
+
+    name: str = Field(default="router", description="Component name")
+    max_providers: int = Field(
+        default=3, ge=1, description="Maximum providers per query"
     )
-    rate_limit_skip_paths: str = Field(
-        default="/health,/metrics", description="Comma-separated rate limit skip paths"
+    min_confidence: float = Field(
+        default=0.6, ge=0, le=1, description="Minimum confidence threshold"
+    )
+    execution_strategy: str = Field(default="auto", description="Execution strategy")
+    base_timeout_ms: int = Field(
+        default=10000, gt=0, description="Base timeout in milliseconds"
+    )
+    min_timeout_ms: int = Field(
+        default=3000, gt=0, description="Minimum timeout in milliseconds"
+    )
+    max_timeout_ms: int = Field(
+        default=30000, gt=0, description="Maximum timeout in milliseconds"
     )
 
-    # Logging middleware settings
+
+class ResultProcessorConfig(ComponentConfig):
+    """Configuration for result processor components."""
+
+    name: str = Field(default="result_processor", description="Component name")
+    fuzzy_url_threshold: float = Field(
+        default=92.0, description="Threshold for fuzzy URL matching"
+    )
+    content_similarity_threshold: float = Field(
+        default=0.85, description="Threshold for content similarity"
+    )
+    use_content_similarity: bool = Field(
+        default=True, description="Whether to use content similarity"
+    )
+    max_results: int = Field(
+        default=10, description="Maximum number of results to return"
+    )
+
+
+class MergerConfig(ResultProcessorConfig):
+    """Configuration for result merger components."""
+
+    name: str = Field(default="merger", description="Component name")
+    provider_weights: dict[str, float] = Field(
+        default_factory=dict, description="Per-provider quality weights"
+    )
+    recency_enabled: bool = Field(
+        default=True, description="Whether to boost recent results"
+    )
+    credibility_enabled: bool = Field(
+        default=True, description="Whether to use credibility scoring"
+    )
+    consensus_weight: float = Field(
+        default=0.5, description="Weight for consensus boosting"
+    )
+
+
+class MiddlewareConfig(BaseModel):
+    """Middleware configuration settings."""
+
+    # Auth middleware
+    auth_enabled: bool = Field(default=True, description="Enable authentication")
+    auth_api_keys: list[str] = Field(default_factory=list, description="Valid API keys")
+    auth_skip_paths: list[str] = Field(
+        default_factory=lambda: [
+            "/health",
+            "/metrics",
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+        ],
+        description="Paths to skip authentication",
+    )
+
+    # Rate limiting
+    rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting")
+    rate_limit_requests: int = Field(
+        default=100, gt=0, description="Requests per window"
+    )
+    rate_limit_window: int = Field(
+        default=60, gt=0, description="Time window in seconds"
+    )
+    rate_limit_global: int = Field(
+        default=1000, gt=0, description="Global requests limit"
+    )
+    rate_limit_skip_paths: list[str] = Field(
+        default_factory=lambda: ["/health", "/metrics"],
+        description="Paths to skip rate limiting",
+    )
+
+    # Logging
+    logging_enabled: bool = Field(default=True, description="Enable request logging")
     logging_include_headers: bool = Field(
         default=True, description="Include headers in logs"
     )
     logging_include_body: bool = Field(
         default=False, description="Include body in logs"
     )
-    logging_max_body_size: int = Field(default=1024, description="Max body size to log")
-    sensitive_headers: str = Field(
-        default="authorization,x-api-key,cookie,set-cookie",
-        description="Comma-separated sensitive headers",
+    logging_max_body_size: int = Field(
+        default=1024, ge=0, description="Max body size to log"
+    )
+    logging_sensitive_headers: list[str] = Field(
+        default_factory=lambda: ["authorization", "x-api-key", "cookie", "set-cookie"],
+        description="Headers to redact from logs",
     )
 
-    # Retry middleware settings
-    retry_skip_paths: str = Field(
-        default="/health,/metrics", description="Comma-separated retry skip paths"
-    )
+
+class AppSettings(BaseSettings):
+    """Main application settings with modern Pydantic v2 patterns."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
         validate_assignment=True,
+        validate_default=True,
     )
 
-    def to_legacy_settings(self) -> LegacySettings:
-        """Convert to legacy Settings format for backward compatibility."""
-        # Parse comma-separated values using ConfigLoader utilities
-        api_keys = ConfigLoader.parse_comma_separated_list(self.auth_api_keys)
-        auth_skip_paths = ConfigLoader.parse_comma_separated_list(self.auth_skip_paths)
-        rate_limit_skip_paths = ConfigLoader.parse_comma_separated_list(
-            self.rate_limit_skip_paths
-        )
-        sensitive_headers = ConfigLoader.parse_comma_separated_list(
-            self.sensitive_headers
-        )
-        retry_skip_paths = ConfigLoader.parse_comma_separated_list(
-            self.retry_skip_paths
-        )
+    # Application metadata
+    app_name: str = Field(default="MCP Search Hub", description="Application name")
+    environment: str = Field(default="development", description="Runtime environment")
 
-        return LegacySettings(
-            providers=ProvidersConfig(
-                linkup=ProviderConfig(
-                    name="linkup",
-                    api_key=self.linkup_api_key,
-                    enabled=self.linkup_enabled,
-                    timeout=self.linkup_timeout,
-                ),
-                exa=ProviderConfig(
-                    name="exa",
-                    api_key=self.exa_api_key,
-                    enabled=self.exa_enabled,
-                    timeout=self.exa_timeout,
-                ),
-                perplexity=ProviderConfig(
-                    name="perplexity",
-                    api_key=self.perplexity_api_key,
-                    enabled=self.perplexity_enabled,
-                    timeout=self.perplexity_timeout,
-                ),
-                tavily=ProviderConfig(
-                    name="tavily",
-                    api_key=self.tavily_api_key,
-                    enabled=self.tavily_enabled,
-                    timeout=self.tavily_timeout,
-                ),
-                firecrawl=ProviderConfig(
-                    name="firecrawl",
-                    api_key=self.firecrawl_api_key,
-                    enabled=self.firecrawl_enabled,
-                    timeout=self.firecrawl_timeout,
-                ),
-            ),
-            log_level=self.log_level,
-            cache_ttl=self.cache_ttl,
-            cache=CacheConfig(
-                name="cache",
-                memory_ttl=self.cache_memory_ttl,
-                redis_ttl=self.cache_redis_ttl,
-                redis_url=self.redis_url,
-                redis_enabled=self.redis_enabled,
-                prefix=self.cache_prefix,
-                fingerprint_enabled=self.cache_fingerprint_enabled,
-                clean_interval=self.cache_clean_interval,
-            ),
-            default_budget=self.default_budget,
-            port=self.port,
-            host=self.host,
-            transport=self.transport,
-            retry=RetryConfig(
-                max_retries=self.max_retries,
-                base_delay=self.retry_base_delay,
-                max_delay=self.retry_max_delay,
-                exponential_base=self.retry_exponential_base,
-                jitter=self.retry_jitter,
-            ),
-            middleware=MiddlewareConfig(
-                logging=LoggingMiddlewareConfig(
-                    enabled=True,  # Default enabled
-                    order=5,  # Default order
-                    log_level=self.log_level,
-                    include_headers=self.logging_include_headers,
-                    include_body=self.logging_include_body,
-                    sensitive_headers=sensitive_headers,
-                    max_body_size=self.logging_max_body_size,
-                ),
-                auth=AuthMiddlewareConfig(
-                    enabled=True,  # Default enabled
-                    order=10,  # Default order
-                    api_keys=api_keys,
-                    skip_auth_paths=auth_skip_paths,
-                ),
-                rate_limit=RateLimitMiddlewareConfig(
-                    enabled=True,  # Default enabled
-                    order=20,  # Default order
-                    limit=self.rate_limit,
-                    window=self.rate_limit_window,
-                    global_limit=self.global_rate_limit,
-                    global_window=self.global_rate_limit_window,
-                    skip_paths=rate_limit_skip_paths,
-                ),
-                retry=RetryMiddlewareConfig(
-                    enabled=True,  # Default enabled
-                    order=30,  # Default order
-                    max_retries=self.max_retries,
-                    base_delay=self.retry_base_delay,
-                    max_delay=self.retry_max_delay,
-                    exponential_base=self.retry_exponential_base,
-                    jitter=self.retry_jitter,
-                    skip_paths=retry_skip_paths,
-                ),
-            ),
-        )
+    # Server configuration
+    host: str = Field(default="0.0.0.0", description="Server host")
+    port: int = Field(default=8000, ge=1, le=65535, description="Server port")
+    log_level: str = Field(default="INFO", description="Logging level")
+    transport: str = Field(default="streamable-http", description="Transport mode")
+
+    # Budget
+    default_budget: float | None = Field(
+        default=None, ge=0, description="Default query budget"
+    )
+
+    # Nested configurations
+    cache: CacheConfig = Field(
+        default_factory=CacheConfig, description="Cache settings"
+    )
+    retry: RetryConfig = Field(
+        default_factory=RetryConfig, description="Retry settings"
+    )
+    router: RouterConfig = Field(
+        default_factory=RouterConfig, description="Router settings"
+    )
+    middleware: MiddlewareConfig = Field(
+        default_factory=MiddlewareConfig, description="Middleware settings"
+    )
+
+    # Provider configurations
+    linkup: ProviderSettings = Field(
+        default_factory=ProviderSettings, description="Linkup provider"
+    )
+    exa: ProviderSettings = Field(
+        default_factory=ProviderSettings, description="Exa provider"
+    )
+    perplexity: ProviderSettings = Field(
+        default_factory=ProviderSettings, description="Perplexity provider"
+    )
+    tavily: ProviderSettings = Field(
+        default_factory=ProviderSettings, description="Tavily provider"
+    )
+    firecrawl: ProviderSettings = Field(
+        default_factory=ProviderSettings, description="Firecrawl provider"
+    )
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
+        """Validate environment value."""
+        valid_envs = {"development", "staging", "production", "test"}
+        if v.lower() not in valid_envs:
+            raise ValueError(f"Invalid environment: {v}. Must be one of {valid_envs}")
+        return v.lower()
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate log level."""
+        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        if v.upper() not in valid_levels:
+            raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
+        return v.upper()
+
+    def get_provider_config(self, provider_name: str) -> ProviderSettings | None:
+        """Get configuration for a specific provider."""
+        return getattr(self, provider_name.lower(), None)
+
+    def get_enabled_providers(self) -> list[str]:
+        """Get list of enabled provider names."""
+        providers = ["linkup", "exa", "perplexity", "tavily", "firecrawl"]
+        return [p for p in providers if getattr(self, p).enabled]
 
 
 @lru_cache(maxsize=1)
-def get_app_settings() -> AppSettings:
+def get_settings() -> AppSettings:
     """Get cached application settings."""
     return AppSettings()
 
 
-@lru_cache(maxsize=1)
-def get_settings() -> LegacySettings:
-    """Get settings in legacy format for backward compatibility."""
-    app_settings = get_app_settings()
-    return app_settings.to_legacy_settings()
+# Alias for compatibility
+get_app_settings = get_settings

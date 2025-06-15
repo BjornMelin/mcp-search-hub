@@ -9,9 +9,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from w3lib.url import canonicalize_url
 
+from ..config.settings import ResultProcessorConfig
 from ..models.base import HealthStatus
 from ..models.component import ResultProcessorBase
-from ..models.config import ResultProcessorConfig
 from ..models.results import SearchResult
 from ..utils.logging import get_logger
 

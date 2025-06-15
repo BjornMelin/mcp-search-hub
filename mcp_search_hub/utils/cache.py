@@ -1,555 +1,209 @@
-"""Caching mechanisms with tiered memory and Redis support."""
+"""Simple Redis-based cache implementation with minimal complexity."""
 
 import hashlib
 import json
 import logging
+import random
 import time
-from typing import Any, TypeVar
+from typing import Any
 
-# Import Redis conditionally to allow use without Redis installed
 try:
-    import redis.asyncio as async_redis
-    from redis import Redis
-
+    import redis.asyncio as redis
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
-
-    # Create dummy classes for static type checking
-    class Redis:
-        @classmethod
-        def from_url(cls, *args, **kwargs):
-            return None
-
-    class async_redis:
-        @classmethod
-        def from_url(cls, *args, **kwargs):
-            return None
-
+    redis = None
 
 from ..models.query import SearchQuery
 from ..models.results import CombinedSearchResponse
 
-T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
-class QueryCache:
-    """
-    Legacy memory-only cache for search query results.
+class SearchCache:
+    """Redis-based cache with async interface and graceful error handling.
 
-    Kept for backward compatibility.
-    """
+    This cache implementation focuses on simplicity and reliability:
+    - Redis-only backend (no memory tier)
+    - Async-only interface (no sync methods)
+    - SHA256 key generation
+    - TTL with jitter to prevent cache stampede
+    - Graceful error handling - cache errors never break the app
+    - JSON serialization for search results
 
-    def __init__(self, ttl: int = 3600):
-        """
-        Initialize cache with time-to-live in seconds.
-
-        Args:
-            ttl: Time-to-live in seconds (default: 1 hour)
-        """
-        self.cache: dict[str, dict[str, Any]] = {}
-        self.ttl = ttl
-
-    def generate_key(self, query: SearchQuery) -> str:
-        """
-        Generate a cache key for a search query.
-
-        Args:
-            query: The search query
-
-        Returns:
-            A unique key for the query
-        """
-        # Convert query to a normalized form
-        query_dict = query.model_dump()
-        # Sort dictionary to ensure consistent ordering
-        query_str = json.dumps(query_dict, sort_keys=True)
-        # Create a hash
-        return hashlib.md5(query_str.encode()).hexdigest()
-
-    def get(self, key: str) -> CombinedSearchResponse | None:
-        """
-        Get cached result for a key if available and not expired.
-
-        Args:
-            key: Cache key
-
-        Returns:
-            Cached result or None if not found or expired
-        """
-        if key in self.cache:
-            entry = self.cache[key]
-            if time.time() - entry["timestamp"] < self.ttl:
-                return entry["result"]
-
-        return None
-
-    def set(self, key: str, result: CombinedSearchResponse):
-        """
-        Cache a result with the current timestamp.
-
-        Args:
-            key: Cache key
-            result: Result to cache
-        """
-        self.cache[key] = {"result": result, "timestamp": time.time()}
-
-    def clear(self, key: str | None = None):
-        """
-        Clear cache for a specific key or the entire cache.
-
-        Args:
-            key: Specific key to clear, or None to clear all
-        """
-        if key:
-            if key in self.cache:
-                del self.cache[key]
-        else:
-            self.cache.clear()
-
-    def clean_expired(self):
-        """Remove expired entries from the cache."""
-        current_time = time.time()
-        keys_to_remove = []
-
-        for key, entry in self.cache.items():
-            if current_time - entry["timestamp"] >= self.ttl:
-                keys_to_remove.append(key)
-
-        for key in keys_to_remove:
-            del self.cache[key]
-
-
-class TieredCache:
-    """
-    Tiered cache implementation with in-memory and Redis backends.
-
-    Features:
-    - Fast in-memory first-level cache
-    - Redis-backed distributed second-level cache
-    - Different TTLs for each cache level
-    - Support for cache invalidation by pattern
-    - Query fingerprinting for semantically similar cache hits
-    - Both sync and async interfaces
+    Attributes:
+        redis_client: The async Redis client instance
+        default_ttl: Default time-to-live in seconds
+        ttl_jitter: Random jitter range in seconds
     """
 
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379",
-        memory_ttl: int = 300,  # 5 minutes for memory cache
-        redis_ttl: int = 3600,  # 1 hour for Redis cache
+        default_ttl: int = 300,
+        ttl_jitter: int = 60,
         prefix: str = "search:",
-        fingerprint_enabled: bool = True,
-        redis_enabled: bool = False,  # Default to not using Redis
     ):
-        """
-        Initialize tiered cache.
+        """Initialize the cache.
 
         Args:
             redis_url: Redis connection URL
-            memory_ttl: Time-to-live for memory cache in seconds
-            redis_ttl: Time-to-live for Redis cache in seconds
-            prefix: Key prefix for Redis cache
-            fingerprint_enabled: Whether to enable query fingerprinting
-            redis_enabled: Whether to enable Redis caching
+            default_ttl: Default TTL in seconds (default: 300)
+            ttl_jitter: TTL jitter range in seconds (default: 60)
+            prefix: Key prefix for Redis (default: "search:")
         """
-        self.memory_cache: dict[str, dict[str, Any]] = {}
-        self.memory_ttl = memory_ttl
-        self.redis_ttl = redis_ttl
+        self.redis_url = redis_url
+        self.default_ttl = default_ttl
+        self.ttl_jitter = ttl_jitter
         self.prefix = prefix
-        self.fingerprint_enabled = fingerprint_enabled
+        self.redis_client = None
 
-        # Initialize Redis clients if Redis is enabled and available
-        self.redis = None
-        self.async_redis = None
-        self.redis_enabled = redis_enabled and REDIS_AVAILABLE
-
-        if self.redis_enabled:
-            try:
-                self.redis = Redis.from_url(redis_url)
-                self.async_redis = async_redis.from_url(redis_url)
-                logger.info(f"Redis cache initialized at {redis_url}")
-            except Exception as e:
-                logger.warning(
-                    f"Failed to initialize Redis cache: {e}. Using memory cache only."
-                )
-                self.redis = None
-                self.async_redis = None
-                self.redis_enabled = False
-
-    def _redis_key(self, key: str) -> str:
-        """
-        Generate Redis key with prefix.
-
-        Args:
-            key: The original key
-
-        Returns:
-            Prefixed key for Redis
-        """
-        return f"{self.prefix}{key}"
+        # Initialize Redis client
+        if not REDIS_AVAILABLE:
+            logger.warning("SearchCache: Redis not available. Cache will not work.")
+            return
+            
+        try:
+            self.redis_client = redis.from_url(redis_url, decode_responses=False)
+            logger.info(f"SearchCache: Redis client initialized at {redis_url}")
+        except Exception as e:
+            logger.error(f"SearchCache: Failed to initialize Redis client: {e}")
 
     def generate_key(self, query: SearchQuery) -> str:
-        """
-        Generate a cache key for a search query with optional fingerprinting.
+        """Generate cache key using SHA256 hash.
 
         Args:
-            query: The search query
+            query: The search query to generate key for
 
         Returns:
-            A unique key for the query
+            SHA256 hash of the normalized query
         """
-        # Convert query to a normalized form
+        # Convert query to normalized JSON string
         query_dict = query.model_dump()
+        query_str = json.dumps(query_dict, sort_keys=True)
 
-        if self.fingerprint_enabled:
-            # Keep only the important parts of the query for fingerprinting
-            fingerprint_dict = {
-                "query": query_dict["query"],
-                "max_results": query_dict["max_results"],
-                "raw_content": query_dict["raw_content"],
-            }
+        # Generate SHA256 hash
+        hash_obj = hashlib.sha256(query_str.encode())
+        return f"{self.prefix}{hash_obj.hexdigest()}"
 
-            # Sort dictionary to ensure consistent ordering
-            query_str = json.dumps(fingerprint_dict, sort_keys=True)
-        else:
-            # Use the full query for an exact match
-            query_str = json.dumps(query_dict, sort_keys=True)
-
-        # Create a hash
-        return hashlib.md5(query_str.encode()).hexdigest()
-
-    def get(self, key: str) -> CombinedSearchResponse | None:
-        """
-        Get cached result from tiered cache.
-
-        Checks memory cache first, then Redis if not found.
-
-        Args:
-            key: Cache key
+    def _get_ttl(self) -> int:
+        """Get TTL with random jitter to prevent cache stampede.
 
         Returns:
-            Cached result or None if not found or expired
+            TTL in seconds with random jitter applied
         """
-        # Check memory cache first (fastest)
-        if key in self.memory_cache:
-            entry = self.memory_cache[key]
-            if time.time() - entry["timestamp"] < self.memory_ttl:
-                logger.debug(f"Memory cache hit for key: {key}")
-                return entry["result"]
+        jitter = random.randint(0, self.ttl_jitter)
+        return self.default_ttl + jitter
 
-        # Check Redis cache if enabled and not in memory
-        if self.redis_enabled and self.redis:
-            redis_data = self.redis.get(self._redis_key(key))
-            if redis_data:
-                try:
-                    result = self._deserialize(redis_data)
-                    # Update memory cache
-                    self.memory_cache[key] = {
-                        "result": result,
-                        "timestamp": time.time(),
-                    }
-                    logger.debug(f"Redis cache hit for key: {key}")
-                    return result
-                except Exception as e:
-                    logger.warning(f"Failed to deserialize Redis data: {e}")
-
-        return None
-
-    async def get_async(self, key: str) -> CombinedSearchResponse | None:
-        """
-        Async version of get method.
+    async def get(self, query: SearchQuery) -> CombinedSearchResponse | None:
+        """Get cached result from Redis.
 
         Args:
-            key: Cache key
+            query: The search query to look up
 
         Returns:
-            Cached result or None if not found or expired
+            Cached result or None if not found, expired, or error
         """
-        # Check memory cache first (fastest)
-        if key in self.memory_cache:
-            entry = self.memory_cache[key]
-            if time.time() - entry["timestamp"] < self.memory_ttl:
-                logger.debug(f"Memory cache hit for key: {key}")
-                return entry["result"]
+        if not self.redis_client:
+            return None
 
-        # Check Redis cache if enabled and not in memory
-        if self.redis_enabled and self.async_redis:
-            try:
-                redis_data = await self.async_redis.get(self._redis_key(key))
-                if redis_data:
-                    result = self._deserialize(redis_data)
-                    # Update memory cache
-                    self.memory_cache[key] = {
-                        "result": result,
-                        "timestamp": time.time(),
-                    }
-                    logger.debug(f"Redis cache hit for key: {key}")
-                    return result
-            except Exception as e:
-                logger.warning(f"Failed to get data from Redis: {e}")
+        try:
+            key = self.generate_key(query)
+            data = await self.redis_client.get(key)
 
-        return None
+            if data:
+                # Deserialize the JSON data
+                result_dict = json.loads(data.decode("utf-8"))
+                result = CombinedSearchResponse.model_validate(result_dict)
+                logger.debug(f"SearchCache: Cache hit for key {key[:16]}...")
+                return result
 
-    def set(self, key: str, result: CombinedSearchResponse) -> None:
-        """
-        Set result in both memory and Redis caches.
+            logger.debug(f"SearchCache: Cache miss for key {key[:16]}...")
+            return None
+
+        except Exception as e:
+            # Log error but don't raise - cache errors shouldn't break the app
+            logger.warning(f"SearchCache: Error getting from cache: {e}")
+            return None
+
+    async def set(self, query: SearchQuery, results: CombinedSearchResponse) -> None:
+        """Set result in Redis with TTL.
 
         Args:
-            key: Cache key
-            result: Result to cache
+            query: The search query as cache key
+            results: The search results to cache
         """
-        # Update memory cache
-        self.memory_cache[key] = {"result": result, "timestamp": time.time()}
-
-        # Update Redis cache if enabled
-        if self.redis_enabled and self.redis:
-            try:
-                serialized = self._serialize(result)
-                self.redis.setex(self._redis_key(key), self.redis_ttl, serialized)
-                logger.debug(f"Set key in Redis cache: {key}")
-            except Exception as e:
-                logger.warning(f"Failed to set data in Redis: {e}")
-
-    async def set_async(self, key: str, result: CombinedSearchResponse) -> None:
-        """
-        Async version of set method.
-
-        Args:
-            key: Cache key
-            result: Result to cache
-        """
-        # Update memory cache
-        self.memory_cache[key] = {"result": result, "timestamp": time.time()}
-
-        # Update Redis cache if enabled
-        if self.redis_enabled and self.async_redis:
-            try:
-                serialized = self._serialize(result)
-                await self.async_redis.setex(
-                    self._redis_key(key), self.redis_ttl, serialized
-                )
-                logger.debug(f"Set key in Redis cache: {key}")
-            except Exception as e:
-                logger.warning(f"Failed to set data in Redis: {e}")
-
-    def clear(self, key: str = None, pattern: str = None) -> None:
-        """
-        Clear cache for a specific key, pattern, or the entire cache.
-
-        Args:
-            key: Specific key to clear
-            pattern: Pattern to match keys for clearing
-        """
-        if key:
-            # Clear specific key
-            if key in self.memory_cache:
-                del self.memory_cache[key]
-                logger.debug(f"Cleared key from memory cache: {key}")
-
-            if self.redis_enabled and self.redis:
-                try:
-                    self.redis.delete(self._redis_key(key))
-                    logger.debug(f"Cleared key from Redis cache: {key}")
-                except Exception as e:
-                    logger.warning(f"Failed to clear key from Redis: {e}")
-
-        elif pattern:
-            # Clear keys matching pattern
-            if self.redis_enabled and self.redis:
-                try:
-                    redis_keys = self.redis.keys(f"{self.prefix}{pattern}")
-                    if redis_keys:
-                        self.redis.delete(*redis_keys)
-                        logger.debug(
-                            f"Cleared {len(redis_keys)} keys matching pattern from Redis: {pattern}"
-                        )
-
-                        # Also clear from memory cache if keys match the pattern
-                        memory_keys = [
-                            k for k in self.memory_cache.keys() if pattern in k
-                        ]
-                        for k in memory_keys:
-                            del self.memory_cache[k]
-                            logger.debug(f"Cleared key from memory cache: {k}")
-                except Exception as e:
-                    logger.warning(f"Failed to clear keys by pattern from Redis: {e}")
-
-            # Also clear memory cache based on pattern
-            memory_keys = [k for k in list(self.memory_cache.keys()) if pattern in k]
-            for k in memory_keys:
-                del self.memory_cache[k]
-
-        else:
-            # Clear all cache
-            self.memory_cache.clear()
-            logger.debug("Cleared entire memory cache")
-
-            if self.redis_enabled and self.redis:
-                try:
-                    # Delete all keys with the prefix
-                    redis_keys = self.redis.keys(f"{self.prefix}*")
-                    if redis_keys:
-                        self.redis.delete(*redis_keys)
-                        logger.debug(f"Cleared {len(redis_keys)} keys from Redis cache")
-                except Exception as e:
-                    logger.warning(f"Failed to clear all keys from Redis: {e}")
-
-    async def clear_async(self, key: str = None, pattern: str = None) -> None:
-        """
-        Async version of clear method.
-
-        Args:
-            key: Specific key to clear
-            pattern: Pattern to match keys for clearing
-        """
-        if key:
-            # Clear specific key
-            if key in self.memory_cache:
-                del self.memory_cache[key]
-                logger.debug(f"Cleared key from memory cache: {key}")
-
-            if self.redis_enabled and self.async_redis:
-                try:
-                    await self.async_redis.delete(self._redis_key(key))
-                    logger.debug(f"Cleared key from Redis cache: {key}")
-                except Exception as e:
-                    logger.warning(f"Failed to clear key from Redis: {e}")
-
-        elif pattern:
-            # Clear keys matching pattern
-            if self.redis_enabled and self.async_redis:
-                try:
-                    # Scan for keys matching pattern
-                    cursor = b"0"
-                    redis_keys = []
-
-                    while cursor:
-                        cursor, keys = await self.async_redis.scan(
-                            cursor=cursor, match=f"{self.prefix}{pattern}*"
-                        )
-                        redis_keys.extend(keys)
-
-                        # Avoid infinite loops
-                        if cursor == b"0":
-                            break
-
-                    if redis_keys:
-                        # Note: * unpacking doesn't work with await, need to pass the list directly
-                        await self.async_redis.delete(*redis_keys)
-                        logger.debug(
-                            f"Cleared {len(redis_keys)} keys matching pattern from Redis: {pattern}"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to clear keys by pattern from Redis: {e}")
-
-            # Also clear memory cache based on pattern
-            memory_keys = [k for k in list(self.memory_cache.keys()) if pattern in k]
-            for k in memory_keys:
-                del self.memory_cache[k]
-
-        else:
-            # Clear all cache
-            self.memory_cache.clear()
-            logger.debug("Cleared entire memory cache")
-
-            if self.redis_enabled and self.async_redis:
-                try:
-                    # Scan for all keys with prefix
-                    cursor = b"0"
-                    redis_keys = []
-
-                    while cursor:
-                        cursor, keys = await self.async_redis.scan(
-                            cursor=cursor, match=f"{self.prefix}*"
-                        )
-                        redis_keys.extend(keys)
-
-                        # Avoid infinite loops
-                        if cursor == b"0":
-                            break
-
-                    if redis_keys:
-                        await self.async_redis.delete(*redis_keys)
-                        logger.debug(f"Cleared {len(redis_keys)} keys from Redis cache")
-                except Exception as e:
-                    logger.warning(f"Failed to clear all keys from Redis: {e}")
-
-    def clean_expired_memory(self) -> None:
-        """
-        Remove expired entries from memory cache.
-        """
-        current_time = time.time()
-        keys_to_remove = []
-
-        for key, entry in self.memory_cache.items():
-            if current_time - entry["timestamp"] >= self.memory_ttl:
-                keys_to_remove.append(key)
-
-        for key in keys_to_remove:
-            del self.memory_cache[key]
-            logger.debug(f"Removed expired key from memory cache: {key}")
-
-    async def clean_expired_redis(self) -> None:
-        """
-        Clean up expired Redis keys (though Redis does this automatically).
-
-        This is mostly for maintenance and monitoring purposes.
-        """
-        if not self.redis_enabled or not self.async_redis:
+        if not self.redis_client:
             return
 
         try:
-            # This is a no-op since Redis automatically removes expired keys
-            # But we can log current cache stats
-            info = await self.async_redis.info("memory")
-            used_memory = info.get("used_memory_human", "unknown")
-            logger.info(f"Redis memory usage: {used_memory}")
+            key = self.generate_key(query)
+            ttl = self._get_ttl()
+
+            # Serialize the results to JSON
+            data = json.dumps(results.model_dump()).encode("utf-8")
+
+            # Set in Redis with TTL
+            await self.redis_client.setex(key, ttl, data)
+            logger.debug(f"SearchCache: Set key {key[:16]}... with TTL {ttl}s")
+
         except Exception as e:
-            logger.warning(f"Failed to get Redis stats: {e}")
-
-    def _serialize(self, result: CombinedSearchResponse) -> bytes:
-        """
-        Serialize result to JSON bytes.
-
-        Args:
-            result: The result to serialize
-
-        Returns:
-            Serialized bytes
-        """
-        try:
-            return json.dumps(result.model_dump()).encode("utf-8")
-        except Exception as e:
-            logger.error(f"Failed to serialize result: {e}")
-            raise
-
-    def _deserialize(self, data: bytes) -> CombinedSearchResponse:
-        """
-        Deserialize JSON bytes to result object.
-
-        Args:
-            data: Serialized data
-
-        Returns:
-            Deserialized CombinedSearchResponse
-        """
-        try:
-            return CombinedSearchResponse.model_validate(
-                json.loads(data.decode("utf-8"))
-            )
-        except Exception as e:
-            logger.error(f"Failed to deserialize data: {e}")
-            raise
+            # Log error but don't raise - cache errors shouldn't break the app
+            logger.warning(f"SearchCache: Error setting in cache: {e}")
 
     async def close(self) -> None:
-        """
-        Close Redis connections.
-        """
-        if self.redis_enabled and self.async_redis:
+        """Close Redis connection gracefully."""
+        if self.redis_client:
             try:
-                await self.async_redis.aclose()
-                logger.debug("Closed Redis connection")
+                await self.redis_client.aclose()
+                logger.info("SearchCache: Redis connection closed")
             except Exception as e:
-                logger.warning(f"Failed to close Redis connection: {e}")
+                logger.warning(f"SearchCache: Error closing Redis connection: {e}")
+
+
+class TimedCache:
+    """Simple in-memory cache with TTL for backward compatibility.
+
+    This is a minimal implementation to support legacy code that uses TimedCache.
+    """
+
+    def __init__(self, ttl_seconds: int = 3600):
+        """Initialize timed cache.
+
+        Args:
+            ttl_seconds: Time-to-live in seconds
+        """
+        self.ttl_seconds = ttl_seconds
+        self._cache: dict[str, dict[str, Any]] = {}
+
+    def get(self, key: str) -> Any | None:
+        """Get value from cache if not expired.
+
+        Args:
+            key: Cache key
+
+        Returns:
+            Cached value or None if not found/expired
+        """
+        if key not in self._cache:
+            return None
+
+        entry = self._cache[key]
+        if time.time() - entry["timestamp"] > self.ttl_seconds:
+            del self._cache[key]
+            return None
+
+        return entry["value"]
+
+    def set(self, key: str, value: Any) -> None:
+        """Set value in cache with current timestamp.
+
+        Args:
+            key: Cache key
+            value: Value to cache
+        """
+        self._cache[key] = {"value": value, "timestamp": time.time()}
+
+    def clear(self) -> None:
+        """Clear all cached entries."""
+        self._cache.clear()

@@ -6,18 +6,9 @@ python-dotenv>=1.1.0
 mcp>=1.9.0
 w3lib>=2.3.1
 rapidfuzz>=3.13.0
-scikit-learn>=1.6.1
-numpy>=1.24.3
-sentence-transformers>=4.1.0
-torch>=2.0.0
 dateparser>=1.2.1
 redis>=6.1.0
-
-# Optional ML dependencies
-diskcache>=5.6.3  # For disk-based embedding caching
-onnx>=1.15.0      # For ONNX model export and inference
-onnxruntime>=1.17.0  # For ONNX runtime
-openvino>=2023.3.0   # For OpenVINO inference acceleration
+circuitbreaker>=1.4.0
 
 # Test dependencies
 pytest>=8.0.0

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ..utils.logging import get_logger
 from .base import HealthStatus
-from .config import ComponentConfig
+from ..config.settings import ComponentConfig
 from .interfaces import (
     HealthCheck,
     ServiceLifecycle,
