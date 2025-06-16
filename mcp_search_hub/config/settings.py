@@ -208,6 +208,22 @@ class AppSettings(BaseSettings):
         default=None, ge=0, description="Default query budget"
     )
 
+    # LLM routing
+    llm_routing_enabled: bool = Field(
+        default=False, description="Enable LLM-based routing for complex queries"
+    )
+
+    # Provider timeouts (in milliseconds for compatibility)
+    linkup_timeout: int = Field(default=10000, gt=0, description="Linkup timeout in ms")
+    exa_timeout: int = Field(default=15000, gt=0, description="Exa timeout in ms")
+    perplexity_timeout: int = Field(
+        default=20000, gt=0, description="Perplexity timeout in ms"
+    )
+    tavily_timeout: int = Field(default=10000, gt=0, description="Tavily timeout in ms")
+    firecrawl_timeout: int = Field(
+        default=30000, gt=0, description="Firecrawl timeout in ms"
+    )
+
     # Nested configurations
     cache: CacheConfig = Field(
         default_factory=CacheConfig, description="Cache settings"

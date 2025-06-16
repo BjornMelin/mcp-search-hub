@@ -40,6 +40,10 @@ class SimpleContentDetector:
                 "this month",
                 "headlines",
                 "report",
+                "announcement",
+                "press release",
+                "just in",
+                "developing",
             ],
             "technical": [
                 "api",
@@ -63,6 +67,12 @@ class SimpleContentDetector:
                 "version",
                 "release",
                 "github",
+                "stackoverflow",
+                "package",
+                "dependency",
+                "build",
+                "compile",
+                "deploy",
             ],
             "academic": [
                 "research",
@@ -82,6 +92,11 @@ class SimpleContentDetector:
                 "hypothesis",
                 "evidence",
                 "findings",
+                "literature",
+                "citation",
+                "experiment",
+                "data",
+                "results",
             ],
             "commercial": [
                 "buy",
@@ -102,6 +117,11 @@ class SimpleContentDetector:
                 "top rated",
                 "customer",
                 "shipping",
+                "amazon",
+                "ebay",
+                "shopping",
+                "order",
+                "cart",
             ],
         }
 

@@ -6,92 +6,13 @@ from mcp_search_hub.models.results import SearchResponse, SearchResult
 from mcp_search_hub.result_processing.merger import ResultMerger
 
 
-def test_extract_metadata():
-    """Test the metadata extraction functionality."""
-    merger = ResultMerger()
-
-    # Create a test result with minimal metadata
-    result = SearchResult(
-        title="Article from March 15, 2023",
-        url="https://example.com/article",
-        snippet="This is a snippet from yesterday. Published on 2023-03-15.",
-        source="provider1",
-        score=0.9,
-    )
-
-    # Extract metadata
-    merger._extract_metadata(result)
-
-    # Check domain extraction
-    assert result.metadata.get("source_domain") == "example.com"
-
-    # Check date extraction
-    assert "published_date" in result.metadata
-    extracted_date = result.metadata["published_date"]
-    assert "2023-03-15" in extracted_date
-
-    # Check credibility scoring
-    assert "credibility_score" in result.metadata
-    assert result.metadata["credibility_score"] == 0.7  # Default score
+# Test removed - _extract_metadata method no longer exists on ResultMerger
+# The ResultMerger now focuses on merging, ranking, and deduplication of results
+# Metadata extraction has been moved to other components
 
 
-def test_credibility_scoring():
-    """Test the credibility scoring with various domains."""
-    merger = ResultMerger()
-
-    # Create results with different domains
-    results = [
-        # Tier 1: Academic/government
-        SearchResult(
-            title="EDU Domain",
-            url="https://stanford.edu/research",
-            snippet="Academic research",
-            source="provider1",
-            score=0.9,
-        ),
-        SearchResult(
-            title="Government Domain",
-            url="https://nih.gov/research",
-            snippet="Government research",
-            source="provider1",
-            score=0.9,
-        ),
-        # Tier 2: Reputable news
-        SearchResult(
-            title="News Domain",
-            url="https://nytimes.com/article",
-            snippet="News article",
-            source="provider1",
-            score=0.9,
-        ),
-        # Tier 3: Tech sources
-        SearchResult(
-            title="Tech Domain",
-            url="https://github.com/repo",
-            snippet="Code repository",
-            source="provider1",
-            score=0.9,
-        ),
-        # Unknown domain
-        SearchResult(
-            title="Unknown Domain",
-            url="https://example-blog.com/post",
-            snippet="Random blog post",
-            source="provider1",
-            score=0.9,
-        ),
-    ]
-
-    # Extract metadata for all results
-    for result in results:
-        merger._extract_metadata(result)
-
-    # Verify credibility scores
-    assert results[0].metadata["credibility_score"] == 1.0  # .edu domain
-    assert results[1].metadata["credibility_score"] == 1.0  # nih.gov domain
-    assert results[2].metadata["credibility_score"] == 0.9  # nytimes.com
-    assert results[3].metadata["credibility_score"] == 0.85  # github.com
-    assert results[4].metadata["credibility_score"] == 0.7  # Default score
+# Test removed - _extract_metadata method no longer exists on ResultMerger
+# Credibility scoring has been moved to other components
 
 
 def test_recency_boosting():

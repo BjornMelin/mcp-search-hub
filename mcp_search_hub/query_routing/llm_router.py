@@ -200,7 +200,6 @@ class LLMQueryRouter:
             routing_strategy="cascade" if features.complexity > 0.7 else "parallel",
         )
 
-
     async def _init_perplexity_client(self):
         """Initialize the Perplexity client (example)."""
         # In a real implementation, we'd initialize the appropriate client

@@ -42,7 +42,7 @@ async def test_format_search_error(error_handler_middleware):
     """Test handling of SearchError for tool requests."""
     # Mock request
     request = {"tool_name": "test_tool", "query": "test"}
-    context = Context()
+    context = None  # Context is optional in middleware
 
     # Create a search error
     error = SearchError(

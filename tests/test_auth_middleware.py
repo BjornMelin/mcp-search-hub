@@ -121,15 +121,16 @@ class TestAuthMiddleware:
         mock_request.url.path = "/search"
         mock_request.headers = {"X-API-Key": "invalid_key"}
 
-        # Should raise exception with JSONResponse
-        with pytest.raises(Exception) as exc_info:
+        # Should raise AuthenticationError
+        from mcp_search_hub.utils.errors import AuthenticationError
+        
+        with pytest.raises(AuthenticationError) as exc_info:
             await middleware.process_request(mock_request)
 
-        # Check that the exception contains a JSONResponse
-        response = exc_info.value.args[0]
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 401
-        assert response.body is not None  # Body should contain error details
+        # Check the error details
+        error = exc_info.value
+        assert error.message == "Invalid or missing API key"
+        assert error.status_code == 401
 
     @pytest.mark.asyncio
     async def test_process_http_request_missing_key(self):
@@ -141,14 +142,16 @@ class TestAuthMiddleware:
         mock_request.url.path = "/search"
         mock_request.headers = {}
 
-        # Should raise exception with JSONResponse
-        with pytest.raises(Exception) as exc_info:
+        # Should raise AuthenticationError
+        from mcp_search_hub.utils.errors import AuthenticationError
+        
+        with pytest.raises(AuthenticationError) as exc_info:
             await middleware.process_request(mock_request)
 
-        # Check that the exception contains a JSONResponse
-        response = exc_info.value.args[0]
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 401
+        # Check the error details
+        error = exc_info.value
+        assert error.message == "Invalid or missing API key"
+        assert error.status_code == 401
 
     @pytest.mark.asyncio
     async def test_process_response(self):
@@ -202,9 +205,11 @@ async def test_auth_middleware_scenarios(
         assert result == mock_request
     else:
         # Should fail authentication
-        with pytest.raises(Exception) as exc_info:
+        from mcp_search_hub.utils.errors import AuthenticationError
+        
+        with pytest.raises(AuthenticationError) as exc_info:
             await middleware.process_request(mock_request)
 
-        response = exc_info.value.args[0]
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 401
+        error = exc_info.value
+        assert error.message == "Invalid or missing API key"
+        assert error.status_code == 401

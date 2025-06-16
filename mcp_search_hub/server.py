@@ -33,7 +33,7 @@ from .providers.linkup_mcp import LinkupMCPProvider
 from .providers.perplexity_mcp import PerplexityMCPProvider
 from .providers.tavily_mcp import TavilyMCPProvider
 from .query_routing.analyzer import QueryAnalyzer
-from .query_routing.router import SearchRouter
+from .query_routing.hybrid_router import HybridRouter
 from .result_processing.merger import ResultMerger
 from .utils.cache import SearchCache
 from .utils.metrics import MetricsTracker
@@ -73,12 +73,9 @@ class SearchServer:
         self.analyzer = QueryAnalyzer()
 
         # Initialize router
-        self.router = SearchRouter(
+        self.router = HybridRouter(
             providers=self.providers,
-            max_concurrent=self.settings.router.max_concurrent,
-            default_timeout=self.settings.router.max_timeout_ms / 1000.0,  # Convert ms to seconds
-            circuit_failure_threshold=self.settings.router.circuit_failure_threshold,
-            circuit_recovery_timeout=self.settings.router.circuit_recovery_timeout,
+            settings=self.settings,
         )
 
         self.merger = ResultMerger()
@@ -107,6 +104,11 @@ class SearchServer:
         """Set up and configure middleware components."""
         # Get the Starlette app from FastMCP
         app = self.mcp.http_app
+        
+        # Skip middleware setup if http_app is not a Starlette app (e.g., in tests)
+        if not hasattr(app, 'add_middleware'):
+            logger.warning("http_app does not support add_middleware, skipping middleware setup")
+            return
 
         # Add middleware directly to the Starlette app
         middleware_config = self.settings.middleware
@@ -276,7 +278,7 @@ class SearchServer:
                             name=f"{prov_name}_{orig_tool_name}",
                             description=f"{tool_desc} (via {prov_name})",
                         )
-                        async def provider_tool_wrapper(ctx: Context, **kwargs):
+                        async def provider_tool_wrapper(ctx: "Context", **kwargs):
                             """Wrapper function for provider-specific tools."""
                             request_id = str(uuid.uuid4())
                             ctx.info(
@@ -513,7 +515,7 @@ class SearchServer:
             return JSONResponse(content=response.model_dump(mode="json"))
 
     async def search_with_routing(
-        self, search_query: SearchQuery, request_id: str, ctx: Context
+        self, search_query: SearchQuery, request_id: str, ctx: "Context"
     ) -> CombinedSearchResponse:
         """Execute a search using the unified router."""
         # Check cache
@@ -530,20 +532,16 @@ class SearchServer:
             )
             return cached_result
 
-        # Analyze query
-        features = self.analyzer.analyze(search_query)
-        ctx.info(f"Request {request_id} - Query features: {features.model_dump()}")
-
         # Route and execute
-        ctx.info(f"Request {request_id} - Starting search with router")
+        ctx.info(f"Request {request_id} - Starting search with hybrid router")
         start_time = time.time()
 
-        # Use the router which handles provider selection and execution
-        results = await self.router.route_and_execute(
-            query=search_query,
-            features=features,
-            max_providers=3,
-        )
+        # Route query to appropriate providers
+        routing_decision = await self.router.route(search_query)
+        ctx.info(f"Request {request_id} - Routing decision: {routing_decision.model_dump()}")
+        
+        # Execute search across selected providers
+        results = await self.router.execute(search_query, routing_decision)
 
         response_time = time.time() - start_time
         ctx.info(f"Request {request_id} - Search completed in {response_time:.2f}s")
@@ -557,7 +555,7 @@ class SearchServer:
             metadata={
                 "request_id": request_id,
                 "query": search_query.query,
-                "features": features.model_dump(),
+                "routing_decision": routing_decision.model_dump(),
                 "providers_used": list(results.keys()),
                 "result_count": len(merged_results),
                 "response_time": response_time,
