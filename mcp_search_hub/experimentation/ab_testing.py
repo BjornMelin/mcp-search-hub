@@ -575,7 +575,7 @@ class ABTestingManager:
             }
 
         # Create summary
-        summary = {
+        return {
             "experiment_id": experiment_id,
             "name": experiment.name,
             "total_queries": len(results),
@@ -585,4 +585,3 @@ class ABTestingManager:
             "active": experiment.active,
         }
 
-        return summary

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from ..models.query import QueryFeatures
 from ..models.router import ProviderPerformanceMetrics, ProviderScore
 from ..providers.base import SearchProvider
-from ..utils.simple_cache import TimedCache
+from ..utils.cache import TimedCache
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +187,7 @@ class LLMQueryRouter:
 
         # For now, just return a mock result
         # In a real implementation, we'd parse the LLM response into this structure
-        mock_result = LLMRoutingResult(
+        return LLMRoutingResult(
             provider_scores={
                 "tavily": 0.9 if "fact" in features.content_type else 0.6,
                 "perplexity": 0.8 if features.complexity > 0.7 else 0.5,
@@ -200,7 +200,6 @@ class LLMQueryRouter:
             routing_strategy="cascade" if features.complexity > 0.7 else "parallel",
         )
 
-        return mock_result
 
     async def _init_perplexity_client(self):
         """Initialize the Perplexity client (example)."""

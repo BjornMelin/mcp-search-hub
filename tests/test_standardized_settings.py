@@ -4,6 +4,8 @@ import os
 import tempfile
 from unittest.mock import patch
 
+from pydantic import SecretStr
+
 from mcp_search_hub.config.settings import AppSettings, get_settings
 
 
@@ -32,6 +34,7 @@ class TestAppSettings:
         assert settings.cache.prefix == "search:"
         assert settings.cache.fingerprint_enabled is True
         assert settings.cache.clean_interval == 600
+        assert settings.cache.ttl_jitter == 60
 
         # Provider defaults
         assert settings.linkup.enabled is True
@@ -58,6 +61,9 @@ class TestAppSettings:
         assert settings.router.max_providers == 3
         assert settings.router.min_confidence == 0.6
         assert settings.router.execution_strategy == "auto"
+        assert settings.router.max_concurrent == 3
+        assert settings.router.circuit_failure_threshold == 5
+        assert settings.router.circuit_recovery_timeout == 30.0
 
         # Middleware defaults
         assert settings.middleware.auth_enabled is True
@@ -111,8 +117,8 @@ CACHE__REDIS_ENABLED=true
         """Test that API keys are handled as SecretStr properly."""
         settings = AppSettings()
 
-        # Set a secret value
-        settings.linkup.api_key = "secret_key_123"
+        # Set a secret value as SecretStr
+        settings.linkup.api_key = SecretStr("secret_key_123")
 
         # Should be SecretStr type
         assert hasattr(settings.linkup.api_key, "get_secret_value")

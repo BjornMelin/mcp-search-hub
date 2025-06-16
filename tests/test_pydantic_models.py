@@ -2,16 +2,16 @@
 
 import pytest
 
+from mcp_search_hub.config.settings import (
+    AppSettings,
+    ComponentConfig,
+    ProviderSettings,
+)
 from mcp_search_hub.models.base import (
     ErrorResponse,
     HealthResponse,
     HealthStatus,
     ProviderStatus,
-)
-from mcp_search_hub.config.settings import (
-    AppSettings,
-    ComponentConfig,
-    ProviderSettings,
 )
 from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.models.results import (

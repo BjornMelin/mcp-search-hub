@@ -115,8 +115,7 @@ class RateLimitMiddleware(BaseMiddleware):
                 return api_key[:8]
 
             # Fall back to client host
-            client_host = request.client.host if request.client else "unknown"
-            return client_host
+            return request.client.host if request.client else "unknown"
 
         # For tool requests, use "tool" as client id (no rate limiting for tools)
         return "tool"

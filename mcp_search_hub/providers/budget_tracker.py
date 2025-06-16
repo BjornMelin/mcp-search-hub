@@ -78,11 +78,8 @@ class ProviderBudgetTracker:
             if self.state.daily_cost + estimated_cost > self.config.daily_budget:
                 return False
 
-            if self.state.monthly_cost + estimated_cost > self.config.monthly_budget:
-                return False
-
-            # Budget is OK
-            return True
+            # Budget is OK if monthly cost won't exceed limit
+            return self.state.monthly_cost + estimated_cost <= self.config.monthly_budget
 
     async def record_cost(self, actual_cost: Decimal) -> None:
         """

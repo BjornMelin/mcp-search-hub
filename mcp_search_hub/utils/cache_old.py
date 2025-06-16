@@ -18,12 +18,12 @@ except ImportError:
     # Create dummy classes for static type checking
     class Redis:
         @classmethod
-        def from_url(cls, *args, **kwargs):
+        def from_url(cls, *args, **kwargs) -> None:
             return None
 
-    class async_redis:
+    class AsyncRedis:
         @classmethod
-        def from_url(cls, *args, **kwargs):
+        def from_url(cls, *args, **kwargs) -> None:
             return None
 
 
@@ -281,7 +281,7 @@ class TieredCache:
 
                         # Also clear from memory cache if keys match the pattern
                         memory_keys = [
-                            k for k in self.memory_cache.keys() if pattern in k
+                            k for k in self.memory_cache if pattern in k
                         ]
                         for k in memory_keys:
                             del self.memory_cache[k]

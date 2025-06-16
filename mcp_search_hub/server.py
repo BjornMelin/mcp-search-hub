@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -33,8 +35,8 @@ from .providers.tavily_mcp import TavilyMCPProvider
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.router import SearchRouter
 from .result_processing.merger import ResultMerger
-from .utils.metrics import MetricsTracker
 from .utils.cache import SearchCache
+from .utils.metrics import MetricsTracker
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +75,10 @@ class SearchServer:
         # Initialize router
         self.router = SearchRouter(
             providers=self.providers,
-            max_concurrent=3,
-            default_timeout=30.0,
+            max_concurrent=self.settings.router.max_concurrent,
+            default_timeout=self.settings.router.max_timeout_ms / 1000.0,  # Convert ms to seconds
+            circuit_failure_threshold=self.settings.router.circuit_failure_threshold,
+            circuit_recovery_timeout=self.settings.router.circuit_recovery_timeout,
         )
 
         self.merger = ResultMerger()
@@ -83,7 +87,7 @@ class SearchServer:
         self.cache = SearchCache(
             redis_url=self.settings.cache.redis_url,
             default_ttl=self.settings.cache.redis_ttl,
-            ttl_jitter=60,
+            ttl_jitter=self.settings.cache.ttl_jitter,
             prefix=self.settings.cache.prefix,
         )
         logger.info(
@@ -264,17 +268,13 @@ class SearchServer:
                 tools = await provider.list_tools()
 
                 for tool in tools:
-                    # Create a tool wrapper that routes to the provider
-                    tool_name = f"{provider_name}_{tool.name}"
-                    tool_description = f"{tool.description} (via {provider_name})"
-
                     # Create a closure to capture the current values
                     def create_tool_wrapper(
-                        prov_name: str, prov: SearchProvider, orig_tool_name: str
+                        prov_name: str, prov: SearchProvider, orig_tool_name: str, tool_desc: str
                     ):
                         @self.mcp.tool(
                             name=f"{prov_name}_{orig_tool_name}",
-                            description=f"{tool.description} (via {prov_name})",
+                            description=f"{tool_desc} (via {prov_name})",
                         )
                         async def provider_tool_wrapper(ctx: Context, **kwargs):
                             """Wrapper function for provider-specific tools."""
@@ -292,8 +292,10 @@ class SearchServer:
                                 )
                                 raise
 
+                        return provider_tool_wrapper
+
                     # Register the tool
-                    create_tool_wrapper(provider_name, provider, tool.name)
+                    create_tool_wrapper(provider_name, provider, tool.name, tool.description)
 
                 logger.info(
                     f"Registered {len(tools)} tools for provider {provider_name}"
@@ -311,8 +313,30 @@ class SearchServer:
         async def search_combined(request: Request) -> JSONResponse:
             """Execute a combined search across multiple providers."""
             try:
-                data = await request.json()
-                search_query = SearchQuery(**data)
+                # Parse request body
+                try:
+                    data = await request.json()
+                except json.JSONDecodeError as e:
+                    return JSONResponse(
+                        content={
+                            "error": "Invalid JSON in request body",
+                            "details": str(e),
+                        },
+                        status_code=400,
+                    )
+
+                # Validate query
+                try:
+                    search_query = SearchQuery(**data)
+                except ValidationError as e:
+                    return JSONResponse(
+                        content={
+                            "error": "Invalid search query parameters",
+                            "details": e.errors(),
+                        },
+                        status_code=422,
+                    )
+
                 request_id = str(uuid.uuid4())
 
                 # Create a simple context for logging
@@ -329,14 +353,48 @@ class SearchServer:
                 ctx = SimpleContext()
 
                 # Use search_with_routing
-                response = await self.search_with_routing(search_query, request_id, ctx)
+                try:
+                    response = await self.search_with_routing(search_query, request_id, ctx)
+                except TimeoutError:
+                    return JSONResponse(
+                        content={
+                            "error": "Search request timed out",
+                            "request_id": request_id,
+                        },
+                        status_code=504,
+                    )
+                except Exception as e:
+                    # Check if it's a known provider error
+                    if "rate limit" in str(e).lower():
+                        return JSONResponse(
+                            content={
+                                "error": "Rate limit exceeded",
+                                "details": str(e),
+                                "request_id": request_id,
+                            },
+                            status_code=429,
+                        )
+                    if "budget" in str(e).lower():
+                        return JSONResponse(
+                            content={
+                                "error": "Budget limit exceeded",
+                                "details": str(e),
+                                "request_id": request_id,
+                            },
+                            status_code=402,
+                        )
+                    raise
 
                 return JSONResponse(content=response.model_dump(mode="json"))
 
             except Exception as e:
-                logger.error(f"Error in search_combined: {str(e)}")
+                logger.error(f"Error in search_combined: {str(e)}", exc_info=True)
                 return JSONResponse(
-                    content={"error": str(e)},
+                    content={
+                        "error": "Internal server error",
+                        "message": str(e),
+                        "request_id": request_id if 'request_id' in locals() else None,
+                    },
                     status_code=500,
                 )
 

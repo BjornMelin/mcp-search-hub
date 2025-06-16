@@ -160,10 +160,7 @@ class SimpleContentDetector:
                 return True
 
         # Check for question mark
-        if "?" in query:
-            return True
-
-        return False
+        return "?" in query
 
     def get_query_length_category(
         self, query: str

@@ -15,8 +15,8 @@ from typing import (
     runtime_checkable,
 )
 
-from .base import HealthStatus
 from ..config.settings import ComponentConfig
+from .base import HealthStatus
 from .query import SearchQuery
 from .results import SearchResponse, SearchResult
 

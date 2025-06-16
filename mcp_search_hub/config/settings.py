@@ -24,6 +24,9 @@ class CacheConfig(BaseModel):
     clean_interval: int = Field(
         default=600, ge=0, description="Cache cleanup interval in seconds"
     )
+    ttl_jitter: int = Field(
+        default=60, ge=0, description="Cache TTL jitter in seconds to prevent stampede"
+    )
 
 
 class RetryConfig(BaseModel):
@@ -79,6 +82,15 @@ class RouterConfig(ComponentConfig):
     )
     max_timeout_ms: int = Field(
         default=30000, gt=0, description="Maximum timeout in milliseconds"
+    )
+    max_concurrent: int = Field(
+        default=3, ge=1, description="Maximum concurrent provider executions"
+    )
+    circuit_failure_threshold: int = Field(
+        default=5, ge=1, description="Circuit breaker failure threshold"
+    )
+    circuit_recovery_timeout: float = Field(
+        default=30.0, gt=0, description="Circuit breaker recovery timeout in seconds"
     )
 
 

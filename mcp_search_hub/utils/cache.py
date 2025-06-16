@@ -9,6 +9,7 @@ from typing import Any
 
 try:
     import redis.asyncio as redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -62,7 +63,7 @@ class SearchCache:
         if not REDIS_AVAILABLE:
             logger.warning("SearchCache: Redis not available. Cache will not work.")
             return
-            
+
         try:
             self.redis_client = redis.from_url(redis_url, decode_responses=False)
             logger.info(f"SearchCache: Redis client initialized at {redis_url}")

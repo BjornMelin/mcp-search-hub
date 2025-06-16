@@ -316,7 +316,7 @@ def _apply_fuzzy_matching(
     sorted_results = sorted(results, key=lambda x: x.score, reverse=True)
 
     # Keep track of which results to include in the final set
-    keep_indices = set([0])  # Always keep the highest-scored result
+    keep_indices = {0}  # Always keep the highest-scored result
 
     # For fuzzy URL matching
     for i in range(1, len(sorted_results)):
@@ -362,7 +362,7 @@ def _apply_fuzzy_matching(
             similarity_matrix = cosine_similarity(tfidf_matrix)
 
             # Find content duplicates
-            final_indices = set([0])  # Always keep highest scored
+            final_indices = {0}  # Always keep highest scored
             for i in range(1, len(kept_results)):
                 content_duplicate = False
 

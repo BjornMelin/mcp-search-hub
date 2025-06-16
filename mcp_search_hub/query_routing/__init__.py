@@ -3,7 +3,7 @@
 from .analyzer import QueryAnalyzer
 from .circuit_breaker import CircuitBreaker
 from .cost_optimizer import CostOptimizer
-from .router import SearchRouter, ProviderMetrics
+from .router import ProviderMetrics, SearchRouter
 from .scoring_calculator import ScoringCalculator
 
 __all__ = [

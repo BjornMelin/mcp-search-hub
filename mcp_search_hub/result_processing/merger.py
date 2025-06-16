@@ -173,7 +173,7 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
 
         # Process groups with more than one result
         merged_results = []
-        for url, group in url_groups.items():
+        for _url, group in url_groups.items():
             if len(group) == 1:
                 merged_results.append(group[0])
                 continue

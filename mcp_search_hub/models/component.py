@@ -12,9 +12,9 @@ from typing import Any, Generic, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
+from ..config.settings import ComponentConfig
 from ..utils.logging import get_logger
 from .base import HealthStatus
-from ..config.settings import ComponentConfig
 from .interfaces import (
     HealthCheck,
     ServiceLifecycle,
