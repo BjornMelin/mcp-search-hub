@@ -179,7 +179,7 @@ CACHE_TTL=300
 
 > 💡 **Tip**: You don't need all providers enabled. Start with 1-2 providers and add more as needed.
 
-For detailed configuration options, see [CONFIGURATION.md](CONFIGURATION.md).
+For detailed configuration options, see [Configuration Guide](../operators/configuration.md).
 
 ## First Search
 
@@ -291,7 +291,7 @@ ls -la .env
 
 ### Getting Help
 
-- **Documentation**: Check [Configuration Guide](CONFIGURATION.md) and [API Reference](API_REFERENCE.md)
+- **Documentation**: Check [Configuration Guide](../operators/configuration.md) and [API Reference](../developers/api-reference.md)
 - **Issues**: Report bugs on [GitHub Issues](https://github.com/BjornMelin/mcp-search-hub/issues)
 - **Logs**: Check server logs for detailed error information
 
@@ -314,12 +314,12 @@ curl http://localhost:8000/metrics
 
 Now that you have MCP Search Hub running:
 
-1. **🔍 [Try Advanced Features](API_REFERENCE.md#advanced-usage)**
+1. **🔍 [Try Advanced Features](../developers/api-reference.md#advanced-usage)**
    - Provider-specific searches
    - Budget constraints
    - Content type hints
 
-2. **⚙️ [Optimize Configuration](CONFIGURATION.md)**
+2. **⚙️ [Optimize Configuration](../operators/configuration.md)**
    - Rate limiting
    - Caching strategies
    - Performance tuning
@@ -329,7 +329,7 @@ Now that you have MCP Search Hub running:
    - Load balancing
    - Monitoring
 
-4. **🛠️ [Contribute to Development](CONTRIBUTING.md)**
+4. **🛠️ [Contribute to Development](../developers/contributing.md)**
    - Development setup
    - Testing guidelines
    - Code contribution

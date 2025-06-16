@@ -1,49 +1,33 @@
 version: "3.8"
 
+# Alternative development Docker Compose configuration
+# Extends base configuration with aggressive development settings
+
+include:
+  - docker-compose.base.yml
+
 services:
   mcp-search-hub:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: builder  # Use the builder stage for development
-    ports:
-      - "8000:8000"
     volumes:
       - ./:/app  # Mount local directory for live code changes
     environment:
-      - LINKUP_API_KEY=${LINKUP_API_KEY}
-      - EXA_API_KEY=${EXA_API_KEY}
-      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}  # More verbose logging for development
-      - CACHE_TTL=${CACHE_TTL:-300}
-      - DEFAULT_BUDGET=${DEFAULT_BUDGET:-0.5}
-      - TRANSPORT=${TRANSPORT:-streamable-http}
+      - CACHE_TTL=${CACHE_TTL:-60}     # Very short cache for immediate feedback
+      - DEFAULT_BUDGET=${DEFAULT_BUDGET:-1.0}  # High budget for development
       - PYTHONUNBUFFERED=1  # Unbuffered output for better logging
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s  # More frequent checks during development
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - MIDDLEWARE_LOGGING_INCLUDE_BODY=true  # Debug logging
+      - MIDDLEWARE_ERROR_INCLUDE_TRACEBACK=true  # Full error details
+    build:
+      target: builder  # Use builder stage with dev tools
     command: ["python", "-m", "mcp_search_hub.main", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8000"]
-    restart: unless-stopped
-
-  # Add Redis for caching in development
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      interval: 5s   # Very frequent checks for development
+      timeout: 3s
       start_period: 5s
-    restart: unless-stopped
+      retries: 2
 
-volumes:
-  redis-data:
+  redis:
+    healthcheck:
+      interval: 10s  # More frequent Redis checks
+      timeout: 5s
+      start_period: 5s

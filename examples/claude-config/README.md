@@ -4,7 +4,7 @@ This directory contains example configurations for using MCP Search Hub with var
 
 > **🚀 Quick Setup**: For the fastest setup, use our interactive script: `python scripts/setup_claude_desktop.py`
 > 
-> **📖 Complete Guide**: See [docs/CLAUDE_DESKTOP_SETUP.md](../../docs/CLAUDE_DESKTOP_SETUP.md) for comprehensive instructions
+> **📖 Complete Guide**: See [docs/users/claude-desktop-setup.md](../../docs/users/claude-desktop-setup.md) for comprehensive instructions
 
 ## Recommended Setup (Single Server)
 

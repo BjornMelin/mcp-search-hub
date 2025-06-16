@@ -5,8 +5,8 @@ Welcome to the MCP Search Hub developer documentation. This section is for devel
 ## Quick Navigation
 
 ### Getting Started
-- [Development Setup](../../DEVELOPMENT.md) - Set up your development environment
-- [Contributing Guide](../../CONTRIBUTING.md) - How to contribute to the project
+- [Development Setup](development.md) - Set up your development environment
+- [Contributing Guide](contributing.md) - How to contribute to the project
 - [Architecture Overview](/docs/architecture/overview.md) - Understand the system design
 
 ### Core Concepts
@@ -16,7 +16,7 @@ Welcome to the MCP Search Hub developer documentation. This section is for devel
 - [Result Processing](/docs/developers/result-processing.md) - Merging and ranking algorithms
 
 ### API & Reference
-- [API Reference](../../API_REFERENCE.md) - Complete tool documentation
+- [API Reference](api-reference.md) - Complete tool documentation
 - [Provider APIs](/docs/developers/provider-apis.md) - Provider-specific interfaces
 - [Configuration API](/docs/developers/config-api.md) - Settings and configuration system
 - [Python API Docs](/docs/reference/python-api.md) - Module and class documentation

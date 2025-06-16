@@ -1,0 +1,57 @@
+version: "3.8"
+
+# Base Docker Compose configuration
+# Extended by environment-specific compose files
+
+services:
+  mcp-search-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8000:8000"
+    environment:
+      - LINKUP_API_KEY=${LINKUP_API_KEY}
+      - EXA_API_KEY=${EXA_API_KEY}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CACHE_TTL=${CACHE_TTL:-3600}
+      - DEFAULT_BUDGET=${DEFAULT_BUDGET}
+      - TRANSPORT=${TRANSPORT:-streamable-http}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - REDIS_CACHE_ENABLED=${REDIS_CACHE_ENABLED:-false}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  redis-data:

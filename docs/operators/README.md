@@ -11,7 +11,7 @@ Welcome to the MCP Search Hub operator documentation. This section is for system
 - [Cloud Deployment](/docs/operators/cloud-deployment.md) - AWS, GCP, Azure guides
 
 ### Configuration
-- [Environment Configuration](../../CONFIGURATION.md) - Complete configuration reference
+- [Environment Configuration](configuration.md) - Complete configuration reference
 - [Security Configuration](/docs/operators/security.md) - API keys, authentication, TLS
 - [Provider Configuration](/docs/operators/provider-config.md) - Provider-specific settings
 - [Performance Tuning](/docs/operators/performance-tuning.md) - Optimization settings
@@ -74,7 +74,7 @@ curl http://localhost:8000/providers/status
 ```
 
 ### Environment Variables
-See [Configuration Reference](../../CONFIGURATION.md) for complete list.
+See [Configuration Reference](configuration.md) for complete list.
 
 ### Support Channels
 - [Operations Issues](https://github.com/yourusername/mcp-search-hub/issues)

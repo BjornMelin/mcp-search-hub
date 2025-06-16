@@ -5,12 +5,12 @@ Welcome to the MCP Search Hub user documentation. This section is designed for e
 ## Quick Navigation
 
 ### Getting Started
-- [Installation Guide](../../GETTING_STARTED.md) - Get up and running in 5 minutes
+- [Installation Guide](getting-started.md) - Get up and running in 5 minutes
 - [Quick Start Tutorial](/docs/users/quick-start.md) - Your first search with MCP Search Hub
 - [Basic Usage Examples](/docs/users/basic-usage.md) - Common search patterns
 
 ### Configuration
-- [Environment Setup](../../CONFIGURATION.md) - Configure API keys and settings
+- [Environment Setup](../operators/configuration.md) - Configure API keys and settings
 - [Provider Configuration](/docs/users/provider-setup.md) - Enable and configure search providers
 - [Claude Desktop Integration](/docs/CLAUDE_DESKTOP_SETUP.md) - Set up with Claude Desktop
 
