@@ -370,7 +370,7 @@ class TestCacheIntegration:
             raw_content="Content with special chars: <>&\"'",
         )
 
-        response = CombinedSearchResponse(
+        CombinedSearchResponse(
             results=[result_with_unicode],
             query="test",
             providers_used=["test_provider"],

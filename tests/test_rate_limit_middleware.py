@@ -243,7 +243,7 @@ class TestRateLimitMiddleware:
         mock_request.client.host = "192.168.1.1"
 
         # Should raise exception with JSONResponse
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Rate limit exceeded"):
             await middleware.process_request(mock_request)
 
     @pytest.mark.asyncio
@@ -270,7 +270,7 @@ class TestRateLimitMiddleware:
         mock_request.client.host = "192.168.1.1"
 
         # Should raise exception with JSONResponse
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Rate limit exceeded"):
             await middleware.process_request(mock_request)
 
     @pytest.mark.asyncio
@@ -360,7 +360,7 @@ async def test_integration_with_multiple_clients():
     assert result3 == client1_req
 
     # Third request from client1 should be blocked
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="Rate limit exceeded"):
         await middleware.process_request(client1_req)
 
     # But client2 should still be allowed

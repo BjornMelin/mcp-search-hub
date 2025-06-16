@@ -63,7 +63,6 @@ class TestBaseMCPProviderRetry:
             provider.RETRY_ENABLED = True
 
             # Mock the with_retry method
-            original_with_retry = provider.with_retry
             retry_spy = MagicMock()
 
             # Create a mock decorator that captures the function being decorated
@@ -421,7 +420,7 @@ class TestEexaMCPProviderRetry:
             # Mock sleep to avoid actual waiting
             with patch("mcp_search_hub.utils.retry.asyncio.sleep", return_value=None):
                 query = SearchQuery(query="test")
-                result = await provider.search(query)
+                await provider.search(query)
 
                 # Verify retry behavior
                 assert call_count == 3  # Initial + 2 retries
@@ -553,9 +552,12 @@ class TestMixedExceptionRetry:
         """Test retry with a sequence of different exception types."""
         with patch("mcp_search_hub.utils.retry.asyncio.sleep", return_value=None):
 
-            class MockMixedExceptionProvider(RetryMixin):
+            class MockMixedExceptionProvider(BaseMCPProvider):
                 def __init__(self):
                     self.call_count = 0
+                    self.name = "mock_provider"
+                    self.api_key = "test_key"
+                    self.enabled = True
 
                 def get_retry_config(self):
                     return RetryConfig(max_retries=3, base_delay=0.01, jitter=False)

@@ -3,14 +3,14 @@
 import asyncio
 import time
 from collections import defaultdict
-from typing import Any
+from collections.abc import Callable
 
-from fastmcp import Context
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import Response
 
 from ..utils.errors import ProviderRateLimitError
 from ..utils.logging import get_logger
-from .base import BaseMiddleware
 
 logger = get_logger(__name__)
 
@@ -59,20 +59,22 @@ class RateLimiter:
             return True, self.limit - len(self.requests), self.window
 
 
-class RateLimitMiddleware(BaseMiddleware):
+class RateLimitMiddleware(BaseHTTPMiddleware):
     """Middleware to implement rate limiting."""
 
-    def _initialize(self, **options):
+    def __init__(self, app, **options):
         """Initialize rate limiting middleware.
 
         Args:
+            app: ASGI application
             **options: Configuration options including:
                 - limit: Requests per window
                 - window: Time window in seconds
-                - key_func: Function to extract client ID from request
+                - global_limit: Global requests per window
+                - global_window: Global time window in seconds
                 - skip_paths: List of paths to skip rate limiting
         """
-        self.order = options.get("order", 20)  # Run after auth
+        super().__init__(app)
         self.limit = options.get("limit", 100)
         self.window = options.get("window", 60)  # Default: 100 requests per minute
         self.skip_paths = options.get("skip_paths", ["/health", "/metrics"])
@@ -90,58 +92,48 @@ class RateLimitMiddleware(BaseMiddleware):
             f"per client, {len(self.skip_paths)} skipped paths"
         )
 
-    def _get_client_id(self, request: Any) -> str:
+    def _get_client_id(self, request: Request) -> str:
         """Extract client identifier from request.
 
         Args:
-            request: The request object
+            request: The HTTP request object
 
         Returns:
             Client identifier string
         """
-        if isinstance(request, Request):
-            # For HTTP requests, use client IP or forwarded IP
-            forwarded = request.headers.get("X-Forwarded-For")
-            if forwarded:
-                return forwarded.split(",")[0].strip()
+        # For HTTP requests, use client IP or forwarded IP
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
 
-            api_key = request.headers.get("X-API-Key") or request.headers.get(
-                "Authorization"
-            )
-            if api_key:
-                if api_key.startswith("Bearer "):
-                    api_key = api_key.replace("Bearer ", "")
-                # Use first 8 chars of API key as identifier
-                return api_key[:8]
+        api_key = request.headers.get("X-API-Key") or request.headers.get(
+            "Authorization"
+        )
+        if api_key:
+            if api_key.startswith("Bearer "):
+                api_key = api_key.replace("Bearer ", "")
+            # Use first 8 chars of API key as identifier
+            return api_key[:8]
 
-            # Fall back to client host
-            return request.client.host if request.client else "unknown"
+        # Fall back to client host
+        return request.client.host if request.client else "unknown"
 
-        # For tool requests, use "tool" as client id (no rate limiting for tools)
-        return "tool"
-
-    async def process_request(
-        self, request: Any, context: Context | None = None
-    ) -> Any:
-        """Process the incoming request for rate limiting.
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Process HTTP requests for rate limiting.
 
         Args:
-            request: The incoming request (HTTP or tool params)
-            context: Optional Context object for tool requests
+            request: The incoming HTTP request
+            call_next: The next middleware or handler
 
         Returns:
-            The request if rate limit not exceeded
+            The response from downstream
 
         Raises:
-            Exception: If rate limit exceeded
+            ProviderRateLimitError: If rate limit exceeded
         """
-        # Only rate limit HTTP requests
-        if not isinstance(request, Request):
-            return request
-
         # Skip rate limiting for allowed paths
         if any(request.url.path.startswith(path) for path in self.skip_paths):
-            return request
+            return await call_next(request)
 
         # Check global rate limit first
         allowed, remaining, reset = await self.global_limiter.check_rate_limit("global")
@@ -196,38 +188,21 @@ class RateLimitMiddleware(BaseMiddleware):
 
             raise error
 
-        return request
+        # Call the next middleware/handler
+        response = await call_next(request)
 
-    async def process_response(
-        self, response: Any, request: Any, context: Context | None = None
-    ) -> Any:
-        """Add rate limit headers to the response.
+        # Add rate limit headers to the response
+        if hasattr(response, "headers"):
+            # Add rate limit headers
+            limiter = self.limiters[client_id]
 
-        Args:
-            response: The response object
-            request: The original request
-            context: Optional Context object
+            # Just check current state without incrementing
+            remaining = max(0, limiter.limit - len(limiter.requests))
 
-        Returns:
-            The response with rate limit headers
-        """
-        # Only add headers for HTTP responses
-        if not isinstance(request, Request) or not hasattr(response, "headers"):
-            return response
-
-        # Skip adding headers for exempt paths
-        if any(request.url.path.startswith(path) for path in self.skip_paths):
-            return response
-
-        # Add rate limit headers
-        client_id = self._get_client_id(request)
-        limiter = self.limiters[client_id]
-
-        # Just check current state without incrementing
-        remaining = max(0, limiter.limit - len(limiter.requests))
-
-        response.headers["X-RateLimit-Limit"] = str(limiter.limit)
-        response.headers["X-RateLimit-Remaining"] = str(remaining)
-        response.headers["X-RateLimit-Reset"] = str(int(time.time() + limiter.window))
+            response.headers["X-RateLimit-Limit"] = str(limiter.limit)
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+            response.headers["X-RateLimit-Reset"] = str(
+                int(time.time() + limiter.window)
+            )
 
         return response

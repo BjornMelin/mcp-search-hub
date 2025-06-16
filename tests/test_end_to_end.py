@@ -149,7 +149,7 @@ async def test_end_to_end_search_basic(mock_server, mock_context):
     assert len(response.metadata["providers_used"]) > 0
 
     # Verify providers were called
-    for provider_name, provider in mock_server.providers.items():
+    for _provider_name, provider in mock_server.providers.items():
         if not provider.should_fail:
             assert provider.search_called
 
@@ -296,7 +296,7 @@ async def test_unified_router_strategy_selection(mock_server, mock_context):
         # Create a mock query features
         from mcp_search_hub.models.query import QueryFeatures
 
-        features = QueryFeatures(
+        QueryFeatures(
             length=len(case["query"]),
             word_count=len(case["query"].split()),
             content_type="general",

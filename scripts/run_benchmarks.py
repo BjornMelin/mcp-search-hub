@@ -26,10 +26,13 @@ from mcp_search_hub.result_processing.merger import ResultMerger
 from tests.test_performance_benchmark import BenchmarkProvider
 
 
-async def benchmark_parallel_strategy(
-    provider_counts=[2, 5, 10], result_counts=[10, 20, 50]
-):
+async def benchmark_parallel_strategy(provider_counts=None, result_counts=None):
     """Benchmark parallel execution strategy with different provider counts."""
+    if provider_counts is None:
+        provider_counts = [2, 5, 10]
+    if result_counts is None:
+        result_counts = [10, 20, 50]
+
     print("\n======== Parallel Strategy Benchmark ========")
 
     for provider_count in provider_counts:
@@ -84,8 +87,13 @@ async def benchmark_parallel_strategy(
         print(f"  Overhead: {execution_time - max(response_times) / 1000:.3f}s")
 
 
-async def benchmark_cascade_strategy(provider_counts=[2, 5, 10], fail_rates=[0, 0.5]):
+async def benchmark_cascade_strategy(provider_counts=None, fail_rates=None):
     """Benchmark cascade execution strategy with different failure rates."""
+    if provider_counts is None:
+        provider_counts = [2, 5, 10]
+    if fail_rates is None:
+        fail_rates = [0, 0.5]
+
     print("\n======== Cascade Strategy Benchmark ========")
 
     for provider_count in provider_counts:
@@ -153,8 +161,11 @@ async def benchmark_cascade_strategy(provider_counts=[2, 5, 10], fail_rates=[0, 
             print(f"  Overhead: {execution_time - sum(response_times) / 1000:.3f}s")
 
 
-async def benchmark_result_merger(result_counts=[50, 100, 500, 1000]):
+async def benchmark_result_merger(result_counts=None):
     """Benchmark result merger with different numbers of results."""
+    if result_counts is None:
+        result_counts = [50, 100, 500, 1000]
+
     print("\n======== Result Merger Benchmark ========")
 
     merger = ResultMerger()
@@ -216,8 +227,11 @@ async def benchmark_result_merger(result_counts=[50, 100, 500, 1000]):
         print(f"  Processing rate: {result_count / execution_time:.1f} results/second")
 
 
-async def benchmark_throughput(concurrent_queries=[5, 10, 20, 50]):
+async def benchmark_throughput(concurrent_queries=None):
     """Benchmark system throughput with concurrent queries."""
+    if concurrent_queries is None:
+        concurrent_queries = [5, 10, 20, 50]
+
     print("\n======== System Throughput Benchmark ========")
 
     for concurrency in concurrent_queries:

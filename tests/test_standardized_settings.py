@@ -62,8 +62,7 @@ class TestAppSettings:
         assert settings.router.min_confidence == 0.6
         assert settings.router.execution_strategy == "auto"
         assert settings.router.max_concurrent == 3
-        assert settings.router.circuit_failure_threshold == 5
-        assert settings.router.circuit_recovery_timeout == 30.0
+        assert settings.router.base_timeout_ms == 10000
 
         # Middleware defaults
         assert settings.middleware.auth_enabled is True
@@ -139,7 +138,7 @@ CACHE__REDIS_ENABLED=true
         # Test invalid environment
         try:
             AppSettings(environment="invalid")
-            assert False, "Should have raised ValidationError"
+            raise AssertionError("Should have raised ValidationError")
         except Exception:
             pass  # Expected
 
@@ -150,7 +149,7 @@ CACHE__REDIS_ENABLED=true
         # Test invalid log level
         try:
             AppSettings(log_level="INVALID")
-            assert False, "Should have raised ValidationError"
+            raise AssertionError("Should have raised ValidationError")
         except Exception:
             pass  # Expected
 
