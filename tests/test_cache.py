@@ -7,7 +7,7 @@ import pytest
 
 from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.models.results import CombinedSearchResponse, SearchResult
-from mcp_search_hub.utils.cache import SearchCache, TimedCache
+from mcp_search_hub.utils.cache import SearchCache
 
 
 def create_test_result(
@@ -287,7 +287,7 @@ class TestSearchCache:
     @pytest.mark.asyncio
     async def test_end_to_end_caching(self, sample_query):
         """Test complete cache workflow with real-like data."""
-        # Use TimedCache for predictable testing without Redis dependency
+        # Test without Redis dependency
         with patch("mcp_search_hub.utils.cache.REDIS_AVAILABLE", False):
             cache = SearchCache()
 
@@ -323,87 +323,6 @@ class TestSearchCache:
         assert key1 != key2
         assert key1.startswith("app1:")
         assert key2.startswith("app2:")
-
-
-class TestTimedCache:
-    """Test TimedCache class for backward compatibility."""
-
-    def test_initialization(self):
-        """Test TimedCache initialization."""
-        cache = TimedCache(ttl_seconds=3600)
-        assert cache.ttl_seconds == 3600
-        assert cache._cache == {}
-
-    def test_set_and_get(self):
-        """Test basic set and get operations."""
-        cache = TimedCache(ttl_seconds=3600)
-
-        # Set a value
-        cache.set("test_key", "test_value")
-
-        # Get the value
-        result = cache.get("test_key")
-        assert result == "test_value"
-
-    def test_get_nonexistent_key(self):
-        """Test getting a key that doesn't exist."""
-        cache = TimedCache()
-        result = cache.get("nonexistent")
-        assert result is None
-
-    def test_get_expired_key(self):
-        """Test getting an expired key."""
-        cache = TimedCache(ttl_seconds=0)  # Immediate expiration
-
-        cache.set("test_key", "test_value")
-
-        # Should be expired immediately
-        result = cache.get("test_key")
-        assert result is None
-
-        # Key should be removed from cache
-        assert "test_key" not in cache._cache
-
-    def test_clear(self):
-        """Test clearing all cached entries."""
-        cache = TimedCache()
-
-        # Add some entries
-        cache.set("key1", "value1")
-        cache.set("key2", "value2")
-
-        # Clear cache
-        cache.clear()
-
-        # Should be empty
-        assert cache._cache == {}
-        assert cache.get("key1") is None
-        assert cache.get("key2") is None
-
-    def test_overwrite_existing_key(self):
-        """Test overwriting an existing key."""
-        cache = TimedCache()
-
-        cache.set("test_key", "old_value")
-        cache.set("test_key", "new_value")
-
-        result = cache.get("test_key")
-        assert result == "new_value"
-
-    def test_multiple_keys_independent_expiration(self):
-        """Test that multiple keys expire independently."""
-        cache = TimedCache(ttl_seconds=1)
-
-        # Set keys at different times
-        cache.set("key1", "value1")
-
-        # Modify internal timestamp to simulate time passage
-        cache._cache["key1"]["timestamp"] -= 2  # Make it expired
-        cache.set("key2", "value2")  # This should still be valid
-
-        # key1 should be expired, key2 should be valid
-        assert cache.get("key1") is None
-        assert cache.get("key2") == "value2"
 
 
 class TestCacheIntegration:

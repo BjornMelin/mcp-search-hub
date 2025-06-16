@@ -4,8 +4,6 @@ import hashlib
 import json
 import logging
 import random
-import time
-from typing import Any
 
 try:
     import redis.asyncio as redis
@@ -160,51 +158,3 @@ class SearchCache:
                 logger.info("SearchCache: Redis connection closed")
             except Exception as e:
                 logger.warning(f"SearchCache: Error closing Redis connection: {e}")
-
-
-class TimedCache:
-    """Simple in-memory cache with TTL for backward compatibility.
-
-    This is a minimal implementation to support legacy code that uses TimedCache.
-    """
-
-    def __init__(self, ttl_seconds: int = 3600):
-        """Initialize timed cache.
-
-        Args:
-            ttl_seconds: Time-to-live in seconds
-        """
-        self.ttl_seconds = ttl_seconds
-        self._cache: dict[str, dict[str, Any]] = {}
-
-    def get(self, key: str) -> Any | None:
-        """Get value from cache if not expired.
-
-        Args:
-            key: Cache key
-
-        Returns:
-            Cached value or None if not found/expired
-        """
-        if key not in self._cache:
-            return None
-
-        entry = self._cache[key]
-        if time.time() - entry["timestamp"] > self.ttl_seconds:
-            del self._cache[key]
-            return None
-
-        return entry["value"]
-
-    def set(self, key: str, value: Any) -> None:
-        """Set value in cache with current timestamp.
-
-        Args:
-            key: Cache key
-            value: Value to cache
-        """
-        self._cache[key] = {"value": value, "timestamp": time.time()}
-
-    def clear(self) -> None:
-        """Clear all cached entries."""
-        self._cache.clear()
