@@ -584,4 +584,3 @@ class ABTestingManager:
             "end_date": experiment.end_date,
             "active": experiment.active,
         }
-

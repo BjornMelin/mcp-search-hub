@@ -79,7 +79,9 @@ class ProviderBudgetTracker:
                 return False
 
             # Budget is OK if monthly cost won't exceed limit
-            return self.state.monthly_cost + estimated_cost <= self.config.monthly_budget
+            return (
+                self.state.monthly_cost + estimated_cost <= self.config.monthly_budget
+            )
 
     async def record_cost(self, actual_cost: Decimal) -> None:
         """

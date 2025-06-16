@@ -95,7 +95,8 @@ async def test_firecrawl_provider_with_raw_content(mock_firecrawl_response):
     assert result.results[0].raw_content == "This is the raw content from Firecrawl"
 
 
-def test_merger_with_raw_content(mock_linkup_response, mock_firecrawl_response):
+@pytest.mark.asyncio
+async def test_merger_with_raw_content(mock_linkup_response, mock_firecrawl_response):
     """Test that ResultMerger preserves raw content."""
     merger = ResultMerger()
 
@@ -105,7 +106,7 @@ def test_merger_with_raw_content(mock_linkup_response, mock_firecrawl_response):
     }
 
     # Merge with raw content
-    merged = merger.merge_results(responses, raw_content=True)
+    merged = await merger.merge_results(responses, raw_content=True)
 
     # Verify both results are included
     assert len(merged) == 2
@@ -119,7 +120,8 @@ def test_merger_with_raw_content(mock_linkup_response, mock_firecrawl_response):
     assert firecrawl_result.raw_content == "This is the raw content from Firecrawl"
 
 
-def test_merger_without_raw_content_merge(
+@pytest.mark.asyncio
+async def test_merger_without_raw_content_merge(
     mock_linkup_response, mock_firecrawl_response
 ):
     """Test that ResultMerger doesn't apply raw content merging when raw_content=False."""
@@ -131,7 +133,7 @@ def test_merger_without_raw_content_merge(
     }
 
     # Merge without raw content feature
-    merged = merger.merge_results(responses, raw_content=False)
+    merged = await merger.merge_results(responses, raw_content=False)
 
     # Verify both results are included
     assert len(merged) == 2

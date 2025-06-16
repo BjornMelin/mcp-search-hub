@@ -23,7 +23,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, cast
 
-from ..config.settings import ComponentConfig
+# ComponentConfig removed - using dict-based config instead
 from ..models.base import HealthStatus
 from ..models.component import SearchProviderBase
 from ..models.query import SearchQuery
@@ -33,16 +33,25 @@ from ..utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-class ProviderConfig(ComponentConfig):
+class ProviderConfig(dict[str, Any]):
     """Base configuration for search providers."""
 
-    api_key: str | None = None
-    enabled: bool = True
-    timeout_ms: int = 30000
-    max_retries: int = 3
-    rate_limit_per_minute: int | None = None
-    rate_limit_per_hour: int | None = None
-    rate_limit_per_day: int | None = None
+    def __init__(self, **kwargs):
+        """Initialize provider config with defaults."""
+        super().__init__(
+            api_key=kwargs.get("api_key"),
+            enabled=kwargs.get("enabled", True),
+            timeout_ms=kwargs.get("timeout_ms", 30000),
+            max_retries=kwargs.get("max_retries", 3),
+            rate_limit_per_minute=kwargs.get("rate_limit_per_minute"),
+            rate_limit_per_hour=kwargs.get("rate_limit_per_hour"),
+            rate_limit_per_day=kwargs.get("rate_limit_per_day"),
+            name=kwargs.get("name", "provider"),
+        )
+        # Also store any extra kwargs
+        for k, v in kwargs.items():
+            if k not in self:
+                self[k] = v
 
 
 class ProviderMetrics(dict[str, Any]):

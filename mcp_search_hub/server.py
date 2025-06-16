@@ -19,7 +19,6 @@ from .middleware import (
     AuthMiddleware,
     ErrorHandlerMiddleware,
     LoggingMiddleware,
-    MiddlewareManager,
     RateLimitMiddleware,
     RetryMiddleware,
 )
@@ -48,9 +47,6 @@ class SearchServer:
         """Initialize the SearchServer with all components and providers."""
         # Initialize settings
         self.settings = get_settings()
-
-        # Initialize middleware manager
-        self.middleware_manager = MiddlewareManager()
 
         # Initialize FastMCP server
         self.mcp = FastMCP(
@@ -104,10 +100,12 @@ class SearchServer:
         """Set up and configure middleware components."""
         # Get the Starlette app from FastMCP
         app = self.mcp.http_app
-        
+
         # Skip middleware setup if http_app is not a Starlette app (e.g., in tests)
-        if not hasattr(app, 'add_middleware'):
-            logger.warning("http_app does not support add_middleware, skipping middleware setup")
+        if not hasattr(app, "add_middleware"):
+            logger.warning(
+                "http_app does not support add_middleware, skipping middleware setup"
+            )
             return
 
         # Add middleware directly to the Starlette app
@@ -272,13 +270,16 @@ class SearchServer:
                 for tool in tools:
                     # Create a closure to capture the current values
                     def create_tool_wrapper(
-                        prov_name: str, prov: SearchProvider, orig_tool_name: str, tool_desc: str
+                        prov_name: str,
+                        prov: SearchProvider,
+                        orig_tool_name: str,
+                        tool_desc: str,
                     ):
                         @self.mcp.tool(
                             name=f"{prov_name}_{orig_tool_name}",
                             description=f"{tool_desc} (via {prov_name})",
                         )
-                        async def provider_tool_wrapper(ctx: "Context", **kwargs):
+                        async def provider_tool_wrapper(ctx: Context, **kwargs):
                             """Wrapper function for provider-specific tools."""
                             request_id = str(uuid.uuid4())
                             ctx.info(
@@ -297,7 +298,9 @@ class SearchServer:
                         return provider_tool_wrapper
 
                     # Register the tool
-                    create_tool_wrapper(provider_name, provider, tool.name, tool.description)
+                    create_tool_wrapper(
+                        provider_name, provider, tool.name, tool.description
+                    )
 
                 logger.info(
                     f"Registered {len(tools)} tools for provider {provider_name}"
@@ -356,7 +359,9 @@ class SearchServer:
 
                 # Use search_with_routing
                 try:
-                    response = await self.search_with_routing(search_query, request_id, ctx)
+                    response = await self.search_with_routing(
+                        search_query, request_id, ctx
+                    )
                 except TimeoutError:
                     return JSONResponse(
                         content={
@@ -395,7 +400,7 @@ class SearchServer:
                     content={
                         "error": "Internal server error",
                         "message": str(e),
-                        "request_id": request_id if 'request_id' in locals() else None,
+                        "request_id": request_id if "request_id" in locals() else None,
                     },
                     status_code=500,
                 )
@@ -515,7 +520,7 @@ class SearchServer:
             return JSONResponse(content=response.model_dump(mode="json"))
 
     async def search_with_routing(
-        self, search_query: SearchQuery, request_id: str, ctx: "Context"
+        self, search_query: SearchQuery, request_id: str, ctx: Context
     ) -> CombinedSearchResponse:
         """Execute a search using the unified router."""
         # Check cache
@@ -538,8 +543,10 @@ class SearchServer:
 
         # Route query to appropriate providers
         routing_decision = await self.router.route(search_query)
-        ctx.info(f"Request {request_id} - Routing decision: {routing_decision.model_dump()}")
-        
+        ctx.info(
+            f"Request {request_id} - Routing decision: {routing_decision.model_dump()}"
+        )
+
         # Execute search across selected providers
         results = await self.router.execute(search_query, routing_decision)
 

@@ -1,9 +1,10 @@
 """Tests for the error handler middleware."""
 
 import pytest
-from fastmcp import Context
-from starlette.requests import Request
+from starlette.applications import Starlette
 from starlette.responses import JSONResponse
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 from mcp_search_hub.middleware.error_handler import ErrorHandlerMiddleware
 from mcp_search_hub.utils.errors import (
@@ -13,150 +14,138 @@ from mcp_search_hub.utils.errors import (
 )
 
 
-@pytest.fixture
-def error_handler_middleware():
-    """Create an instance of ErrorHandlerMiddleware for testing."""
-    return ErrorHandlerMiddleware()
+def create_test_app(include_traceback=False):
+    """Create a test Starlette app with error handler middleware."""
+
+    async def success_endpoint(request):
+        return JSONResponse({"result": "success"})
+
+    async def search_error_endpoint(request):
+        raise SearchError(
+            message="Search failed",
+            details={"provider": "test"},
+            status_code=400,
+        )
+
+    async def auth_error_endpoint(request):
+        raise AuthenticationError(message="Invalid API key")
+
+    async def rate_limit_error_endpoint(request):
+        raise ProviderRateLimitError(
+            provider="test_provider",
+            retry_after=60,
+            message="Rate limit exceeded",
+        )
+
+    async def generic_error_endpoint(request):
+        raise ValueError("Something went wrong")
+
+    routes = [
+        Route("/success", success_endpoint),
+        Route("/search_error", search_error_endpoint),
+        Route("/auth_error", auth_error_endpoint),
+        Route("/rate_limit_error", rate_limit_error_endpoint),
+        Route("/generic_error", generic_error_endpoint),
+    ]
+
+    app = Starlette(routes=routes)
+    app.add_middleware(
+        ErrorHandlerMiddleware,
+        include_traceback=include_traceback,
+        redact_sensitive_data=True,
+    )
+    return app
 
 
 @pytest.mark.asyncio
-async def test_pass_through_success(error_handler_middleware):
+async def test_pass_through_success():
     """Test that the middleware passes through successful responses."""
-    # Mock request and response
-    request = {"key": "value"}
-    expected_response = {"result": "success"}
+    app = create_test_app()
+    client = TestClient(app)
 
-    # Mock call_next function
-    async def call_next(_):
-        return expected_response
-
-    # Process the request through middleware
-    response = await error_handler_middleware(request, call_next)
-
-    # Verify the response is passed through unchanged
-    assert response == expected_response
+    response = client.get("/success")
+    assert response.status_code == 200
+    assert response.json() == {"result": "success"}
 
 
 @pytest.mark.asyncio
-async def test_format_search_error(error_handler_middleware):
-    """Test handling of SearchError for tool requests."""
-    # Mock request
-    request = {"tool_name": "test_tool", "query": "test"}
-    context = None  # Context is optional in middleware
+async def test_search_error_handling():
+    """Test handling of SearchError exceptions."""
+    app = create_test_app()
+    client = TestClient(app)
 
-    # Create a search error
-    error = SearchError(
-        message="Test error",
-        provider="test_provider",
-        status_code=400,
-        details={"key": "value"},
-    )
-
-    # Mock call_next function that raises the error
-    async def call_next(_):
-        raise error
-
-    # Process the request through middleware
-    result = await error_handler_middleware(request, call_next, context)
-
-    # Verify the error is formatted correctly
-    assert isinstance(result, dict)
-    assert result["error_type"] == "SearchError"
-    assert result["message"] == "Test error"
-    assert result["provider"] == "test_provider"
-    assert result["details"]["key"] == "value"
+    response = client.get("/search_error")
+    assert response.status_code == 400
+    data = response.json()
+    assert data["message"] == "Search failed"
+    assert data["error_type"] == "SearchError"
+    assert data["details"]["provider"] == "test"
 
 
 @pytest.mark.asyncio
-async def test_format_authentication_error_http(error_handler_middleware):
-    """Test handling of AuthenticationError for HTTP requests."""
-    # Mock HTTP request
-    request = Request({"type": "http", "method": "GET", "path": "/test"})
+async def test_auth_error_handling():
+    """Test handling of AuthenticationError exceptions."""
+    app = create_test_app()
+    client = TestClient(app)
 
-    # Create an authentication error
-    error = AuthenticationError(message="Invalid API key")
-
-    # Mock call_next function that raises the error
-    async def call_next(_):
-        raise error
-
-    # Process the request through middleware
-    response = await error_handler_middleware(request, call_next)
-
-    # Verify the response is a proper JSONResponse
-    assert isinstance(response, JSONResponse)
+    response = client.get("/auth_error")
     assert response.status_code == 401
-
-    # Check content
-    content = response.body.decode("utf-8")
-    assert "Invalid API key" in content
-    assert "AuthenticationError" in content
+    data = response.json()
+    assert data["message"] == "Invalid API key"
+    assert data["error_type"] == "AuthenticationError"
 
 
 @pytest.mark.asyncio
-async def test_format_rate_limit_error_with_headers(error_handler_middleware):
-    """Test handling of ProviderRateLimitError with custom headers."""
-    # Mock HTTP request
-    request = Request({"type": "http", "method": "GET", "path": "/test"})
+async def test_rate_limit_error_handling():
+    """Test handling of ProviderRateLimitError exceptions."""
+    app = create_test_app()
+    client = TestClient(app)
 
-    # Create a rate limit error with custom headers
-    error = ProviderRateLimitError(
-        provider="test_provider",
-        limit_type="requests_per_minute",
-        retry_after=30,
-        message="Rate limit exceeded",
-    )
-
-    # Add headers to error details
-    error.details["headers"] = {
-        "X-RateLimit-Limit": "100",
-        "X-RateLimit-Remaining": "0",
-        "X-RateLimit-Reset": "30",
-        "Retry-After": "30",
-    }
-
-    # Mock call_next function that raises the error
-    async def call_next(_):
-        raise error
-
-    # Process the request through middleware
-    response = await error_handler_middleware(request, call_next)
-
-    # Verify the response is a proper JSONResponse with the headers
-    assert isinstance(response, JSONResponse)
+    response = client.get("/rate_limit_error")
     assert response.status_code == 429
-    assert response.headers["X-RateLimit-Limit"] == "100"
-    assert response.headers["X-RateLimit-Remaining"] == "0"
-    assert response.headers["X-RateLimit-Reset"] == "30"
-    assert response.headers["Retry-After"] == "30"
+    data = response.json()
+    assert data["message"] == "Rate limit exceeded"
+    assert data["error_type"] == "ProviderRateLimitError"
+    assert data["provider"] == "test_provider"
+    assert data["details"]["retry_after_seconds"] == 60
 
-    # Check content
-    content = response.body.decode("utf-8")
-    assert "Rate limit exceeded" in content
-    assert "ProviderRateLimitError" in content
-
-
-@pytest.mark.asyncio
-async def test_format_generic_exception(error_handler_middleware):
-    """Test handling of a generic Exception."""
-    # Mock request
-    request = {"tool_name": "test_tool", "query": "test"}
-
-    # Mock call_next function that raises a generic error
-    async def call_next(_):
-        raise ValueError("Invalid value")
-
-    # Process the request through middleware
-    result = await error_handler_middleware(request, call_next)
-
-    # Verify the error is formatted correctly
-    assert isinstance(result, dict)
-    assert result["error"] == "Invalid value"
-    assert result["type"] == "ValueError"
+    # Check for rate limit headers
+    assert "X-RateLimit-Retry-After" in response.headers
+    assert response.headers["X-RateLimit-Retry-After"] == "60"
 
 
 @pytest.mark.asyncio
-async def test_middleware_order(error_handler_middleware):
-    """Test that error handler middleware has very low order value."""
-    # It should run first (last in the chain) to catch errors from all other middleware
-    assert error_handler_middleware.order == 0
+async def test_generic_error_handling():
+    """Test handling of generic exceptions."""
+    app = create_test_app()
+    client = TestClient(app)
+
+    response = client.get("/generic_error")
+    assert response.status_code == 500
+    data = response.json()
+    assert data["message"] == "Something went wrong"
+    assert data["error_type"] == "ValueError"
+
+
+@pytest.mark.asyncio
+async def test_include_traceback_option():
+    """Test that traceback is included when option is enabled."""
+    app = create_test_app(include_traceback=True)
+    client = TestClient(app)
+
+    response = client.get("/generic_error")
+    assert response.status_code == 500
+    data = response.json()
+    assert "traceback" in data
+
+
+@pytest.mark.asyncio
+async def test_exclude_traceback_option():
+    """Test that traceback is excluded when option is disabled."""
+    app = create_test_app(include_traceback=False)
+    client = TestClient(app)
+
+    response = client.get("/generic_error")
+    assert response.status_code == 500
+    data = response.json()
+    assert "traceback" not in data

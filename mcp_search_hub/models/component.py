@@ -12,7 +12,7 @@ from typing import Any, Generic, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-from ..config.settings import ComponentConfig
+# Removed ComponentConfig import - using dict for config instead
 from ..utils.logging import get_logger
 from .base import HealthStatus
 from .interfaces import (
@@ -22,7 +22,7 @@ from .interfaces import (
 
 # Type variables for generics
 T = TypeVar("T")
-ConfigT = TypeVar("ConfigT", bound="ComponentConfig")
+ConfigT = TypeVar("ConfigT", bound=dict[str, Any])
 ResultT = TypeVar("ResultT")
 MetricsT = TypeVar("MetricsT", bound=dict[str, Any])
 

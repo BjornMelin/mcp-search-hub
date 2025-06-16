@@ -769,4 +769,3 @@ class BaseMCPProvider(SearchProvider):
             return func
 
         return with_exponential_backoff(config=self.get_retry_config())(func)
-

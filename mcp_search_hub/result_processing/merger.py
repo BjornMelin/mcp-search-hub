@@ -4,7 +4,7 @@ import datetime
 import time
 from typing import Any
 
-from ..config.settings import MergerConfig
+from ..config.settings import MergerSettings
 from ..models.base import HealthStatus
 from ..models.component import ResultMergerBase
 from ..models.results import SearchResponse, SearchResult
@@ -15,7 +15,7 @@ from .metadata_enrichment import enrich_result_metadata
 logger = get_logger(__name__)
 
 
-class ResultMerger(ResultMergerBase[MergerConfig]):
+class ResultMerger(ResultMergerBase[MergerSettings]):
     """Merges and ranks results from multiple providers."""
 
     # Provider quality weights for ranking
@@ -56,13 +56,12 @@ class ResultMerger(ResultMergerBase[MergerConfig]):
     def __init__(
         self,
         name: str = "result_merger",
-        config: MergerConfig | None = None,
+        config: MergerSettings | None = None,
     ):
         """Initialize the merger with configuration options."""
         # If no config is provided, create a default one
         if config is None:
-            config = MergerConfig(
-                name=name,
+            config = MergerSettings(
                 provider_weights=self.DEFAULT_WEIGHTS,
                 recency_enabled=True,
                 credibility_enabled=True,

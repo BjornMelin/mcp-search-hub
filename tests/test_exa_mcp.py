@@ -25,7 +25,9 @@ class TestExaMCPProvider:
     @patch("mcp_search_hub.providers.base_mcp.stdio_client")
     @patch("asyncio.create_subprocess_exec")
     @patch("mcp.ClientSession")
-    async def test_initialize_success(self, mock_client_session, mock_subprocess, mock_stdio_client, provider):
+    async def test_initialize_success(
+        self, mock_client_session, mock_subprocess, mock_stdio_client, provider
+    ):
         """Test successful initialization."""
         # Mock subprocess for installation check
         mock_process = MagicMock()
@@ -36,11 +38,11 @@ class TestExaMCPProvider:
         # Mock stdio_client streams
         mock_read_stream = MagicMock()
         mock_write_stream = MagicMock()
-        
+
         # Create async context manager for stdio_client
         async def async_context_manager():
             return mock_read_stream, mock_write_stream
-        
+
         mock_stdio_client.return_value.__aenter__ = async_context_manager
         mock_stdio_client.return_value.__aexit__ = AsyncMock()
 
@@ -48,7 +50,9 @@ class TestExaMCPProvider:
         mock_session = MagicMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock()
-        mock_session.list_tools = AsyncMock(return_value=[MagicMock(name="web_search_exa")])
+        mock_session.list_tools = AsyncMock(
+            return_value=[MagicMock(name="web_search_exa")]
+        )
         mock_client_session.return_value = mock_session
 
         await provider.initialize()

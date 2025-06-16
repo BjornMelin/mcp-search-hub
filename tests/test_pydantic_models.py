@@ -4,7 +4,6 @@ import pytest
 
 from mcp_search_hub.config.settings import (
     AppSettings,
-    ComponentConfig,
     ProviderSettings,
 )
 from mcp_search_hub.models.base import (
@@ -122,27 +121,6 @@ class TestBaseModels:
 
 class TestConfigModels:
     """Tests for configuration models in models/config.py."""
-
-    def test_component_config(self):
-        """Test ComponentConfig model initialization and serialization."""
-        config = ComponentConfig(name="test_component")
-        assert config.name == "test_component"
-        assert config.enabled is True  # Default
-        assert config.debug is False  # Default
-
-        # Test with all fields
-        config = ComponentConfig(
-            name="test_component",
-            enabled=False,
-            debug=True,
-            custom_field="custom_value",  # Extra field should be allowed
-        )
-
-        data = config.model_dump()
-        assert data["name"] == "test_component"
-        assert data["enabled"] is False
-        assert data["debug"] is True
-        assert data["custom_field"] == "custom_value"
 
     def test_provider_settings(self):
         """Test ProviderSettings model initialization and serialization."""

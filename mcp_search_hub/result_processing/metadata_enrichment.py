@@ -25,15 +25,20 @@ def enrich_result_metadata(result: SearchResult) -> None:
 
             # Extract organization name from domain
             domain_parts = domain.split(".")
-            if len(domain_parts) >= 2 and domain_parts[-1] in ["com", "org", "net", "io"]:
-                    # For commercial domains, use the subdomain
-                    org_name = domain_parts[-2].capitalize()
-                    # Convert kebab/snake case to title case
-                    if "-" in org_name:
-                        org_name = " ".join(
-                            word.capitalize() for word in org_name.split("-")
-                        )
-                    result.metadata["organization"] = org_name
+            if len(domain_parts) >= 2 and domain_parts[-1] in [
+                "com",
+                "org",
+                "net",
+                "io",
+            ]:
+                # For commercial domains, use the subdomain
+                org_name = domain_parts[-2].capitalize()
+                # Convert kebab/snake case to title case
+                if "-" in org_name:
+                    org_name = " ".join(
+                        word.capitalize() for word in org_name.split("-")
+                    )
+                result.metadata["organization"] = org_name
         except Exception:
             pass
 

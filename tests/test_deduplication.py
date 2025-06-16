@@ -18,9 +18,7 @@ def test_normalize_url_handles_trailing_slashes():
 def test_normalize_url_removes_fragments():
     """Test that URL fragments are removed."""
     assert _normalize_url("https://example.com/#section") == "example.com"
-    assert (
-        _normalize_url("https://example.com/page#footer") == "example.com/page"
-    )
+    assert _normalize_url("https://example.com/page#footer") == "example.com/page"
 
 
 def test_normalize_url_sorts_query_params():
@@ -179,7 +177,9 @@ def test_remove_duplicates_preserves_non_duplicates():
 
     # Use a higher fuzzy threshold since the URLs are very similar
     # Also disable content similarity to ensure it's not interfering
-    unique = remove_duplicates(results, fuzzy_url_threshold=95.0, use_content_similarity=False)
+    unique = remove_duplicates(
+        results, fuzzy_url_threshold=95.0, use_content_similarity=False
+    )
     assert len(unique) == 3
     assert [r.title for r in unique] == ["Page 1", "Page 2", "Page 3"]
 

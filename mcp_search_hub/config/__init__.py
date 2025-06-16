@@ -3,25 +3,21 @@
 from .settings import (
     AppSettings,
     CacheConfig,
-    ComponentConfig,
-    MergerConfig,
+    MergerSettings,
     MiddlewareConfig,
     ProviderSettings,
-    ResultProcessorConfig,
     RetryConfig,
-    RouterConfig,
+    RouterSettings,
     get_settings,
 )
 
 __all__ = [
     "AppSettings",
     "CacheConfig",
-    "ComponentConfig",
-    "MergerConfig",
+    "MergerSettings",
     "MiddlewareConfig",
     "ProviderSettings",
-    "ResultProcessorConfig",
     "RetryConfig",
-    "RouterConfig",
+    "RouterSettings",
     "get_settings",
 ]
