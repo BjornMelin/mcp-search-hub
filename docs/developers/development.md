@@ -27,7 +27,7 @@ make setup-dev
 # OR manually:
 python -m venv venv
 source venv/bin/activate
-uv pip install -r requirements.txt -r requirements-development.txt
+uv pip install -r requirements.txt -r requirements-dev.txt
 pre-commit install
 ```
 
@@ -36,7 +36,7 @@ pre-commit install
 The development environment includes:
 
 ```txt
-# requirements-development.txt
+# requirements-dev.txt
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
@@ -214,8 +214,8 @@ make format
    ```
 
 5. **Update documentation**:
-   - Add to `CONFIGURATION.md`
-   - Update `API_REFERENCE.md`
+   - Add to `../operators/configuration.md`
+   - Update `api-reference.md`
    - Add example usage
 
 #### Debugging Provider Issues

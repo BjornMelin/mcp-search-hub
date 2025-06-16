@@ -269,7 +269,7 @@ def main():
         print("2. In a new conversation, ask: 'What MCP tools do you have available?'")
         print("3. Test with: 'Search for recent AI developments'")
         print()
-        print("📚 For more help, see: docs/CLAUDE_DESKTOP_SETUP.md")
+        print("📚 For more help, see: docs/users/claude-desktop-setup.md")
 
     except OSError as e:
         print(f"❌ Failed to write configuration: {e}")

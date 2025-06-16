@@ -387,7 +387,7 @@ Use Perplexity to research and reason about the implications of recent AI regula
 - **Examples**: See [examples/claude-config/](../examples/claude-config/) for additional configurations
 
 ### Contributing
-- **Development**: See [CONTRIBUTING.md](../CONTRIBUTING.md) for development setup
+- **Development**: See [../developers/contributing.md](../../developers/contributing.md) for development setup
 - **Testing**: Run `uv run pytest` to verify functionality
 - **Documentation**: Help improve this guide by submitting PRs
 

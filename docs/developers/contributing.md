@@ -62,7 +62,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies with development tools
 uv pip install -r requirements.txt
-uv pip install -r requirements-development.txt
+uv pip install -r requirements-dev.txt
 
 # Install pre-commit hooks
 pre-commit install
@@ -296,8 +296,8 @@ class TestExaMCPProvider:
 
 ### Documentation Standards
 
-1. **API Documentation**: Keep `API_REFERENCE.md` updated
-2. **Configuration**: Update `CONFIGURATION.md` for new settings
+1. **API Documentation**: Keep `api-reference.md` updated
+2. **Configuration**: Update `../operators/configuration.md` for new settings
 3. **Getting Started**: Update setup instructions as needed
 4. **Code Comments**: Explain complex logic and algorithms
 5. **Architecture Decisions**: Document in `docs/adrs/`
@@ -314,11 +314,11 @@ class TestExaMCPProvider:
 
 ```
 ├── README.md                 # Project overview and quick start
-├── GETTING_STARTED.md       # Detailed setup guide
-├── CONFIGURATION.md         # Complete configuration reference
-├── API_REFERENCE.md         # Tool and API documentation
-├── CONTRIBUTING.md          # This file
-├── DEVELOPMENT.md           # Development workflows
+├── docs/users/getting-started.md      # Detailed setup guide
+├── docs/operators/configuration.md   # Complete configuration reference
+├── docs/developers/api-reference.md  # Tool and API documentation
+├── docs/developers/contributing.md   # This file
+├── docs/developers/development.md    # Development workflows
 └── docs/
     ├── architecture/        # System design documentation
     ├── deployment/          # Deployment guides

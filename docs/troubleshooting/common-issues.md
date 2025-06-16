@@ -526,7 +526,7 @@ curl -X POST http://localhost:8000/search/combined \
 ### Support Channels
 
 - **GitHub Issues**: Bug reports and feature requests
-- **Documentation**: Check API_REFERENCE.md and CONFIGURATION.md
+- **Documentation**: Check ../developers/api-reference.md and ../operators/configuration.md
 - **Health Check**: Always run `/health` endpoint first
 
 ---
