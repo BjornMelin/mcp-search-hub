@@ -1,4 +1,4 @@
-"""Simplified application settings with modern Pydantic v2 patterns."""
+"""Application settings with modern Pydantic v2 patterns."""
 
 from functools import lru_cache
 
@@ -55,18 +55,10 @@ class ProviderSettings(BaseModel):
     timeout: float = Field(default=30.0, gt=0, description="Request timeout in seconds")
 
 
-class ComponentConfig(BaseModel):
-    """Base configuration for components."""
-
-    name: str = Field(description="Component name")
-    enabled: bool = Field(default=True, description="Whether component is enabled")
-    debug: bool = Field(default=False, description="Enable debug mode")
-
-
-class RouterConfig(ComponentConfig):
+# Router settings
+class RouterSettings(BaseModel):
     """Router configuration settings."""
 
-    name: str = Field(default="router", description="Component name")
     max_providers: int = Field(
         default=3, ge=1, description="Maximum providers per query"
     )
@@ -77,27 +69,15 @@ class RouterConfig(ComponentConfig):
     base_timeout_ms: int = Field(
         default=10000, gt=0, description="Base timeout in milliseconds"
     )
-    min_timeout_ms: int = Field(
-        default=3000, gt=0, description="Minimum timeout in milliseconds"
-    )
-    max_timeout_ms: int = Field(
-        default=30000, gt=0, description="Maximum timeout in milliseconds"
-    )
     max_concurrent: int = Field(
         default=3, ge=1, description="Maximum concurrent provider executions"
     )
-    circuit_failure_threshold: int = Field(
-        default=5, ge=1, description="Circuit breaker failure threshold"
-    )
-    circuit_recovery_timeout: float = Field(
-        default=30.0, gt=0, description="Circuit breaker recovery timeout in seconds"
-    )
 
 
-class ResultProcessorConfig(ComponentConfig):
-    """Configuration for result processor components."""
+# Merger settings
+class MergerSettings(BaseModel):
+    """Merger configuration settings."""
 
-    name: str = Field(default="result_processor", description="Component name")
     fuzzy_url_threshold: float = Field(
         default=92.0, description="Threshold for fuzzy URL matching"
     )
@@ -110,12 +90,6 @@ class ResultProcessorConfig(ComponentConfig):
     max_results: int = Field(
         default=10, description="Maximum number of results to return"
     )
-
-
-class MergerConfig(ResultProcessorConfig):
-    """Configuration for result merger components."""
-
-    name: str = Field(default="merger", description="Component name")
     provider_weights: dict[str, float] = Field(
         default_factory=dict, description="Per-provider quality weights"
     )
@@ -231,8 +205,11 @@ class AppSettings(BaseSettings):
     retry: RetryConfig = Field(
         default_factory=RetryConfig, description="Retry settings"
     )
-    router: RouterConfig = Field(
-        default_factory=RouterConfig, description="Router settings"
+    router: RouterSettings = Field(
+        default_factory=RouterSettings, description="Router settings"
+    )
+    merger: MergerSettings = Field(
+        default_factory=MergerSettings, description="Merger settings"
     )
     middleware: MiddlewareConfig = Field(
         default_factory=MiddlewareConfig, description="Middleware settings"
