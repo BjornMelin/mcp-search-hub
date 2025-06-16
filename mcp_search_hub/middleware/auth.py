@@ -1,30 +1,31 @@
 """Authentication middleware for MCP Search Hub."""
 
 import os
-from typing import Any
+from collections.abc import Callable
 
-from fastmcp import Context
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import Response
 
 from ..utils.errors import AuthenticationError
 from ..utils.logging import get_logger
-from .base import BaseMiddleware
 
 logger = get_logger(__name__)
 
 
-class AuthMiddleware(BaseMiddleware):
-    """Middleware to handle API key authentication for HTTP and tool requests."""
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Middleware to handle API key authentication for HTTP requests."""
 
-    def _initialize(self, **options):
+    def __init__(self, app, **options):
         """Initialize authentication middleware.
 
         Args:
+            app: ASGI application
             **options: Configuration options including:
                 - api_keys: Optional list of valid API keys
                 - skip_auth_paths: List of paths that don't require authentication
         """
-        self.order = options.get("order", 10)  # Auth should run early
+        super().__init__(app)
 
         # Get API keys from options or environment
         self.api_keys = options.get("api_keys", [])
@@ -44,48 +45,26 @@ class AuthMiddleware(BaseMiddleware):
             f"{len(self.api_keys)} API keys and {len(self.skip_auth_paths)} skipped paths"
         )
 
-    async def process_request(
-        self, request: Any, context: Context | None = None
-    ) -> Any:
-        """Process the incoming request for authentication.
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Process HTTP requests for authentication.
 
         Args:
-            request: The incoming request (HTTP or tool params)
-            context: Optional Context object for tool requests
+            request: The incoming HTTP request
+            call_next: The next middleware or handler
 
         Returns:
-            The request if authentication succeeds
+            The response from downstream
 
         Raises:
             AuthenticationError: If authentication fails
         """
         # Skip authentication if no API keys are configured
         if not self.api_keys:
-            return request
+            return await call_next(request)
 
-        # Handle HTTP requests
-        if isinstance(request, Request):
-            return await self._authenticate_http_request(request)
-
-        # Tool requests don't need auth - they've already been authenticated
-        # at the HTTP layer or via MCP client authentication
-        return request
-
-    async def _authenticate_http_request(self, request: Request) -> Request:
-        """Authenticate an HTTP request.
-
-        Args:
-            request: The HTTP request
-
-        Returns:
-            The request if authentication succeeds
-
-        Raises:
-            AuthenticationError: If authentication fails
-        """
         # Skip authentication for allowed paths
         if any(request.url.path.startswith(path) for path in self.skip_auth_paths):
-            return request
+            return await call_next(request)
 
         # Get API key from header - case insensitive
         api_key = (
@@ -104,19 +83,4 @@ class AuthMiddleware(BaseMiddleware):
                 message="Invalid or missing API key",
             )
 
-        return request
-
-    async def process_response(
-        self, response: Any, request: Any, context: Context | None = None
-    ) -> Any:
-        """Process the outgoing response (not used for authentication).
-
-        Args:
-            response: The response
-            request: The original request
-            context: Optional Context object
-
-        Returns:
-            The unmodified response
-        """
-        return response
+        return await call_next(request)

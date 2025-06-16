@@ -1,20 +1,20 @@
-"""Retry middleware for HTTP requests and tool invocations.
+"""Retry middleware for HTTP requests.
 
-This middleware adds exponential backoff retry logic to HTTP requests and tool
-invocations when certain types of transient failures occur.
+This middleware adds exponential backoff retry logic to HTTP requests
+when certain types of transient failures occur.
 """
 
 import asyncio
 import random
-from typing import Any
+from collections.abc import Callable
 
 import httpx
-from fastmcp import Context
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import Response
 
 from ..utils.errors import ProviderTimeoutError, SearchError
 from ..utils.logging import get_logger
-from .base import BaseMiddleware
 
 logger = get_logger(__name__)
 
@@ -39,22 +39,23 @@ RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
 )
 
 
-class RetryMiddleware(BaseMiddleware):
+class RetryMiddleware(BaseHTTPMiddleware):
     """Middleware for applying exponential backoff retry logic."""
 
-    def _initialize(self, **options):
+    def __init__(self, app, **options):
         """Initialize retry middleware.
 
         Args:
+            app: ASGI application
             **options: Configuration options including:
                 - max_retries: Maximum number of retry attempts
                 - base_delay: Initial delay between retries in seconds
                 - max_delay: Maximum delay between retries in seconds
                 - exponential_base: Base for exponential backoff calculation
                 - jitter: Whether to add randomization to delays
-                - order: Middleware execution order (default: 30)
+                - skip_paths: List of paths to skip retry logic
         """
-        self.order = options.get("order", 30)  # Run after auth and rate limit
+        super().__init__(app)
         self.max_retries = options.get("max_retries", 3)
         self.base_delay = options.get("base_delay", 1.0)
         self.max_delay = options.get("max_delay", 60.0)
@@ -110,104 +111,33 @@ class RetryMiddleware(BaseMiddleware):
 
         return False
 
-    def should_retry_request(self, request: Any) -> bool:
+    def should_retry_request(self, request: Request) -> bool:
         """Determine if a request should be retried.
 
         Args:
-            request: The request to check
+            request: The HTTP request to check
 
         Returns:
             True if the request should be handled by retry logic
         """
-        # For HTTP requests, check if path is in skip list
-        if isinstance(request, Request):
-            path = request.url.path
-            return path not in self.skip_paths
+        # Check if path is in skip list
+        path = request.url.path
+        return path not in self.skip_paths
 
-        # For tool requests, always apply retry logic
-        return True
-
-    async def process_request(
-        self, request: Any, context: Context | None = None
-    ) -> Any:
-        """Process the incoming request (pre-processing).
-
-        For retry middleware, we don't modify the request, just pass it through.
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Process HTTP requests with retry logic.
 
         Args:
-            request: The incoming request
-            context: Optional Context object for tool requests
-
-        Returns:
-            Unmodified request
-        """
-        # No pre-processing needed, just attach retry state for later use
-        if isinstance(request, Request):
-            request.state.retry_attempt = 0
-            request.state.retryable_request = self.should_retry_request(request)
-
-        elif isinstance(request, dict):
-            # For tool parameters, add retry state
-            request = request.copy()
-            request["_retry_attempt"] = 0
-            request["_retryable_request"] = self.should_retry_request(request)
-
-        return request
-
-    async def process_response(
-        self, response: Any, request: Any, context: Context | None = None
-    ) -> Any:
-        """Process the outgoing response (post-processing).
-
-        For retry middleware, we don't modify successful responses.
-
-        Args:
-            response: The response
-            request: The original request
-            context: Optional Context object
-
-        Returns:
-            Response (either original or from retry)
-        """
-        # Response was successful, just return it
-        return response
-
-    async def __call__(
-        self,
-        request: Any,
-        call_next: callable,
-        context: Context | None = None,
-    ) -> Any:
-        """Execute the middleware with retry logic.
-
-        This overrides the base implementation to implement retry logic.
-
-        Args:
-            request: The incoming request
-            call_next: The next middleware or handler function
-            context: Optional Context object
+            request: The incoming HTTP request
+            call_next: The next middleware or handler
 
         Returns:
             The response from downstream
         """
-        if not self.enabled:
-            return await call_next(request)
-
-        # Process request (add retry state)
-        modified_request = await self.process_request(request, context)
-
         # Check if we should apply retry logic to this request
-        retryable_request = False
-        if isinstance(modified_request, Request):
-            retryable_request = getattr(
-                modified_request.state, "retryable_request", False
-            )
-        elif isinstance(modified_request, dict):
-            retryable_request = modified_request.get("_retryable_request", False)
-
-        if not retryable_request:
+        if not self.should_retry_request(request):
             # Skip retry logic for excluded paths
-            return await call_next(modified_request)
+            return await call_next(request)
 
         # Initialize retry state
         attempt = 0
@@ -216,18 +146,11 @@ class RetryMiddleware(BaseMiddleware):
         # Retry loop
         while attempt <= self.max_retries:
             try:
-                # Update retry counter in request
-                if isinstance(modified_request, Request):
-                    modified_request.state.retry_attempt = attempt
-                elif isinstance(modified_request, dict):
-                    modified_request = modified_request.copy()
-                    modified_request["_retry_attempt"] = attempt
+                # Store retry attempt in request state
+                request.state.retry_attempt = attempt
 
-                # Call the next middleware/handler
-                response = await call_next(modified_request)
-
-                # Process response (no changes needed for success)
-                return await self.process_response(response, request, context)
+                # Call the next middleware/handler and return on success
+                return await call_next(request)
 
             except Exception as exc:
                 last_exception = exc
@@ -248,11 +171,7 @@ class RetryMiddleware(BaseMiddleware):
                 delay = self.calculate_delay(attempt)
 
                 # Get request info for logging
-                request_info = "unknown"
-                if isinstance(request, Request):
-                    request_info = f"{request.method} {request.url.path}"
-                elif isinstance(request, dict) and "tool_name" in request:
-                    request_info = f"Tool: {request['tool_name']}"
+                request_info = f"{request.method} {request.url.path}"
 
                 logger.warning(
                     f"Retryable error for {request_info} (attempt {attempt + 1}/{self.max_retries + 1}): {exc}. "

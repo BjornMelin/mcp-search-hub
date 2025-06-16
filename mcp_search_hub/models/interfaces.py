@@ -15,14 +15,14 @@ from typing import (
     runtime_checkable,
 )
 
+# ComponentConfig removed - using dict for config instead
 from .base import HealthStatus
-from .config import ComponentConfig
 from .query import SearchQuery
 from .results import SearchResponse, SearchResult
 
 # Type variables for generic protocols
 T = TypeVar("T")
-ConfigT = TypeVar("ConfigT", bound="ComponentConfig")
+ConfigT = TypeVar("ConfigT", bound=dict[str, Any])
 ResultT = TypeVar("ResultT")
 MetricsT = TypeVar("MetricsT", bound=dict[str, Any])
 

@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from ..models.query import QueryFeatures
 from ..models.router import ProviderPerformanceMetrics, ProviderScore
 from ..providers.base import SearchProvider
-from ..utils.cache import TimedCache
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,9 @@ class LLMQueryRouter:
             fallback_scorer: A fallback scorer to use when LLM routing is disabled or fails
         """
         self.fallback_scorer = fallback_scorer
-        self.cache = TimedCache(ttl_seconds=LLM_ROUTER_CACHE_TTL)
+        self._cache: dict[
+            str, tuple[float, dict[str, Any]]
+        ] = {}  # Simple cache with TTL
         self.llm_client = None  # Will be initialized lazily
 
         # Track metrics for reporting
@@ -142,10 +143,14 @@ class LLMQueryRouter:
         cache_key = self._create_cache_key(features)
 
         # Check cache first
-        cached_result = self.cache.get(cache_key)
-        if cached_result:
-            self.metrics["cache_hits"] += 1
-            return LLMRoutingResult.model_validate(cached_result)
+        if cache_key in self._cache:
+            timestamp, cached_result = self._cache[cache_key]
+            # Check if cache entry is still valid (within TTL)
+            if time.time() - timestamp < LLM_ROUTER_CACHE_TTL:
+                self.metrics["cache_hits"] += 1
+                return LLMRoutingResult.model_validate(cached_result)
+            # Expired, remove from cache
+            del self._cache[cache_key]
 
         # Call LLM for routing decision
         start_time = time.time()
@@ -159,8 +164,8 @@ class LLMQueryRouter:
             + elapsed_ms
         ) / self.metrics["llm_calls"]
 
-        # Cache result
-        self.cache.set(cache_key, routing_result.model_dump())
+        # Cache result with timestamp
+        self._cache[cache_key] = (time.time(), routing_result.model_dump())
 
         return routing_result
 
@@ -187,7 +192,7 @@ class LLMQueryRouter:
 
         # For now, just return a mock result
         # In a real implementation, we'd parse the LLM response into this structure
-        mock_result = LLMRoutingResult(
+        return LLMRoutingResult(
             provider_scores={
                 "tavily": 0.9 if "fact" in features.content_type else 0.6,
                 "perplexity": 0.8 if features.complexity > 0.7 else 0.5,
@@ -199,8 +204,6 @@ class LLMQueryRouter:
             explanation=f"Selected providers based on content type '{features.content_type}' and complexity {features.complexity}",
             routing_strategy="cascade" if features.complexity > 0.7 else "parallel",
         )
-
-        return mock_result
 
     async def _init_perplexity_client(self):
         """Initialize the Perplexity client (example)."""

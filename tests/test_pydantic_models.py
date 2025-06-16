@@ -2,17 +2,15 @@
 
 import pytest
 
+from mcp_search_hub.config.settings import (
+    AppSettings,
+    ProviderSettings,
+)
 from mcp_search_hub.models.base import (
     ErrorResponse,
     HealthResponse,
     HealthStatus,
     ProviderStatus,
-)
-from mcp_search_hub.models.config import (
-    ComponentConfig,
-    ProviderConfig,
-    ProvidersConfig,
-    Settings,
 )
 from mcp_search_hub.models.query import SearchQuery
 from mcp_search_hub.models.results import (
@@ -124,65 +122,38 @@ class TestBaseModels:
 class TestConfigModels:
     """Tests for configuration models in models/config.py."""
 
-    def test_component_config(self):
-        """Test ComponentConfig model initialization and serialization."""
-        config = ComponentConfig(name="test_component")
-        assert config.name == "test_component"
-        assert config.enabled is True  # Default
-        assert config.debug is False  # Default
-
-        # Test with all fields
-        config = ComponentConfig(
-            name="test_component",
-            enabled=False,
-            debug=True,
-            custom_field="custom_value",  # Extra field should be allowed
-        )
-
-        data = config.model_dump()
-        assert data["name"] == "test_component"
-        assert data["enabled"] is False
-        assert data["debug"] is True
-        assert data["custom_field"] == "custom_value"
-
-    def test_provider_config(self):
-        """Test ProviderConfig model initialization and serialization."""
-        config = ProviderConfig(name="test_provider")
-        assert config.name == "test_provider"
-        assert config.timeout_ms == 30000  # Default
+    def test_provider_settings(self):
+        """Test ProviderSettings model initialization and serialization."""
+        settings = ProviderSettings()
+        assert settings.enabled is True
+        assert settings.timeout == 30.0  # Default
 
         # Test with custom values
-        config = ProviderConfig(
-            name="test_provider",
-            timeout_ms=5000,
-            max_retries=5,
-            rate_limit_per_minute=100,
+        settings = ProviderSettings(
+            enabled=False,
+            timeout=5.0,
         )
 
-        assert config.timeout_ms == 5000
-        assert config.max_retries == 5
-        assert config.rate_limit_per_minute == 100
+        assert settings.enabled is False
+        assert settings.timeout == 5.0
 
-    def test_settings_model(self):
-        """Test Settings model with nested configurations."""
-        provider_config = ProviderConfig(name="test_provider")
-        providers_config = ProvidersConfig(
-            linkup=provider_config,
-            exa=provider_config,
-            perplexity=provider_config,
-            tavily=provider_config,
-            firecrawl=provider_config,
-        )
-
-        settings = Settings(
-            providers=providers_config,
+    def test_app_settings_model(self):
+        """Test AppSettings model with nested configurations."""
+        settings = AppSettings(
             log_level="DEBUG",
-            cache_ttl=1800,
+            port=9000,
         )
 
         assert settings.log_level == "DEBUG"
-        assert settings.cache_ttl == 1800
-        assert settings.providers.linkup.name == "test_provider"
+        assert settings.port == 9000
+        assert settings.linkup.enabled is True
+        assert settings.cache.memory_ttl == 300
+        assert settings.middleware.auth_enabled is True
+
+        # Test validation
+        data = settings.model_dump()
+        assert data["log_level"] == "DEBUG"
+        assert data["port"] == 9000
 
 
 class TestQueryModels:

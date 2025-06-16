@@ -769,21 +769,3 @@ class BaseMCPProvider(SearchProvider):
             return func
 
         return with_exponential_backoff(config=self.get_retry_config())(func)
-
-    # Override search method to add retry logic
-    async def search(self, query: SearchQuery) -> SearchResponse:
-        """
-        Execute a search with retry logic.
-
-        This method overrides the base search method to add
-        exponential backoff retry for increased reliability.
-
-        Args:
-            query: The search query to execute
-
-        Returns:
-            SearchResponse containing results and metadata
-        """
-        # Use the with_retry decorator to add retry logic
-        search_function = self.with_retry(super().search)
-        return await search_function(query)

@@ -4,86 +4,76 @@ This middleware provides centralized error handling for all middleware
 components and response formatting for consistent error responses.
 """
 
-from typing import Any
+import traceback
+from collections.abc import Callable
 
-from fastmcp import Context
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
-from ..utils.errors import SearchError, http_error_response
+from ..utils.errors import ProviderRateLimitError, SearchError, http_error_response
 from ..utils.logging import get_logger
-from .base import BaseMiddleware
 
 logger = get_logger(__name__)
 
 
-class ErrorHandlerMiddleware(BaseMiddleware):
+class ErrorHandlerMiddleware(BaseHTTPMiddleware):
     """Middleware for consistent error handling and formatting."""
 
-    def _initialize(self, **options):
+    def __init__(self, app, **options):
         """Initialize error handling middleware.
 
         Args:
+            app: ASGI application
             **options: Configuration options including:
                 - include_traceback: Whether to include tracebacks in error responses
-                - order: Middleware execution order (default: 0)
+                - redact_sensitive_data: Whether to redact sensitive data from error responses
         """
-        # Error handler should be first in the chain (last to process response)
-        # This ensures it can catch errors from all other middleware
-        self.order = options.get("order", 0)
+        super().__init__(app)
         self.include_traceback = options.get("include_traceback", False)
+        self.redact_sensitive_data = options.get("redact_sensitive_data", True)
 
         logger.info(
             f"Error handler middleware initialized with include_traceback={self.include_traceback}"
         )
 
-    async def process_request(
-        self, request: Any, context: Context | None = None
-    ) -> Any:
-        """Process the incoming request (no modifications).
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Process HTTP requests with error handling.
 
         Args:
-            request: The incoming request (HTTP or tool params)
-            context: Optional Context object for tool requests
+            request: The incoming HTTP request
+            call_next: The next middleware or handler
 
         Returns:
-            The unmodified request
+            The response from downstream or an error response
         """
-        # No pre-processing needed for error handler
-        return request
+        try:
+            return await call_next(request)
 
-    async def process_response(
-        self, response: Any, request: Any, context: Context | None = None
-    ) -> Any:
-        """Process the outgoing response for consistent error formatting.
+        except Exception as exc:
+            # Log the exception
+            logger.error(f"Caught exception in error handler: {exc}", exc_info=True)
 
-        Args:
-            response: The response
-            request: The original request
-            context: Optional Context object
-
-        Returns:
-            The response, possibly converted to a standardized error response
-        """
-        # If the response is already a valid Response object, no need to modify it
-        if not isinstance(response, Exception):
-            return response
-
-        # Handle special case where another middleware has returned a Response
-        # directly in an exception (used by some middleware for early returns)
-        if isinstance(response, JSONResponse):
-            return response
-
-        # Convert exception to standardized error response
-        if isinstance(request, Request):
-            # For HTTP requests, create a JSON Response with appropriate headers
-            error_dict = http_error_response(response)
+            # Convert exception to standardized error response
+            error_dict = http_error_response(exc)
             status_code = error_dict.pop("status_code", 500)
+
+            # Add traceback if enabled
+            if self.include_traceback:
+                error_dict["traceback"] = traceback.format_exc()
 
             # Check if the error has special header requirements (like rate limit errors)
             headers = {}
-            if isinstance(response, SearchError) and "headers" in response.details:
-                headers = response.details["headers"]
+            if isinstance(exc, SearchError) and "headers" in exc.details:
+                headers = exc.details["headers"]
+
+            # Special handling for rate limit errors
+            if isinstance(
+                exc, ProviderRateLimitError
+            ) and "retry_after_seconds" in error_dict.get("details", {}):
+                headers["X-RateLimit-Retry-After"] = str(
+                    int(error_dict["details"]["retry_after_seconds"])
+                )
 
             # Log error details
             logger.error(f"Error in request: {error_dict}")
@@ -94,47 +84,3 @@ class ErrorHandlerMiddleware(BaseMiddleware):
                 content=error_dict,
                 headers=headers,
             )
-
-        # For tool requests, return error in a format FastMCP can handle
-        # This will typically be converted to a proper error by FastMCP
-        if isinstance(response, SearchError):
-            return response.to_dict()
-        return {"error": str(response), "type": type(response).__name__}
-
-    async def __call__(
-        self,
-        request: Any,
-        call_next: callable,
-        context: Context | None = None,
-    ) -> Any:
-        """Execute the middleware with error handling.
-
-        This overrides the base implementation to catch exceptions.
-
-        Args:
-            request: The incoming request
-            call_next: The next middleware or handler function
-            context: Optional Context object
-
-        Returns:
-            The response from downstream or an error response
-        """
-        if not self.enabled:
-            return await call_next(request)
-
-        try:
-            # Process request (no changes for error handler)
-            modified_request = await self.process_request(request, context)
-
-            # Call the next middleware/handler
-            response = await call_next(modified_request)
-
-            # Process response (convert errors to standard format)
-            return await self.process_response(response, request, context)
-
-        except Exception as exc:
-            # Log the exception
-            logger.error(f"Caught exception in error handler: {exc}", exc_info=True)
-
-            # Convert exception to standardized response
-            return await self.process_response(exc, request, context)

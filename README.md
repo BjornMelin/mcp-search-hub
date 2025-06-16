@@ -1,8 +1,25 @@
 # MCP Search Hub
 
-🔍 Intelligent multi-provider search aggregation server built on FastMCP 2.0
+> 🔍 **Intelligent multi-provider search aggregation server built on FastMCP 2.0**
 
-## Quick Start with Claude Desktop
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![FastMCP](https://img.shields.io/badge/FastMCP-2.0-green.svg)](https://github.com/fastmcp)
+
+MCP Search Hub embeds official MCP servers from five leading search providers within a unified interface, intelligently routes queries to the most appropriate provider(s), and combines/ranks results for optimal relevance.
+
+## ✨ Key Features
+
+- **🏗️ Unified Interface**: Single MCP server for all search providers
+- **🧠 Intelligent Routing**: Automatically selects optimal providers based on query characteristics
+- **⚡ Official Provider Integration**: Embeds official MCP servers (Linkup, Exa, Perplexity, Tavily, Firecrawl)
+- **💰 Cost Optimization**: 30-45% cost reduction through intelligent provider selection
+- **🚀 Zero Maintenance**: Provider updates flow through automatically
+- **📊 Smart Result Merging**: Deduplication and multi-factor ranking
+- **⚡ Performance Optimized**: Multi-tier caching and parallel execution
+- **🔧 Production Ready**: Error handling, rate limiting, monitoring
+
+## 🚀 Quick Start
 
 Get up and running in 5 minutes:
 
@@ -15,650 +32,341 @@ uv pip install -r requirements.txt
 # 2. Interactive setup (recommended)
 python scripts/setup_claude_desktop.py
 
-# 3. Or manually configure - see docs/CLAUDE_DESKTOP_SETUP.md
+# 3. Start searching!
+# The script will guide you through API key setup and Claude Desktop integration
 ```
 
 After setup, restart Claude Desktop and ask: *"What MCP tools do you have available?"*
 
-**📖 [Complete Setup Guide](docs/CLAUDE_DESKTOP_SETUP.md)** | **⚡ [Quick Setup Script](scripts/setup_claude_desktop.py)**
+**📖 [Complete Setup Guide](GETTING_STARTED.md)** | **⚡ [Quick Setup Script](scripts/setup_claude_desktop.py)**
 
-## Features
+## 🎯 Why MCP Search Hub?
 
-- Embeds official MCP servers from five leading search providers (Linkup, Exa, Perplexity, Tavily, and Firecrawl) within a unified interface
-- Automatically routes queries to the most appropriate provider(s) based on query characteristics
-- Combines and ranks results for optimal relevance with intelligent deduplication
-- Implements cost control mechanisms and budget constraints
-- Provides caching for improved performance and reduced API costs
-- Handles errors and provider failures gracefully with exponential backoff retry logic
-- Automatically retries transient errors (timeouts, rate limits, server errors) with configurable settings
-- Zero maintenance for provider updates - automatically leverages official MCP server enhancements
-- Easily deployable with Docker or as a standalone Python service
-- Supports both HTTP and STDIO transport methods
+### Provider Strengths
 
-## Cost Efficiency
+Each provider excels in different areas. MCP Search Hub automatically routes queries to leverage these strengths:
 
-MCP Search Hub delivers 30-45% cost reduction compared to single-provider solutions while providing superior search results through intelligent provider selection and result combination.
+| Provider | Strengths | Best For | Accuracy |
+|----------|-----------|----------|----------|
+| **Linkup** | Factual information, current events | News, facts, real-time data | 91.0% |
+| **Exa** | Semantic search, academic content | Research papers, technical docs | 90.0% |
+| **Perplexity** | AI-powered analysis, current events | Complex queries, analysis | 86.0% |
+| **Tavily** | RAG-optimized results | Retrieval applications | 73.0% |
+| **Firecrawl** | Deep content extraction | Web scraping, full content | N/A |
 
-## Provider Strengths
+*Accuracy scores from SimpleQA benchmark*
 
-The system intelligently routes queries by leveraging each provider's unique strengths, all through embedded official MCP servers:
+### Architecture Benefits
 
-- **Linkup**: Factual information with 91.0% accuracy on the SimpleQA benchmark - [official MCP server](https://github.com/LinkupPlatform/python-mcp-server)
-- **Exa**: Academic content and semantic search with 90.04% SimpleQA accuracy - [official MCP server](https://github.com/exa-labs/exa-mcp-server)
-- **Perplexity**: Current events and LLM processing with 86% accuracy - [official MCP server](https://github.com/ppl-ai/modelcontextprotocol)
-- **Tavily**: RAG-optimized results with 73% SimpleQA accuracy - [official MCP server](https://github.com/tavily-ai/tavily-mcp)
-- **Firecrawl**: Deep content extraction and scraping capabilities - [official MCP server](https://github.com/mendableai/firecrawl-mcp-server)
+```mermaid
+graph TB
+    User[Claude Desktop/Code] --> Hub[MCP Search Hub]
+    Hub --> Router[Intelligent Router]
+    
+    Router -->|Academic Query| Exa[Exa MCP Server]
+    Router -->|News Query| Perplexity[Perplexity MCP Server]
+    Router -->|Factual Query| Linkup[Linkup MCP Server]
+    Router -->|Scraping Task| Firecrawl[Firecrawl MCP Server]
+    
+    Hub --> Cache[Smart Caching]
+    Hub --> Merger[Result Merger]
+    
+    style Hub fill:#e1f5fe
+    style Router fill:#f3e5f5
+    style Cache fill:#e8f5e8
+    style Merger fill:#fff3e0
+```
 
-## Architecture
+**Benefits:**
+- **Single Integration**: One MCP server instead of five
+- **Zero Configuration**: No need to manage multiple servers
+- **Automatic Updates**: Provider improvements flow through automatically
+- **Cost Efficient**: Intelligent routing reduces unnecessary API calls
+- **Quality Results**: Multi-provider consensus improves accuracy
 
-MCP Search Hub uses a modular architecture with the following core components:
+## 📚 Documentation
 
-1. **Server Layer**: FastMCP server implementation that registers tools and orchestrates the search process
-2. **Provider Layer**: Standardized interface with implementations for each service
-3. **Query Routing**: Extracts features from queries to determine content type, complexity, and selects appropriate providers
-4. **Result Processing**: Combines, ranks, and deduplicates results from multiple providers
-5. **Tiered Caching**: Multi-level caching system with memory and Redis backends, semantic fingerprinting for similar queries
-6. **Middleware**: Centralized handling of cross-cutting concerns like authentication, rate limiting, and logging
-7. **Utilities**: Error handling, metrics tracking, and configuration management
+### For Users
+- **[Getting Started](GETTING_STARTED.md)** - Complete setup guide and first steps
+- **[Configuration](CONFIGURATION.md)** - Detailed configuration reference
+- **[API Reference](API_REFERENCE.md)** - Complete tool and endpoint documentation
+- **[Troubleshooting](docs/troubleshooting/common-issues.md)** - Solutions to common problems
 
-For detailed information on key components:
-- [Middleware Architecture](docs/middleware.md)
-- [Exponential Backoff Retry Logic](docs/retry.md)
-- [OpenAPI Documentation](docs/openapi-documentation.md)
-- [Tiered Caching System](docs/tiered-caching.md)
-- [Docker Configuration](docs/docker-configuration.md)
-- [Provider Management](docs/provider-management.md)
+### For Developers
+- **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
+- **[Development](DEVELOPMENT.md)** - Development workflows and practices
+- **[Architecture](docs/architecture/overview.md)** - System design and components
 
-### Embedded MCP Server Architecture
+### Advanced Topics
+- **[Provider Integration](docs/architecture/provider-integration.md)** - How providers are embedded
+- **[Caching Strategy](docs/architecture/caching.md)** - Multi-tier caching system
+- **[Performance Tuning](docs/deployment/performance.md)** - Optimization strategies
 
-We've implemented an innovative approach: **embedding all official provider MCP servers within our unified server**. This means:
+📖 **[Complete Documentation Index](docs/README.md)**
 
-- Users interact with a single MCP server (MCP Search Hub)
-- We internally connect to provider MCP servers using the MCP Python SDK
-- All provider tools are exposed through our unified interface
-- Automatic updates when providers enhance their MCP servers
-
-This architectural decision applies to all providers:
-
-- **Firecrawl**: Successfully embedded with all tools available
-- **Perplexity**: Successfully embedded with all tools available
-- **Exa**: Successfully embedded with all tools available
-- **Linkup**: Successfully embedded with all tools available
-- **Tavily**: Successfully embedded with all tools available
-
-Benefits of this approach:
-
-- **Zero maintenance**: Provider updates are automatic
-- **Complete features**: Access to all provider capabilities
-- **Unified interface**: Single server for all search needs
-- **Future-proof**: Ready for new MCP servers as they become available
-
-Learn more about this decision in our [Architecture Decisions](docs/architecture-decisions.md) document.
-
-## Installation
+## ⚙️ Installation
 
 ### Prerequisites
 
-- Python 3.10+ (required for FastMCP 2.0 compatibility)
-- API keys for the search providers you plan to use
-- Docker (optional, for containerized deployment)
-- MCP client that supports HTTP or STDIO transport
-- Node.js (optional, for providers using Node.js MCP servers - will be auto-installed if missing)
+- **Python 3.10+** (required for FastMCP 2.0)
+- **API keys** for desired search providers
+- **Node.js 16+** (optional, for provider MCP servers)
 
-### Using Docker (Recommended)
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/BjornMelin/mcp-search-hub.git
-   cd mcp-search-hub
-   ```
-
-2. Create a `.env` file with your API keys:
-
-   ```bash
-   cp .env.example .env
-   # Edit .env with your API keys and configuration
-   ```
-
-3. Run the validation script to check your setup (optional but recommended):
-
-   ```bash
-   ./scripts/validate_docker_setup.sh
-   ```
-
-4. Choose an environment and run with Docker Compose:
-
-   **Default environment:**
-   ```bash
-   docker-compose up -d
-   ```
-
-   **Development environment:**
-   ```bash
-   docker-compose -f docker-compose.dev.yml up -d
-   ```
-
-   **Production environment:**
-   ```bash
-   docker-compose -f docker-compose.prod.yml up -d
-   ```
-
-5. Verify the server is running:
-
-   ```bash
-   curl http://localhost:8000/health
-   ```
-
-For detailed information on Docker configuration, including multi-stage builds, environment setup, health checks, and deployment best practices, see the [Docker Configuration Guide](docs/docker-configuration.md).
-
-### Manual Installation
-
-#### Linux/macOS
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/BjornMelin/mcp-search-hub.git
-   cd mcp-search-hub
-   ```
-
-2. Create a virtual environment and install dependencies using `uv`:
-
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   uv pip install -r requirements.txt
-   ```
-
-3. Set environment variables with your API keys:
-
-   ```bash
-   cp .env.example .env
-   # Edit .env with your API keys and configuration
-   ```
-
-4. Run the server:
-
-   ```bash
-   python -m mcp_search_hub.main
-   ```
-
-#### Windows
-
-1. Clone the repository:
-
-   ```powershell
-   git clone https://github.com/BjornMelin/mcp-search-hub.git
-   cd mcp-search-hub
-   ```
-
-2. Create a virtual environment and install dependencies using `uv`:
-
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\activate
-   uv pip install -r requirements.txt
-   ```
-
-3. Set environment variables with your API keys:
-
-   ```powershell
-   # Copy and edit the .env file manually, or
-   copy .env.example .env
-   # Edit .env with your API keys and configuration
-   ```
-
-4. Run the server:
-
-   ```powershell
-   python -m mcp_search_hub.main
-   ```
-
-#### Windows Subsystem for Linux (WSL)
-
-1. Follow the Linux/macOS instructions above within your WSL environment
-2. Note that services running in WSL are accessible from Windows using `localhost`
-
-## Configuration
-
-MCP Search Hub uses environment variables for configuration. You can set these in a `.env` file in the project root or as system environment variables.
-
-### Required Configuration
-
-```plaintext
-# API Keys (only required for providers you enable)
-LINKUP_API_KEY=your_linkup_api_key
-EXA_API_KEY=your_exa_api_key
-PERPLEXITY_API_KEY=your_perplexity_api_key
-TAVILY_API_KEY=your_tavily_api_key
-FIRECRAWL_API_KEY=your_firecrawl_api_key
-```
-
-> **Note**: All API keys are required for the embedded MCP servers to function. Each provider's official MCP server is automatically managed and kept up-to-date within MCP Search Hub.
-
-### Optional Configuration
-
-```
-# Server configuration
-LOG_LEVEL=INFO            # DEBUG, INFO, WARNING, ERROR, CRITICAL
-CACHE_TTL=3600            # Cache time-to-live in seconds
-DEFAULT_BUDGET=0.1        # Default query budget in USD
-PORT=8000                 # Server port (for HTTP transport)
-HOST=0.0.0.0              # Server host (0.0.0.0 for all interfaces)
-TRANSPORT=http            # Transport method: "http" or "stdio"
-
-# Provider enablement (set to "true" or "false")
-LINKUP_ENABLED=true
-EXA_ENABLED=true
-PERPLEXITY_ENABLED=true
-TAVILY_ENABLED=true
-FIRECRAWL_ENABLED=true
-
-# Provider timeouts (in milliseconds)
-LINKUP_TIMEOUT=5000
-EXA_TIMEOUT=5000
-PERPLEXITY_TIMEOUT=5000
-TAVILY_TIMEOUT=5000
-FIRECRAWL_TIMEOUT=5000
-
-# Retry configuration for exponential backoff
-MAX_RETRIES=3               # Maximum number of retry attempts
-RETRY_BASE_DELAY=1.0        # Initial delay between retries in seconds
-RETRY_MAX_DELAY=60.0        # Maximum delay between retries in seconds
-RETRY_EXPONENTIAL_BASE=2.0  # Base for exponential backoff calculation
-RETRY_JITTER=true           # Whether to add randomization to retry delays
-
-# Middleware configuration
-# Logging middleware
-MIDDLEWARE_LOGGING_ENABLED=true         # Enable logging middleware
-MIDDLEWARE_LOGGING_ORDER=5              # Order of execution (lower runs first)
-MIDDLEWARE_LOGGING_LOG_LEVEL=INFO       # Log level for middleware
-MIDDLEWARE_LOGGING_INCLUDE_HEADERS=true # Include headers in logs
-MIDDLEWARE_LOGGING_INCLUDE_BODY=false   # Include request/response bodies
-
-# Authentication middleware
-MIDDLEWARE_AUTH_ENABLED=true            # Enable authentication middleware
-MIDDLEWARE_AUTH_ORDER=10                # Order of execution
-MIDDLEWARE_AUTH_API_KEY=your_api_key    # API key for authentication
-
-# Rate limiting middleware
-MIDDLEWARE_RATE_LIMIT_ENABLED=true      # Enable rate limiting middleware
-MIDDLEWARE_RATE_LIMIT_ORDER=20          # Order of execution
-MIDDLEWARE_RATE_LIMIT_LIMIT=100         # Requests per window per client
-MIDDLEWARE_RATE_LIMIT_WINDOW=60         # Window in seconds
-MIDDLEWARE_RATE_LIMIT_GLOBAL_LIMIT=1000 # Global requests per window
-```
-
-## Usage
-
-Once the server is running, you can use it as an MCP server with any MCP client. The server supports both HTTP and STDIO transport methods.
-
-### Running with STDIO Transport
-
-To run the server with STDIO transport, set `TRANSPORT=stdio` in your `.env` file or use the `--transport` flag:
+### Option 1: Interactive Setup (Recommended)
 
 ```bash
-# Using environment variable
-export TRANSPORT=stdio
-uv run mcp_search_hub.main
-
-# Or using command line flag
-uv run mcp_search_hub.main --transport stdio
+git clone https://github.com/BjornMelin/mcp-search-hub
+cd mcp-search-hub
+python scripts/setup_claude_desktop.py
 ```
 
-When using STDIO transport, the server communicates through standard input and output streams, making it suitable for direct integration with LLM clients that support this transport mode.
-
-### MCP Client Integration
-
-#### Claude Desktop
-
-##### HTTP Transport
-
-1. Open Claude Desktop settings
-2. Navigate to MCP Servers
-3. Add a new HTTP server with the following configuration:
-
-   ```json
-   {
-     "mcpServers": {
-       "search": {
-         "url": "http://localhost:8000/mcp"
-       }
-     }
-   }
-   ```
-
-4. Restart Claude Desktop
-5. Access search capability with: `search("your query here")`
-
-##### STDIO Transport
-
-1. Open Claude Desktop settings
-2. Navigate to MCP Servers
-3. Add a new STDIO server with the following configuration:
-
-   ```json
-   {
-     "mcpServers": {
-       "search": {
-         "command": [
-           "uv",
-           "run",
-           "mcp_search_hub.main",
-           "--transport",
-           "stdio"
-         ],
-         "cwd": "/path/to/mcp-search-hub"
-       }
-     }
-   }
-   ```
-
-   Replace `/path/to/mcp-search-hub` with the actual path to your installation
-
-4. Restart Claude Desktop
-5. Access search capability with: `search("your query here")`
-
-#### Claude Code
-
-##### HTTP Transport
-
-Configure the HTTP MCP server in your Claude Code settings:
+### Option 2: Docker (Production Ready)
 
 ```bash
-claude config set mcp-servers.search http://localhost:8000/mcp
+git clone https://github.com/BjornMelin/mcp-search-hub
+cd mcp-search-hub
+cp .env.example .env  # Edit with your API keys
+docker-compose up -d
 ```
 
-##### STDIO Transport
-
-Configure the STDIO MCP server in your Claude Code settings:
+### Option 3: Manual Installation
 
 ```bash
-# For STDIO transport
-claude config set mcp-servers.search.command "uv run mcp_search_hub.main --transport stdio"
-claude config set mcp-servers.search.cwd "/path/to/mcp-search-hub"
+git clone https://github.com/BjornMelin/mcp-search-hub
+cd mcp-search-hub
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+uv pip install -r requirements.txt
+cp .env.example .env  # Edit with your API keys
+python -m mcp_search_hub.main
 ```
 
-Replace `/path/to/mcp-search-hub` with the actual path to your installation.
+📖 **[Detailed Installation Guide](GETTING_STARTED.md#installation-methods)**
 
-Then use it in your sessions with:
+## 🔑 Configuration
 
-```plaintext
-You can now use the search tool. For example: search("latest advancements in artificial intelligence")
+### Minimal Configuration
+
+At minimum, you need API keys for the providers you want to use:
+
+```bash
+# Required: At least one provider API key
+LINKUP_API_KEY=your_linkup_key
+EXA_API_KEY=your_exa_key
+PERPLEXITY_API_KEY=your_perplexity_key
+TAVILY_API_KEY=your_tavily_key
+FIRECRAWL_API_KEY=your_firecrawl_key
 ```
 
-#### VS Code with Claude Extension
+### Getting API Keys
 
-##### HTTP Transport
+| Provider | Free Tier | Sign Up |
+|----------|-----------|---------|
+| **Linkup** | 100 requests/month | [linkup.so](https://linkup.so) |
+| **Exa** | 1,000 requests/month | [exa.ai](https://exa.ai) |
+| **Perplexity** | $5 credit | [perplexity.ai](https://perplexity.ai) |
+| **Tavily** | 1,000 requests/month | [tavily.com](https://tavily.com) |
+| **Firecrawl** | 500 requests/month | [firecrawl.dev](https://firecrawl.dev) |
 
-Add to your settings.json:
+⚙️ **[Complete Configuration Guide](CONFIGURATION.md)**
 
-```json
-"anthropic.claude.mcpServers": {
-  "search": {
-    "url": "http://localhost:8000/mcp"
-  }
-}
-```
+## 🔍 Usage Examples
 
-##### STDIO Transport
+### With Claude Desktop
 
-Add to your settings.json:
-
-```json
-"anthropic.claude.mcpServers": {
-  "search": {
-    "command": ["uv", "run", "mcp_search_hub.main", "--transport", "stdio"],
-    "cwd": "/path/to/mcp-search-hub"
-  }
-}
-```
-
-Replace `/path/to/mcp-search-hub` with the actual path to your installation.
-
-#### Cursor
-
-##### HTTP Transport
-
-Add to your Cursor settings under the Claude section:
-
-```json
-"mcpServers": {
-  "search": {
-    "url": "http://localhost:8000/mcp"
-  }
-}
-```
-
-##### STDIO Transport
-
-Add to your Cursor settings under the Claude section:
-
-```json
-"mcpServers": {
-  "search": {
-    "command": ["uv", "run", "mcp_search_hub.main", "--transport", "stdio"],
-    "cwd": "/path/to/mcp-search-hub"
-  }
-}
-```
-
-Replace `/path/to/mcp-search-hub` with the actual path to your installation.
-
-#### Windsurf
-
-##### HTTP Transport
-
-In Windsurf, navigate to Settings → Claude → MCP Servers and add:
-
-```plaintext
-Name: search
-URL: http://localhost:8000/mcp
-```
-
-##### STDIO Transport
-
-In Windsurf, navigate to Settings → Claude → MCP Servers and add:
+After setup, you can use search tools naturally in Claude Desktop:
 
 ```
-Name: search
-Type: stdio
-Command: uv run mcp_search_hub.main --transport stdio
-Working Directory: /path/to/mcp-search-hub
+🧑 Find the latest research papers on quantum computing
+
+🤖 I'll search for the latest quantum computing research papers using multiple academic sources.
+
+[Searches using Exa and Perplexity providers automatically]
+
+Here are the latest research papers on quantum computing:
+
+1. **"Quantum Error Correction with Deep Learning"**
+   - Published: Nature Physics, Dec 2024
+   - Summary: Novel approach using neural networks...
+
+2. **"Advances in Quantum Algorithms for Machine Learning"**
+   - Published: arXiv, Jan 2025
+   - Summary: Breakthrough in quantum speedup...
 ```
 
-Replace `/path/to/mcp-search-hub` with the actual path to your installation.
-
-### Using with Python
-
-#### Anthropic SDK
-
-```python
-from anthropic import Anthropic
-
-client = Anthropic(api_key="your-api-key")
-message = client.messages.create(
-    model="claude-3-opus-20240229",
-    max_tokens=1024,
-    temperature=0,
-    system="You have access to a search tool, use it to find current information.",
-    messages=[
-        {"role": "user", "content": "What are the latest developments in quantum computing?"}
-    ],
-    tools=[
-        {
-            "name": "search",
-            "description": "Search for information on the web",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "advanced": {"type": "boolean"},
-                    "max_results": {"type": "integer"},
-                },
-                "required": ["query"]
-            }
-        }
-    ],
-    tool_config={
-        "function_calling": "auto",
-        "tools": {
-            "search": {
-                "address": "http://localhost:8000/mcp",
-            }
-        }
-    }
-)
-print(message.content)
-```
-
-#### Direct MCP Client
+### With Python
 
 ```python
 from mcp.client import Client
 
-# Connect to the server
 client = Client("http://localhost:8000/mcp")
 
-# Search with automatic provider selection
+# Automatic provider selection
 response = client.invoke("search", {
-    "query": "Latest developments in quantum computing",
-    "advanced": True,
-    "max_results": 5
+    "query": "latest developments in artificial intelligence",
+    "max_results": 10
 })
 
-# Print results
-for result in response["results"]:
-    print(f"Title: {result['title']}")
-    print(f"URL: {result['url']}")
-    print(f"Snippet: {result['snippet']}")
-    print(f"Source: {result['source']}")
-    print("-" * 50)
-```
+# Provider-specific search
+response = client.invoke("exa_research_papers", {
+    "query": "quantum computing breakthroughs 2024",
+    "numResults": 15
+})
 
-### Advanced Usage
-
-#### Custom Provider Selection
-
-You can explicitly select which providers to use:
-
-```python
+# Advanced search with budget constraints
 response = client.invoke("search", {
-    "query": "Latest developments in quantum computing",
-    "providers": ["perplexity", "exa"],
-    "max_results": 5
+    "query": "comprehensive market analysis renewable energy",
+    "max_results": 20,
+    "budget": 0.05,  # Max 5 cents
+    "content_type": "COMMERCIAL"
 })
 ```
 
-#### Content Type Hints
+### HTTP API
 
-Providing content type hints can improve routing:
+```bash
+# Basic search
+curl -X POST http://localhost:8000/search/combined \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "latest AI developments",
+    "max_results": 10,
+    "advanced": true
+  }'
 
-```python
-response = client.invoke("search", {
-    "query": "Latest stock price for AAPL",
-    "content_type": "FINANCIAL",
-    "max_results": 3
-})
+# Provider-specific search
+curl -X POST http://localhost:8000/providers/firecrawl/scrape \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/article",
+    "formats": ["markdown"]
+  }'
 ```
 
-#### Budget Constraints
+🔧 **[Complete API Reference](API_REFERENCE.md)**
 
-Set maximum spend per query:
+## 🚀 Available Tools
 
-```python
-response = client.invoke("search", {
-    "query": "Complex analysis of renewable energy trends",
-    "advanced": True,
-    "budget": 0.05  # Maximum 5 cents
-})
-```
+MCP Search Hub provides all tools from embedded provider MCP servers:
 
-## API Reference
-
-### Search Tool
-
-```plaintext
-search(query: SearchQuery) -> CombinedSearchResponse
-```
-
-#### Parameters
-
-- `query`: The search query text
-- `advanced`: Whether to use advanced search capabilities (default: false)
-- `max_results`: Maximum number of results to return (default: 10)
-- `content_type`: Optional explicit content type hint (FACTUAL, EDUCATIONAL, NEWS, TECHNICAL, FINANCIAL, etc.)
-- `providers`: Optional explicit provider selection (array of provider names)
-- `budget`: Optional budget constraint in USD
-- `timeout_ms`: Timeout in milliseconds (default: 5000)
-
-#### Returns
-
-- `results`: Combined search results
-- `query`: Original query
-- `providers_used`: Providers used for the search
-- `total_results`: Total number of results
-- `total_cost`: Total cost of the search
-- `timing_ms`: Total search time in milliseconds
-
-### Get Provider Info Tool
-
-```plaintext
-get_provider_info() -> Dict[str, Dict]
-```
-
-Returns information about all available search providers, including their capabilities, content types, and quality metrics.
+### Core Search Tools
+- **`search`** - Intelligent multi-provider search with automatic routing
+- **`get_provider_info`** - Information about available providers
 
 ### Provider-Specific Tools
 
-MCP Search Hub embeds all official provider MCP servers, giving you access to their complete tool suites:
+**Firecrawl** (Web Scraping & Extraction)
+- `firecrawl_scrape` - Advanced web scraping
+- `firecrawl_search` - Search with content extraction
+- `firecrawl_crawl` - Asynchronous site crawling
+- `firecrawl_extract` - Structured data extraction
 
-#### Firecrawl (Completed)
+**Exa** (Semantic Search)
+- `web_search_exa` - Semantic web search
+- `research_paper_search` - Academic papers
+- `company_research` - Company information
+- `linkedin_search` - LinkedIn profiles
 
-- `firecrawl_scrape`: Advanced web scraping with screenshot capture
-- `firecrawl_map`: Site mapping and URL discovery
-- `firecrawl_crawl`: Asynchronous site crawling
-- `firecrawl_check_crawl_status`: Monitor crawl job status
-- `firecrawl_search`: Web search with content extraction
-- `firecrawl_extract`: LLM-powered information extraction
-- `firecrawl_deep_research`: Comprehensive research automation
-- `firecrawl_generate_llmstxt`: Generate LLMs.txt files
+**Perplexity** (AI-Powered Search)
+- `perplexity_ask` - AI-powered question answering
+- `perplexity_research` - Deep research capabilities
 
-#### Perplexity (Completed)
+**Linkup** (Real-Time Search)
+- `linkup_search_web` - Premium real-time search
 
-- `perplexity_ask`: Conversational search with AI
-- `perplexity_research`: Deep research capabilities
-- `perplexity_search`: Web search with citations
+**Tavily** (RAG-Optimized)
+- `tavily_search` - RAG-optimized search
+- `tavily_extract` - Content extraction
 
-#### Exa (Completed)
+🛠️ **[Full Tool Documentation](API_REFERENCE.md#provider-specific-tools)**
 
-- `web_search_exa`: Semantic web search
-- `research_paper_search`: Academic paper search
-- `company_research`: Company information search
-- `linkedin_search`: LinkedIn profile search
-- `wikipedia_search_exa`: Wikipedia search
-- `github_search`: GitHub repository search
+## 📊 Performance & Cost
 
-#### Linkup (Completed)
+### Response Time Improvements
 
-- `linkup_search`: Premium content search with real-time results
+| Cache Type | Response Time | Improvement |
+|------------|---------------|-------------|
+| Cache Miss | 800-2000ms | Baseline |
+| Redis Hit | 10-50ms | 16-200x faster |
+| Memory Hit | 1-5ms | 160-2000x faster |
 
-#### Tavily (Completed)
+### Cost Optimization
 
-- `tavily_search`: RAG-optimized search
-- `tavily_extract`: Content extraction
+- **30-45% cost reduction** vs single-provider solutions
+- **Intelligent provider selection** based on query characteristics
+- **Smart caching** reduces redundant API calls
+- **Budget constraints** prevent overspending
 
-All these tools are available directly through MCP Search Hub - no separate server configuration needed! The official MCP servers are automatically managed and kept up-to-date.
+## 🏗️ Architecture
 
-## Development
+MCP Search Hub uses a modular architecture with embedded MCP servers:
+
+```mermaid
+graph TB
+    subgraph "MCP Search Hub"
+        Server[FastMCP Server]
+        Router[Query Router]
+        Cache[Tiered Cache]
+        Merger[Result Merger]
+    end
+    
+    subgraph "Embedded MCP Servers"
+        LinkupMCP[Linkup MCP]
+        ExaMCP[Exa MCP]
+        PerplexityMCP[Perplexity MCP]
+        TavilyMCP[Tavily MCP]
+        FirecrawlMCP[Firecrawl MCP]
+    end
+    
+    Client[Claude Desktop] --> Server
+    Server --> Router
+    Router --> LinkupMCP
+    Router --> ExaMCP
+    Router --> PerplexityMCP
+    Router --> TavilyMCP
+    Router --> FirecrawlMCP
+    
+    LinkupMCP --> LinkupAPI[Linkup API]
+    ExaMCP --> ExaAPI[Exa API]
+    PerplexityMCP --> PerplexityAPI[Perplexity API]
+    TavilyMCP --> TavilyAPI[Tavily API]
+    FirecrawlMCP --> FirecrawlAPI[Firecrawl API]
+    
+    style Server fill:#e1f5fe
+    style Router fill:#f3e5f5
+    style Cache fill:#e8f5e8
+    style Merger fill:#fff3e0
+```
+
+### Key Components
+
+1. **FastMCP Server**: Main MCP interface and orchestration
+2. **Query Router**: Intelligent provider selection and routing
+3. **Embedded MCP Servers**: Official provider integrations
+4. **Result Merger**: Combines and ranks results from multiple providers
+5. **Tiered Cache**: Memory + Redis caching for performance
+6. **Middleware**: Authentication, rate limiting, logging
+
+🏗️ **[Architecture Documentation](docs/architecture/overview.md)**
+
+## 🧪 Development
+
+### Development Setup
+
+```bash
+# Clone and setup development environment
+git clone https://github.com/BjornMelin/mcp-search-hub
+cd mcp-search-hub
+python -m venv venv
+source venv/bin/activate
+uv pip install -r requirements.txt -r requirements-development.txt
+pre-commit install
+```
 
 ### Testing
 
-MCP Search Hub includes a comprehensive testing suite with unit tests, integration tests, and performance benchmarks:
-
 ```bash
-# Run all tests (excluding benchmarks)
+# Run all tests
 uv run pytest
 
 # Run with coverage
@@ -667,229 +375,119 @@ uv run pytest --cov=mcp_search_hub --cov-report=html
 # Run specific tests
 uv run pytest tests/test_analyzer.py
 
-# Run end-to-end integration tests
-uv run pytest tests/test_end_to_end.py
-
-# Run performance benchmarks
-uv run pytest -m benchmark
-# OR use the dedicated benchmark script
-python scripts/run_benchmarks.py --all
+# Performance benchmarks
+python scripts/run_benchmarks.py
 ```
-
-The test suite includes specialized coverage for:
-- Router tests for both parallel and cascade modes
-- End-to-end tests with mocked provider responses
-- Performance benchmarks for key components
-- CI integration via GitHub Actions
-
-For detailed information on testing, see the [Tests README](tests/README.md).
 
 ### Code Quality
 
-Maintain code quality with ruff:
-
 ```bash
-# Run linter
-ruff check .
-
-# Apply auto-fixes
+# Format and lint
+ruff format .
 ruff check --fix .
 
-# Format code
-ruff format .
-
-# Sort imports
-ruff check --select I --fix .
+# Type checking
+mypy mcp_search_hub/
 ```
 
-## Error Handling and Exception Patterns
+🛠️ **[Development Guide](DEVELOPMENT.md)** | 🤝 **[Contributing Guide](CONTRIBUTING.md)**
 
-MCP Search Hub implements a comprehensive error handling system with a consistent exception hierarchy, propagation, and retry logic. This ensures robust operation even when facing transient provider failures or network issues.
+## 🚀 Deployment
 
-### Exception Hierarchy
-
-The system uses a structured exception hierarchy for consistent error handling:
-
-```
-SearchError (Base class for all errors)
-├── ProviderError (Provider-related errors)
-│   ├── ProviderNotFoundError
-│   ├── ProviderNotEnabledError
-│   ├── ProviderInitializationError
-│   ├── ProviderTimeoutError
-│   ├── ProviderRateLimitError
-│   ├── ProviderAuthenticationError
-│   ├── ProviderQuotaExceededError
-│   └── ProviderServiceError
-├── QueryError (Query-related errors)
-│   ├── QueryValidationError
-│   ├── QueryTooComplexError
-│   └── QueryBudgetExceededError
-├── RouterError (Routing-related errors)
-│   ├── NoProvidersAvailableError
-│   ├── CircuitBreakerOpenError
-│   └── RoutingStrategyError
-├── ConfigurationError
-│   ├── MissingConfigurationError
-│   └── InvalidConfigurationError
-├── AuthenticationError
-├── AuthorizationError
-└── NetworkError
-    ├── NetworkConnectionError
-    └── NetworkTimeoutError
-```
-
-Each exception type includes:
-- Structured context data (provider name, error details, etc.)
-- Appropriate HTTP status code for REST API responses
-- Original exception (if wrapping another error)
-- Detailed information for logging and debugging
-
-### Retryable vs. Non-Retryable Errors
-
-MCP Search Hub automatically classifies errors as retryable or non-retryable:
-
-#### Retryable Errors
-- **Timeouts**: Provider and network timeouts
-- **Rate limits**: Provider request rate exceeded
-- **Temporary failures**: Service overloaded, maintenance, etc.
-- **Connection issues**: Network blips, connection refused, etc.
-- **HTTP status codes**: 408, 429, 500, 502, 503, 504
-
-#### Non-Retryable Errors
-- **Authentication failures**: Invalid API keys
-- **Authorization issues**: Permission denied
-- **Query validation errors**: Invalid query format
-- **Budget exceeded**: Cost limits reached
-- **Permanent provider errors**: Service permanently unavailable
-
-### Exponential Backoff Retry
-
-The system implements exponential backoff retry for transient errors:
-
-- Automatic retry with increasing delays (default: 1s → 2s → 4s)
-- Configurable via `MAX_RETRIES`, `RETRY_BASE_DELAY`, etc.
-- Jitter added to prevent thundering herd problems
-- Detailed logging for visibility into retry attempts
-- Circuit breaker pattern to prevent overwhelming failing providers
-
-### HTTP Error Responses
-
-When errors occur in HTTP endpoints, they are converted to structured JSON responses:
-
-```json
-{
-  "error_type": "ProviderTimeoutError",
-  "message": "Search operation timed out for provider 'exa' after 5 seconds",
-  "provider": "exa",
-  "details": {
-    "operation": "search",
-    "timeout_seconds": 5
-  },
-  "status_code": 504
-}
-```
-
-### Provider Error Propagation
-
-Provider errors are propagated through the system in a consistent way:
-
-1. **Provider Layer**: Specific exceptions raised (e.g., `ProviderTimeoutError`)
-2. **Router Layer**: Captures provider errors, may retry or fail over to other providers
-3. **Server Layer**: Converts exceptions to appropriate HTTP responses
-4. **Client**: Receives structured error information
-
-### Common Errors and Solutions
-
-| Error Type | HTTP Status | Common Causes | Solutions |
-|------------|-------------|--------------|-----------|
-| `ProviderAuthenticationError` | 401 | Invalid/missing API key | Check API key in `.env` file |
-| `ProviderRateLimitError` | 429 | Too many requests | Increase rate limit settings or wait for cooldown |
-| `ProviderTimeoutError` | 504 | Slow provider response | Increase provider timeout or try simpler queries |
-| `QueryBudgetExceededError` | 402 | Query would exceed budget | Increase budget or simplify query |
-| `NoProvidersAvailableError` | 503 | All providers unavailable | Check provider status and API limits |
-| `NetworkConnectionError` | 502 | Network connectivity issues | Check network connection and provider status |
-
-### Error Handling in Client Code
-
-When integrating with MCP Search Hub, handle errors appropriately:
-
-```python
-from mcp.client import Client
-
-client = Client("http://localhost:8000/mcp")
-
-try:
-    response = client.invoke("search", {
-        "query": "Latest quantum computing advances",
-        "max_results": 5
-    })
-    print(f"Found {len(response['results'])} results")
-except Exception as e:
-    if hasattr(e, 'error_type') and e.error_type == 'ProviderRateLimitError':
-        retry_after = e.details.get('retry_after_seconds', 60)
-        print(f"Rate limited. Try again in {retry_after} seconds")
-    elif hasattr(e, 'error_type') and e.error_type == 'ProviderTimeoutError':
-        print(f"Search timed out. Try a simpler query or increase timeout")
-    else:
-        print(f"Error: {e}")
-```
-
-## Troubleshooting
-
-### Common Issues
-
-- **API Key Errors**: Ensure you've set the correct API keys for each enabled provider in your `.env` file
-- **Connection Refused**: Check that the server is running and the port (default: 8000) is not in use
-- **Provider Failures**: If a specific provider fails, check its API status and consider disabling it temporarily
-- **Timeout Errors**: For complex queries, consider increasing the timeout setting
-- **Docker Build Failures**: If Docker build fails, check your Docker installation and ensure you have sufficient disk space
-- **Container Health Check Failures**: Check container logs and verify environment variables are set correctly
-
-### Logs
-
-Check the logs for detailed error information:
+### Production Docker Setup
 
 ```bash
-# For Docker installations
-docker logs mcp-search-hub
+# Production deployment
+cp .env.example .env  # Configure with production settings
+docker-compose -f docker-compose.prod.yml up -d
 
-# View health status
-docker inspect --format='{{json .State.Health}}' mcp-search-hub
+# Health check
+curl http://localhost:8000/health
 
-# For manual installations
-# Logs are output to stdout/stderr or to the file specified in your configuration
+# Monitoring
+curl http://localhost:8000/metrics
 ```
 
-### Docker Health Checks
-
-MCP Search Hub includes automatic health checks that ensure the service is operating correctly:
+### Environment-Specific Configs
 
 ```bash
-# Check container health status
-docker ps --filter name=mcp-search-hub --format "{{.Names}} {{.Status}}"
+# Development
+docker-compose -f docker-compose.dev.yml up -d
 
-# View detailed health check information
-docker inspect --format='{{json .State.Health}}' mcp-search-hub | jq
+# Production
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
-If the container shows an unhealthy status, check the logs for specific error information.
+🚀 **[Deployment Guide](docs/deployment/docker.md)**
 
-## License
+## 📈 Monitoring
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Health Endpoints
 
-## Contributing
+```bash
+# System health
+curl http://localhost:8000/health
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+# Provider status
+curl http://localhost:8000/providers
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+# Performance metrics
+curl http://localhost:8000/metrics
+```
 
-## Acknowledgements
+### Key Metrics
 
-- [FastMCP](https://github.com/fastmcp) - The framework powering this server
-- All the integrated search providers for their excellent APIs
+- Request volume and response times
+- Provider success rates and errors
+- Cache hit rates and performance
+- Cost tracking and budget usage
+
+📊 **[Monitoring Guide](docs/deployment/monitoring.md)**
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. **Fork** the repository
+2. **Create** a feature branch
+3. **Make** your changes with tests
+4. **Submit** a pull request
+
+### Areas for Contribution
+
+- 🐛 **Bug fixes** - Improve stability and reliability
+- ✨ **New features** - Add capabilities and integrations
+- 📚 **Documentation** - Improve guides and references
+- 🧪 **Testing** - Expand test coverage
+- 🎨 **Performance** - Optimize speed and efficiency
+
+🤝 **[Contributing Guide](CONTRIBUTING.md)** | 🛠️ **[Development Setup](DEVELOPMENT.md)**
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgements
+
+- **[FastMCP](https://github.com/fastmcp)** - The framework powering this server
+- **Provider Teams** - For their excellent APIs and official MCP servers:
+  - [Linkup](https://linkup.so) ([Python MCP Server](https://github.com/LinkupPlatform/python-mcp-server))
+  - [Exa](https://exa.ai) ([Node.js MCP Server](https://github.com/exa-labs/exa-mcp-server))
+  - [Perplexity](https://perplexity.ai) ([Node.js MCP Server](https://github.com/ppl-ai/modelcontextprotocol))
+  - [Tavily](https://tavily.com) ([Node.js MCP Server](https://github.com/tavily-ai/tavily-mcp))
+  - [Firecrawl](https://firecrawl.dev) ([Node.js MCP Server](https://github.com/mendableai/firecrawl-mcp-server))
+
+## 🔗 Links
+
+- **[GitHub Repository](https://github.com/BjornMelin/mcp-search-hub)**
+- **[Documentation](docs/README.md)**
+- **[Issue Tracker](https://github.com/BjornMelin/mcp-search-hub/issues)**
+- **[Releases](https://github.com/BjornMelin/mcp-search-hub/releases)**
+
+---
+
+**Ready to get started?** Follow our [Getting Started Guide](GETTING_STARTED.md) or run the interactive setup:
+
+```bash
+python scripts/setup_claude_desktop.py
+```

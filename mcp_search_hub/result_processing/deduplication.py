@@ -11,30 +11,33 @@ from w3lib.url import canonicalize_url
 
 from ..models.base import HealthStatus
 from ..models.component import ResultProcessorBase
-from ..models.config import ResultProcessorConfig
 from ..models.results import SearchResult
 from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class DuplicateRemover(ResultProcessorBase[ResultProcessorConfig]):
+# Simple config type for deduplication
+DuplicationConfig = dict[str, Any]
+
+
+class DuplicateRemover(ResultProcessorBase[DuplicationConfig]):
     """Component for removing duplicate search results."""
 
     def __init__(
         self,
         name: str = "deduplicator",
-        config: ResultProcessorConfig | None = None,
+        config: DuplicationConfig | None = None,
     ):
         """Initialize the duplicate remover."""
         # If no config is provided, create a default one
         if config is None:
-            config = ResultProcessorConfig(
-                name=name,
-                fuzzy_url_threshold=92.0,
-                content_similarity_threshold=0.85,
-                use_content_similarity=True,
-            )
+            config = {
+                "name": name,
+                "fuzzy_url_threshold": 92.0,
+                "content_similarity_threshold": 0.85,
+                "use_content_similarity": True,
+            }
 
         super().__init__(name, config)
 
@@ -79,13 +82,13 @@ class DuplicateRemover(ResultProcessorBase[ResultProcessorConfig]):
 
         # Use defaults from config if not specified
         if fuzzy_url_threshold is None:
-            fuzzy_url_threshold = self.config.fuzzy_url_threshold
+            fuzzy_url_threshold = self.config["fuzzy_url_threshold"]
 
         if content_similarity_threshold is None:
-            content_similarity_threshold = self.config.content_similarity_threshold
+            content_similarity_threshold = self.config["content_similarity_threshold"]
 
         if use_content_similarity is None:
-            use_content_similarity = self.config.use_content_similarity
+            use_content_similarity = self.config["use_content_similarity"]
 
         # Perform deduplication
         output_results = remove_duplicates(
@@ -178,13 +181,13 @@ class DuplicateRemover(ResultProcessorBase[ResultProcessorConfig]):
 
         # Extract other parameters
         fuzzy_url_threshold = kwargs.get(
-            "fuzzy_url_threshold", self.config.fuzzy_url_threshold
+            "fuzzy_url_threshold", self.config["fuzzy_url_threshold"]
         )
         content_similarity_threshold = kwargs.get(
-            "content_similarity_threshold", self.config.content_similarity_threshold
+            "content_similarity_threshold", self.config["content_similarity_threshold"]
         )
         use_content_similarity = kwargs.get(
-            "use_content_similarity", self.config.use_content_similarity
+            "use_content_similarity", self.config["use_content_similarity"]
         )
 
         # Process results
@@ -316,7 +319,7 @@ def _apply_fuzzy_matching(
     sorted_results = sorted(results, key=lambda x: x.score, reverse=True)
 
     # Keep track of which results to include in the final set
-    keep_indices = set([0])  # Always keep the highest-scored result
+    keep_indices = {0}  # Always keep the highest-scored result
 
     # For fuzzy URL matching
     for i in range(1, len(sorted_results)):
@@ -362,7 +365,7 @@ def _apply_fuzzy_matching(
             similarity_matrix = cosine_similarity(tfidf_matrix)
 
             # Find content duplicates
-            final_indices = set([0])  # Always keep highest scored
+            final_indices = {0}  # Always keep highest scored
             for i in range(1, len(kept_results)):
                 content_duplicate = False
 

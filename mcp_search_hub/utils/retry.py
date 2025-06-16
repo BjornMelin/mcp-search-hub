@@ -335,7 +335,7 @@ def with_exponential_backoff(
                     # Calculate delay for next attempt
                     delay = config.calculate_delay(attempt)
 
-                    # Enhanced logging
+                    # Detailed logging
                     log_retry_attempt(
                         func.__name__,
                         exc,
@@ -442,7 +442,7 @@ async def retry_async(
             # Calculate delay for next attempt
             delay = config.calculate_delay(attempt)
 
-            # Enhanced logging
+            # Detailed logging
             log_retry_attempt(
                 func.__name__,
                 exc,

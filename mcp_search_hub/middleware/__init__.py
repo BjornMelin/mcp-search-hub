@@ -3,19 +3,19 @@
 This package contains middleware components that provide cross-cutting
 functionality such as authentication, rate limiting, logging, retry logic,
 and error handling.
+
+All middleware use standard Starlette BaseHTTPMiddleware patterns and work
+directly with FastMCP's built-in middleware support.
 """
 
 # Import middleware components
 from .auth import AuthMiddleware
-from .base import BaseMiddleware, MiddlewareManager
 from .error_handler import ErrorHandlerMiddleware
 from .logging import LoggingMiddleware
 from .rate_limit import RateLimitMiddleware
 from .retry import RetryMiddleware
 
 __all__ = [
-    "BaseMiddleware",
-    "MiddlewareManager",
     "AuthMiddleware",
     "ErrorHandlerMiddleware",
     "LoggingMiddleware",

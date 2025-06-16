@@ -1,14 +1,45 @@
 """Tests for authentication middleware."""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from fastmcp import Context
-from starlette.requests import Request
+from starlette.applications import Starlette
 from starlette.responses import JSONResponse
+from starlette.testclient import TestClient
 
 from mcp_search_hub.middleware.auth import AuthMiddleware
+from mcp_search_hub.middleware.error_handler import ErrorHandlerMiddleware
+
+
+def create_test_app(**middleware_options):
+    """Create a test Starlette app with AuthMiddleware."""
+    app = Starlette()
+
+    # Add a simple test route
+    @app.route("/test")
+    async def test_route(request):
+        return JSONResponse({"message": "success"})
+
+    @app.route("/health")
+    async def health_route(request):
+        return JSONResponse({"status": "ok"})
+
+    @app.route("/metrics")
+    async def metrics_route(request):
+        return JSONResponse({"metrics": "data"})
+
+    @app.route("/docs")
+    async def docs_route(request):
+        return JSONResponse({"docs": "available"})
+
+    # Add the auth middleware
+    app.add_middleware(AuthMiddleware, **middleware_options)
+
+    # Add error handler middleware to convert exceptions to HTTP responses
+    app.add_middleware(ErrorHandlerMiddleware, include_traceback=False)
+
+    return app
 
 
 class TestAuthMiddleware:
@@ -16,195 +47,147 @@ class TestAuthMiddleware:
 
     def test_initialization_with_api_keys(self):
         """Test initialization with explicit API keys."""
-        middleware = AuthMiddleware(
+        app = create_test_app(
             api_keys=["test_key1", "test_key2"], skip_auth_paths=["/skip1", "/skip2"]
         )
-
-        assert middleware.api_keys == ["test_key1", "test_key2"]
-        assert middleware.skip_auth_paths == ["/skip1", "/skip2"]
-        assert middleware.order == 10  # Default auth order
+        # Check that the middleware was added successfully by testing the app
+        client = TestClient(app)
+        # This should fail due to missing API key
+        response = client.get("/test")
+        assert response.status_code == 401
 
     def test_initialization_with_env_var(self):
         """Test initialization with API key from environment."""
         with patch.dict(os.environ, {"MCP_SEARCH_HUB_API_KEY": "env_key"}):
-            middleware = AuthMiddleware()
+            app = create_test_app()
+            client = TestClient(app)
 
-            assert middleware.api_keys == ["env_key"]
-            assert middleware.skip_auth_paths == [
-                "/health",
-                "/metrics",
-                "/docs",
-                "/redoc",
-                "/openapi.json",
-            ]
+            # Test with valid key
+            response = client.get("/test", headers={"X-API-Key": "env_key"})
+            assert response.status_code == 200
+
+            # Test with invalid key
+            response = client.get("/test", headers={"X-API-Key": "wrong_key"})
+            assert response.status_code == 401
 
     def test_initialization_without_api_keys(self):
         """Test initialization without API keys."""
         with patch.dict(os.environ, clear=True):
-            middleware = AuthMiddleware()
+            app = create_test_app()
+            client = TestClient(app)
 
-            assert middleware.api_keys == []
+            # Should allow all requests when no API keys are configured
+            response = client.get("/test")
+            assert response.status_code == 200
 
-    @pytest.mark.asyncio
-    async def test_process_request_no_api_keys(self):
-        """Test processing request when no API keys are configured."""
-        middleware = AuthMiddleware(api_keys=[])
+    def test_skipped_paths(self):
+        """Test that requests to skipped paths are allowed."""
+        app = create_test_app(api_keys=["test_key"])
+        client = TestClient(app)
 
-        # Test with HTTP request
-        mock_request = MagicMock(spec=Request)
-        result = await middleware.process_request(mock_request)
-        assert result == mock_request
+        # Health endpoint should be accessible without auth
+        response = client.get("/health")
+        assert response.status_code == 200
 
-        # Test with tool request
-        mock_tool_request = {"param": "value"}
-        result = await middleware.process_request(mock_tool_request)
-        assert result == mock_tool_request
+        # Metrics endpoint should be accessible without auth
+        response = client.get("/metrics")
+        assert response.status_code == 200
 
-    @pytest.mark.asyncio
-    async def test_process_tool_request(self):
-        """Test processing tool request (should always pass through)."""
-        middleware = AuthMiddleware(api_keys=["test_key"])
+        # Docs endpoint should be accessible without auth
+        response = client.get("/docs")
+        assert response.status_code == 200
 
-        mock_tool_request = {"param": "value"}
-        mock_context = MagicMock(spec=Context)
+    def test_valid_api_key_header(self):
+        """Test requests with valid API key in X-API-Key header."""
+        app = create_test_app(api_keys=["test_key1", "test_key2"])
+        client = TestClient(app)
 
-        result = await middleware.process_request(mock_tool_request, mock_context)
-        assert result == mock_tool_request
+        # Valid key should work
+        response = client.get("/test", headers={"X-API-Key": "test_key1"})
+        assert response.status_code == 200
 
-    @pytest.mark.asyncio
-    async def test_process_http_request_skipped_path(self):
-        """Test processing HTTP request for path that skips authentication."""
-        middleware = AuthMiddleware(
-            api_keys=["test_key"], skip_auth_paths=["/health", "/docs"]
-        )
+        # Another valid key should work
+        response = client.get("/test", headers={"X-API-Key": "test_key2"})
+        assert response.status_code == 200
 
-        # Create mock request with skipped path
-        mock_request = MagicMock(spec=Request)
-        mock_request.url.path = "/health"
+    def test_valid_api_key_bearer(self):
+        """Test requests with valid API key in Bearer token."""
+        app = create_test_app(api_keys=["test_key"])
+        client = TestClient(app)
 
-        result = await middleware.process_request(mock_request)
-        assert result == mock_request
+        # Bearer token should work
+        response = client.get("/test", headers={"Authorization": "Bearer test_key"})
+        assert response.status_code == 200
 
-    @pytest.mark.asyncio
-    async def test_process_http_request_valid_key_header(self):
-        """Test processing HTTP request with valid API key in X-API-Key header."""
-        middleware = AuthMiddleware(api_keys=["test_key"])
+    def test_invalid_api_key(self):
+        """Test requests with invalid API key."""
+        app = create_test_app(api_keys=["test_key"])
+        client = TestClient(app)
 
-        # Create mock request with valid API key
-        mock_request = MagicMock(spec=Request)
-        mock_request.url.path = "/search"
-        mock_request.headers = {"X-API-Key": "test_key"}
-
-        result = await middleware.process_request(mock_request)
-        assert result == mock_request
-
-    @pytest.mark.asyncio
-    async def test_process_http_request_valid_key_bearer(self):
-        """Test processing HTTP request with valid API key in Authorization header."""
-        middleware = AuthMiddleware(api_keys=["test_key"])
-
-        # Create mock request with valid bearer token
-        mock_request = MagicMock(spec=Request)
-        mock_request.url.path = "/search"
-        mock_request.headers = {"Authorization": "Bearer test_key"}
-
-        result = await middleware.process_request(mock_request)
-        assert result == mock_request
-
-    @pytest.mark.asyncio
-    async def test_process_http_request_invalid_key(self):
-        """Test processing HTTP request with invalid API key."""
-        middleware = AuthMiddleware(api_keys=["test_key"])
-
-        # Create mock request with invalid API key
-        mock_request = MagicMock(spec=Request)
-        mock_request.url.path = "/search"
-        mock_request.headers = {"X-API-Key": "invalid_key"}
-
-        # Should raise exception with JSONResponse
-        with pytest.raises(Exception) as exc_info:
-            await middleware.process_request(mock_request)
-
-        # Check that the exception contains a JSONResponse
-        response = exc_info.value.args[0]
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 401
-        assert response.body is not None  # Body should contain error details
-
-    @pytest.mark.asyncio
-    async def test_process_http_request_missing_key(self):
-        """Test processing HTTP request with missing API key."""
-        middleware = AuthMiddleware(api_keys=["test_key"])
-
-        # Create mock request without API key
-        mock_request = MagicMock(spec=Request)
-        mock_request.url.path = "/search"
-        mock_request.headers = {}
-
-        # Should raise exception with JSONResponse
-        with pytest.raises(Exception) as exc_info:
-            await middleware.process_request(mock_request)
-
-        # Check that the exception contains a JSONResponse
-        response = exc_info.value.args[0]
-        assert isinstance(response, JSONResponse)
+        # Invalid key should fail
+        response = client.get("/test", headers={"X-API-Key": "invalid_key"})
         assert response.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_process_response(self):
-        """Test processing response (should be unchanged)."""
-        middleware = AuthMiddleware()
+    def test_missing_api_key(self):
+        """Test requests with missing API key."""
+        app = create_test_app(api_keys=["test_key"])
+        client = TestClient(app)
 
-        mock_response = {"result": "success"}
-        mock_request = MagicMock(spec=Request)
+        # Missing key should fail
+        response = client.get("/test")
+        assert response.status_code == 401
 
-        result = await middleware.process_response(mock_response, mock_request)
-        assert result == mock_response
+    def test_case_insensitive_headers(self):
+        """Test that headers are handled case-insensitively."""
+        app = create_test_app(api_keys=["test_key"])
+        client = TestClient(app)
+
+        # Various header cases should work
+        response = client.get("/test", headers={"x-api-key": "test_key"})
+        assert response.status_code == 200
+
+        response = client.get("/test", headers={"authorization": "Bearer test_key"})
+        assert response.status_code == 200
 
 
 @pytest.mark.parametrize(
     "api_keys,header_key,header_value,path,should_pass",
     [
         # No API keys configured - should always pass
-        ([], None, None, "/search", True),
+        ([], None, None, "/test", True),
         # Valid API key in X-API-Key header
-        (["key1", "key2"], "X-API-Key", "key1", "/search", True),
+        (["key1", "key2"], "X-API-Key", "key1", "/test", True),
         # Valid API key in Authorization header (Bearer)
-        (["key1", "key2"], "Authorization", "Bearer key2", "/search", True),
+        (["key1", "key2"], "Authorization", "Bearer key2", "/test", True),
         # Invalid API key
-        (["key1", "key2"], "X-API-Key", "invalid", "/search", False),
+        (["key1", "key2"], "X-API-Key", "invalid", "/test", False),
         # Missing API key
-        (["key1", "key2"], None, None, "/search", False),
+        (["key1", "key2"], None, None, "/test", False),
         # Skipped path - should pass regardless of API key
         (["key1", "key2"], None, None, "/health", True),
         (["key1", "key2"], None, None, "/metrics", True),
         (["key1", "key2"], None, None, "/docs", True),
     ],
 )
-@pytest.mark.asyncio
-async def test_auth_middleware_scenarios(
+def test_auth_middleware_scenarios(
     api_keys, header_key, header_value, path, should_pass
 ):
     """Test various authentication scenarios."""
-    middleware = AuthMiddleware(api_keys=api_keys)
+    app = create_test_app(api_keys=api_keys)
+    client = TestClient(app)
 
-    # Create mock request
-    mock_request = MagicMock(spec=Request)
-    mock_request.url.path = path
-    mock_request.headers = {}
-
+    # Setup headers
+    headers = {}
     if header_key and header_value:
-        mock_request.headers[header_key] = header_value
+        headers[header_key] = header_value
+
+    response = client.get(path, headers=headers)
 
     if should_pass:
-        # Should pass authentication
-        result = await middleware.process_request(mock_request)
-        assert result == mock_request
+        assert response.status_code == 200, (
+            f"Expected success for scenario with API keys {api_keys}, header {header_key}={header_value}, path {path}"
+        )
     else:
-        # Should fail authentication
-        with pytest.raises(Exception) as exc_info:
-            await middleware.process_request(mock_request)
-
-        response = exc_info.value.args[0]
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 401
+        assert response.status_code == 401, (
+            f"Expected failure for scenario with API keys {api_keys}, header {header_key}={header_value}, path {path}"
+        )

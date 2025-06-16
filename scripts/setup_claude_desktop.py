@@ -136,6 +136,7 @@ def validate_installation() -> bool:
     """Validate that MCP Search Hub is properly installed."""
     try:
         import mcp_search_hub  # noqa: F401
+
         print("✅ MCP Search Hub is installed and importable")
         return True
     except ImportError as e:

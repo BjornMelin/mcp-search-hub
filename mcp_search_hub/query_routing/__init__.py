@@ -1,17 +1,20 @@
 """Query routing package."""
 
 from .analyzer import QueryAnalyzer
-from .circuit_breaker import CircuitBreaker
+from .complexity_classifier import ComplexityClassifier
 from .cost_optimizer import CostOptimizer
+from .hybrid_router import HybridRouter, RoutingDecision
+from .pattern_router import PatternRouter
 from .scoring_calculator import ScoringCalculator
-from .unified_router import ExecutionStrategy, ProviderScorer, UnifiedRouter
+from .simple_keyword_router import SimpleKeywordRouter
 
 __all__ = [
     "QueryAnalyzer",
     "CostOptimizer",
     "ScoringCalculator",
-    "CircuitBreaker",
-    "UnifiedRouter",
-    "ExecutionStrategy",
-    "ProviderScorer",
+    "HybridRouter",
+    "RoutingDecision",
+    "ComplexityClassifier",
+    "PatternRouter",
+    "SimpleKeywordRouter",
 ]

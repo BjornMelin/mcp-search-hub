@@ -11,7 +11,6 @@ from mcp_search_hub.query_routing.llm_router import (
     LLMRoutingResult,
     RoutingHintParser,
 )
-from mcp_search_hub.utils.cache import TimedCache
 
 
 class TestLLMQueryRouter:
@@ -78,7 +77,7 @@ class TestLLMQueryRouter:
     def test_init(self):
         """Test initialization."""
         assert self.llm_router.fallback_scorer is None
-        assert isinstance(self.llm_router.cache, TimedCache)
+        assert isinstance(self.llm_router._cache, dict)
         assert self.llm_router.metrics["llm_calls"] == 0
         assert self.llm_router.metrics["cache_hits"] == 0
         assert self.llm_router.metrics["fallback_used"] == 0
@@ -114,6 +113,7 @@ class TestLLMQueryRouter:
             "test_provider", self.provider, self.simple_features, None
         )
 
+    @mock.patch("mcp_search_hub.query_routing.llm_router.LLM_ROUTER_ENABLED", True)
     @mock.patch(
         "mcp_search_hub.query_routing.llm_router.LLMQueryRouter._call_llm_for_routing"
     )
@@ -143,6 +143,7 @@ class TestLLMQueryRouter:
         # Verify LLM was called
         mock_call_llm.assert_called_once_with(self.features)
 
+    @mock.patch("mcp_search_hub.query_routing.llm_router.LLM_ROUTER_ENABLED", True)
     @mock.patch(
         "mcp_search_hub.query_routing.llm_router.LLMQueryRouter._call_llm_for_routing"
     )
@@ -169,6 +170,7 @@ class TestLLMQueryRouter:
         assert self.llm_router.metrics["llm_calls"] == 1
         assert self.llm_router.metrics["cache_hits"] == 1
 
+    @mock.patch("mcp_search_hub.query_routing.llm_router.LLM_ROUTER_ENABLED", True)
     @mock.patch(
         "mcp_search_hub.query_routing.llm_router.LLMQueryRouter._call_llm_for_routing"
     )
