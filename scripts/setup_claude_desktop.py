@@ -135,7 +135,7 @@ def create_config(api_keys: dict[str, str], advanced: bool = False) -> dict:
 def validate_installation() -> bool:
     """Validate that MCP Search Hub is properly installed."""
     try:
-        import mcp_search_hub  # noqa: F401
+        import mcp_search_hub  # noqa: F401, PLC0415
 
         print("✅ MCP Search Hub is installed and importable")
         return True
@@ -149,7 +149,7 @@ def backup_existing_config(config_path: Path) -> Path | None:
     """Backup existing configuration file if it exists."""
     if config_path.exists():
         backup_path = config_path.with_suffix(".json.backup")
-        import shutil
+        import shutil  # noqa: PLC0415
 
         shutil.copy2(config_path, backup_path)
         print(f"📋 Existing config backed up to: {backup_path}")

@@ -1,10 +1,10 @@
 # MCP Search Hub
 
-> 🔍 **Intelligent multi-provider search aggregation server built on FastMCP 2.0**
+> 🔍 **Intelligent multi-provider search aggregation server built on FastMCP 2.12**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![FastMCP](https://img.shields.io/badge/FastMCP-2.0-green.svg)](https://github.com/fastmcp)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![FastMCP](https://img.shields.io/badge/FastMCP-2.12-green.svg)](https://github.com/fastmcp)
 
 MCP Search Hub embeds official MCP servers from five leading search providers within a unified interface, intelligently routes queries to the most appropriate provider(s), and combines/ranks results for optimal relevance.
 
@@ -24,10 +24,10 @@ MCP Search Hub embeds official MCP servers from five leading search providers wi
 Get up and running in 5 minutes:
 
 ```bash
-# 1. Clone and install
+# 1. Clone and install using uv
 git clone https://github.com/BjornMelin/mcp-search-hub
 cd mcp-search-hub
-uv pip install -r requirements.txt
+uv sync
 
 # 2. Interactive setup (recommended)
 python scripts/setup_claude_desktop.py

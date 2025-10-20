@@ -174,8 +174,13 @@ async def benchmark_result_merger(result_counts=None):
         print(f"\nMerging {result_count} total results:")
 
         # Create mock provider results (5 providers with result_count/5 results each)
-        from mcp_search_hub.models.results import SearchResponse, SearchResult
-        from mcp_search_hub.models.router import ProviderExecutionResult
+        from mcp_search_hub.models.results import (  # noqa: PLC0415
+            SearchResponse,
+            SearchResult,
+        )
+        from mcp_search_hub.models.router import (  # noqa: PLC0415
+            ProviderExecutionResult,
+        )
 
         provider_count = 5
         results_per_provider = result_count // provider_count

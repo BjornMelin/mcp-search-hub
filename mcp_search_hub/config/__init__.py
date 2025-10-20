@@ -1,23 +1,14 @@
 """Configuration management module."""
 
-from .settings import (
-    AppSettings,
-    CacheConfig,
-    MergerSettings,
-    MiddlewareConfig,
-    ProviderSettings,
-    RetryConfig,
-    RouterSettings,
-    get_settings,
-)
+from . import settings as _settings
 
-__all__ = [
-    "AppSettings",
-    "CacheConfig",
-    "MergerSettings",
-    "MiddlewareConfig",
-    "ProviderSettings",
-    "RetryConfig",
-    "RouterSettings",
-    "get_settings",
-]
+AppSettings = _settings.AppSettings
+CacheConfig = _settings.CacheConfig
+MiddlewareConfig = _settings.MiddlewareConfig
+ProviderSettings = _settings.ProviderSettings
+ResultConfig = _settings.ResultConfig
+RetryConfig = _settings.RetryConfig
+RouterSettings = _settings.RouterSettings
+get_settings = _settings.get_settings
+
+__all__ = list(_settings.__all__)

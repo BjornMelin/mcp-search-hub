@@ -1,161 +1,153 @@
-"""Application settings with modern Pydantic v2 patterns."""
+"""Application configuration leveraging Pydantic v2 settings."""
 
+from __future__ import annotations
+
+import shlex
+from collections.abc import Mapping
 from functools import lru_cache
+from typing import Any, TypeAlias, cast
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ..providers.sessions import ProviderDefinition
+
+TransportConfig: TypeAlias = dict[str, Any] | str
+
 
 class CacheConfig(BaseModel):
-    """Cache configuration settings."""
+    """Cache configuration."""
 
-    redis_url: str = Field(
-        default="redis://localhost:6379", description="Redis connection URL"
-    )
-    memory_ttl: int = Field(
-        default=300, ge=0, description="Memory cache TTL in seconds"
-    )
-    redis_ttl: int = Field(default=3600, ge=0, description="Redis cache TTL in seconds")
+    redis_url: str | None = Field(default=None, description="Redis connection URL")
     redis_enabled: bool = Field(default=False, description="Enable Redis caching")
-    prefix: str = Field(default="search:", description="Cache key prefix")
-    fingerprint_enabled: bool = Field(
-        default=True, description="Enable semantic fingerprinting"
-    )
-    clean_interval: int = Field(
-        default=600, ge=0, description="Cache cleanup interval in seconds"
-    )
+    memory_ttl: int = Field(default=300, ge=0, description="In-memory TTL in seconds")
+    redis_ttl: int = Field(default=1800, ge=0, description="Redis TTL in seconds")
+    prefix: str = Field(default="search", description="Cache key prefix")
     ttl_jitter: int = Field(
-        default=60, ge=0, description="Cache TTL jitter in seconds to prevent stampede"
+        default=30, ge=0, description="Jitter in seconds to avoid stampedes"
     )
 
 
 class RetryConfig(BaseModel):
-    """Retry configuration settings."""
+    """Retry middleware configuration."""
 
-    max_retries: int = Field(default=3, ge=0, description="Maximum retry attempts")
-    base_delay: float = Field(
-        default=1.0, gt=0, description="Base delay between retries"
-    )
-    max_delay: float = Field(
-        default=60.0, gt=0, description="Maximum delay between retries"
-    )
-    exponential_base: float = Field(
-        default=2.0, gt=1, description="Exponential backoff base"
-    )
-    jitter: bool = Field(default=True, description="Add randomization to retry delays")
+    max_retries: int = Field(default=2, ge=0)
+    base_delay: float = Field(default=1.0, ge=0.0)
+    max_delay: float = Field(default=30.0, ge=0.0)
+    backoff_multiplier: float = Field(default=2.0, ge=1.0)
 
 
-class ProviderSettings(BaseModel):
-    """Provider configuration settings."""
-
-    api_key: SecretStr = Field(
-        default=SecretStr(""), description="API key for the provider"
-    )
-    enabled: bool = Field(default=True, description="Whether provider is enabled")
-    timeout: float = Field(default=30.0, gt=0, description="Request timeout in seconds")
-
-
-# Router settings
 class RouterSettings(BaseModel):
-    """Router configuration settings."""
+    """Routing planner configuration."""
 
-    max_providers: int = Field(
-        default=3, ge=1, description="Maximum providers per query"
-    )
-    min_confidence: float = Field(
-        default=0.6, ge=0, le=1, description="Minimum confidence threshold"
-    )
-    execution_strategy: str = Field(default="auto", description="Execution strategy")
-    base_timeout_ms: int = Field(
-        default=10000, gt=0, description="Base timeout in milliseconds"
-    )
-    max_concurrent: int = Field(
-        default=3, ge=1, description="Maximum concurrent provider executions"
-    )
+    max_providers: int = Field(default=3, ge=1, le=5)
 
 
-# Merger settings
-class MergerSettings(BaseModel):
-    """Merger configuration settings."""
+class ResultConfig(BaseModel):
+    """Result aggregation configuration."""
 
-    fuzzy_url_threshold: float = Field(
-        default=92.0, description="Threshold for fuzzy URL matching"
-    )
-    content_similarity_threshold: float = Field(
-        default=0.85, description="Threshold for content similarity"
-    )
-    use_content_similarity: bool = Field(
-        default=True, description="Whether to use content similarity"
-    )
-    max_results: int = Field(
-        default=10, description="Maximum number of results to return"
-    )
-    provider_weights: dict[str, float] = Field(
-        default_factory=dict, description="Per-provider quality weights"
-    )
-    recency_enabled: bool = Field(
-        default=True, description="Whether to boost recent results"
-    )
-    credibility_enabled: bool = Field(
-        default=True, description="Whether to use credibility scoring"
-    )
-    consensus_weight: float = Field(
-        default=0.5, description="Weight for consensus boosting"
-    )
+    max_results: int = Field(default=10, ge=1, le=50)
 
 
 class MiddlewareConfig(BaseModel):
-    """Middleware configuration settings."""
+    """Middleware toggles for HTTP transport."""
 
-    # Auth middleware
-    auth_enabled: bool = Field(default=True, description="Enable authentication")
-    auth_api_keys: list[str] = Field(default_factory=list, description="Valid API keys")
-    auth_skip_paths: list[str] = Field(
-        default_factory=lambda: [
-            "/health",
-            "/metrics",
-            "/docs",
-            "/redoc",
-            "/openapi.json",
-        ],
-        description="Paths to skip authentication",
-    )
+    auth_enabled: bool = Field(default=False)
+    auth_api_keys: list[str] = Field(default_factory=list)
+    rate_limit_enabled: bool = Field(default=True)
+    rate_limit_requests: int = Field(default=60, ge=1)
+    rate_limit_window_seconds: int = Field(default=60, ge=1)
+    structured_logging: bool = Field(default=True)
+    include_payloads: bool = Field(default=False)
 
-    # Rate limiting
-    rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting")
-    rate_limit_requests: int = Field(
-        default=100, gt=0, description="Requests per window"
-    )
-    rate_limit_window: int = Field(
-        default=60, gt=0, description="Time window in seconds"
-    )
-    rate_limit_global: int = Field(
-        default=1000, gt=0, description="Global requests limit"
-    )
-    rate_limit_skip_paths: list[str] = Field(
-        default_factory=lambda: ["/health", "/metrics"],
-        description="Paths to skip rate limiting",
-    )
 
-    # Logging
-    logging_enabled: bool = Field(default=True, description="Enable request logging")
-    logging_include_headers: bool = Field(
-        default=True, description="Include headers in logs"
+class ProviderSettings(BaseModel):
+    """Declarative provider configuration."""
+
+    enabled: bool = Field(default=True)
+    transport: str | dict[str, Any] | None = Field(
+        default=None, description="Transport configuration or command string"
     )
-    logging_include_body: bool = Field(
-        default=False, description="Include body in logs"
+    command: list[str] | None = Field(
+        default=None, description="Command array if transport absent"
     )
-    logging_max_body_size: int = Field(
-        default=1024, ge=0, description="Max body size to log"
-    )
-    logging_sensitive_headers: list[str] = Field(
-        default_factory=lambda: ["authorization", "x-api-key", "cookie", "set-cookie"],
-        description="Headers to redact from logs",
-    )
+    api_key: SecretStr | None = Field(default=None, description="Optional API key")
+    default_tool: str = Field(default="search")
+    title: str | None = Field(default=None)
+    timeout: float = Field(default=30.0, gt=0)
+    tags: list[str] = Field(default_factory=list)
+    weight: float = Field(default=1.0, gt=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    env: dict[str, str] = Field(default_factory=dict)
+    failure_threshold: int = Field(default=3, ge=1)
+
+    def build_definition(self, identifier: str) -> ProviderDefinition | None:
+        """Construct a provider definition when the provider is enabled."""
+
+        if not self.enabled:
+            return None
+
+        transport_config = self._resolve_transport()
+        if transport_config is None:
+            return None
+
+        environment: dict[str, str] = dict(self.env)
+        secret_obj = cast(SecretStr | None, getattr(self, "api_key", None))
+        if isinstance(secret_obj, SecretStr):
+            secret_value = secret_obj.get_secret_value().strip()
+            if secret_value:
+                environment.setdefault("API_KEY", secret_value)
+
+        transport = self._apply_env_to_transport(transport_config, environment)
+
+        return ProviderDefinition(
+            identifier=identifier,
+            transport=transport,
+            tool=self.default_tool,
+            title=self.title or identifier.title(),
+            tags=set(self.tags),
+            weight=self.weight,
+            timeout=self.timeout,
+            metadata=self.metadata,
+            failure_threshold=self.failure_threshold,
+        )
+
+    def _resolve_transport(self) -> TransportConfig | None:
+        """Return the configured transport string or mapping if present."""
+
+        transport_value = cast(TransportConfig | None, getattr(self, "transport", None))
+        if isinstance(transport_value, dict):
+            return dict(transport_value)
+        if isinstance(transport_value, str):
+            stripped = transport_value.strip()
+            if stripped:
+                return stripped
+        command_value = cast(list[str] | None, getattr(self, "command", None))
+        if command_value:
+            return {"command": list(command_value)}
+        return None
+
+    def _apply_env_to_transport(
+        self, transport_config: TransportConfig, env: Mapping[str, str]
+    ) -> TransportConfig | dict[str, Any]:
+        """Merge environment variables into the resolved transport when required."""
+
+        if isinstance(transport_config, dict):
+            concrete = dict(transport_config)
+            if env:
+                merged_env = dict(concrete.get("env", {}))
+                merged_env.update(env)
+                concrete["env"] = merged_env
+            return concrete
+
+        if env:
+            return {"command": shlex.split(transport_config), "env": dict(env)}
+
+        return transport_config
 
 
 class AppSettings(BaseSettings):
-    """Main application settings with modern Pydantic v2 patterns."""
+    """Primary application settings."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -163,108 +155,75 @@ class AppSettings(BaseSettings):
         env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
-        validate_assignment=True,
-        validate_default=True,
     )
 
-    # Application metadata
-    app_name: str = Field(default="MCP Search Hub", description="Application name")
-    environment: str = Field(default="development", description="Runtime environment")
+    app_name: str = Field(default="MCP Search Hub")
+    environment: str = Field(default="development")
+    host: str = Field(default="0.0.0.0")
+    port: int = Field(default=8000, ge=1, le=65535)
+    log_level: str = Field(default="INFO")
+    transport: str = Field(default="streamable-http")
+    streamable_http_path: str = Field(default="/mcp")
 
-    # Server configuration
-    host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8000, ge=1, le=65535, description="Server port")
-    log_level: str = Field(default="INFO", description="Logging level")
-    transport: str = Field(default="streamable-http", description="Transport mode")
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+    retry: RetryConfig = Field(default_factory=RetryConfig)
+    router: RouterSettings = Field(default_factory=RouterSettings)
+    results: ResultConfig = Field(default_factory=ResultConfig)
+    middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
 
-    # Budget
-    default_budget: float | None = Field(
-        default=None, ge=0, description="Default query budget"
-    )
-
-    # LLM routing
-    llm_routing_enabled: bool = Field(
-        default=False, description="Enable LLM-based routing for complex queries"
-    )
-
-    # Provider timeouts (in milliseconds for compatibility)
-    linkup_timeout: int = Field(default=10000, gt=0, description="Linkup timeout in ms")
-    exa_timeout: int = Field(default=15000, gt=0, description="Exa timeout in ms")
-    perplexity_timeout: int = Field(
-        default=20000, gt=0, description="Perplexity timeout in ms"
-    )
-    tavily_timeout: int = Field(default=10000, gt=0, description="Tavily timeout in ms")
-    firecrawl_timeout: int = Field(
-        default=30000, gt=0, description="Firecrawl timeout in ms"
-    )
-
-    # Nested configurations
-    cache: CacheConfig = Field(
-        default_factory=CacheConfig, description="Cache settings"
-    )
-    retry: RetryConfig = Field(
-        default_factory=RetryConfig, description="Retry settings"
-    )
-    router: RouterSettings = Field(
-        default_factory=RouterSettings, description="Router settings"
-    )
-    merger: MergerSettings = Field(
-        default_factory=MergerSettings, description="Merger settings"
-    )
-    middleware: MiddlewareConfig = Field(
-        default_factory=MiddlewareConfig, description="Middleware settings"
-    )
-
-    # Provider configurations
-    linkup: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Linkup provider"
-    )
-    exa: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Exa provider"
-    )
-    perplexity: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Perplexity provider"
-    )
-    tavily: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Tavily provider"
-    )
-    firecrawl: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Firecrawl provider"
-    )
+    linkup: ProviderSettings = Field(default_factory=ProviderSettings)
+    exa: ProviderSettings = Field(default_factory=ProviderSettings)
+    perplexity: ProviderSettings = Field(default_factory=ProviderSettings)
+    tavily: ProviderSettings = Field(default_factory=ProviderSettings)
+    firecrawl: ProviderSettings = Field(default_factory=ProviderSettings)
 
     @field_validator("environment")
     @classmethod
-    def validate_environment(cls, v: str) -> str:
-        """Validate environment value."""
-        valid_envs = {"development", "staging", "production", "test"}
-        if v.lower() not in valid_envs:
-            raise ValueError(f"Invalid environment: {v}. Must be one of {valid_envs}")
-        return v.lower()
+    def validate_environment(cls, value: str) -> str:
+        """Normalise environment identifiers from configuration sources."""
+
+        allowed = {"development", "staging", "production", "test"}
+        if value.lower() not in allowed:
+            raise ValueError(f"Invalid environment '{value}'. Must be one of {allowed}")
+        return value.lower()
 
     @field_validator("log_level")
     @classmethod
-    def validate_log_level(cls, v: str) -> str:
-        """Validate log level."""
-        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-        if v.upper() not in valid_levels:
-            raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
-        return v.upper()
+    def validate_log_level(cls, value: str) -> str:
+        """Normalise log level values while validating allowed options."""
 
-    def get_provider_config(self, provider_name: str) -> ProviderSettings | None:
-        """Get configuration for a specific provider."""
-        return getattr(self, provider_name.lower(), None)
+        allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        upper = value.upper()
+        if upper not in allowed:
+            raise ValueError(f"Invalid log level '{value}'. Must be one of {allowed}")
+        return upper
 
-    def get_enabled_providers(self) -> list[str]:
-        """Get list of enabled provider names."""
-        providers = ["linkup", "exa", "perplexity", "tavily", "firecrawl"]
-        return [p for p in providers if getattr(self, p).enabled]
+    def iter_provider_settings(self) -> dict[str, ProviderSettings]:
+        """Return provider settings keyed by provider identifier."""
+
+        return {
+            "linkup": self.linkup,
+            "exa": self.exa,
+            "perplexity": self.perplexity,
+            "tavily": self.tavily,
+            "firecrawl": self.firecrawl,
+        }
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
-    """Get cached application settings."""
+    """Return cached application settings instance."""
+
     return AppSettings()
 
 
-# Alias for compatibility
-get_app_settings = get_settings
+__all__ = [
+    "AppSettings",
+    "CacheConfig",
+    "MiddlewareConfig",
+    "ProviderSettings",
+    "ResultConfig",
+    "RetryConfig",
+    "RouterSettings",
+    "get_settings",
+]

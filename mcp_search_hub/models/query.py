@@ -1,50 +1,57 @@
-"""Query models."""
+"""Query models used by the orchestrator and routing pipeline."""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class SearchQuery(BaseModel):
-    """A search query submitted to the system."""
+class QueryIntent(str, Enum):
+    """Classifies the intent of a search query."""
 
-    query: str = Field(..., description="The search query text")
-    advanced: bool = Field(
-        False, description="Whether to use advanced search capabilities"
+    GENERAL = "general"
+    TECHNICAL = "technical"
+    RESEARCH = "research"
+    NEWS = "news"
+    CODE = "code"
+
+
+class SearchQuery(BaseModel):
+    """User request captured from FastMCP tool invocation."""
+
+    query: str = Field(
+        min_length=1, description="Natural language query provided by the caller"
     )
     max_results: int = Field(
-        10, description="Maximum number of results to return", ge=1, le=100
+        default=10, ge=1, le=50, description="Maximum number of results to return"
     )
-    content_type: str | None = Field(
-        None, description="Optional explicit content type hint"
+    include_raw_content: bool = Field(
+        default=False,
+        description="Whether providers should return raw content bodies when available",
     )
-    providers: list[str] | None = Field(
-        None, description="Optional explicit provider selection"
+    advanced: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Provider-specific knobs forwarded to downstream tools",
     )
-    budget: float | None = Field(None, description="Optional budget constraint in USD")
-    timeout_ms: int = Field(
-        5000, description="Timeout in milliseconds", ge=1000, le=30000
-    )
-    raw_content: bool = Field(
-        False, description="Whether to include raw content in search results"
-    )
-    routing_strategy: str | None = Field(
-        None,
-        description="Execution strategy: 'parallel' (faster) or 'cascade' (more reliable)",
-    )
-    routing_hints: str | None = Field(
-        None,
-        description="Natural language guidance for routing decisions (e.g., 'prioritize recent news')",
+    tags: set[str] = Field(
+        default_factory=set,
+        description="Optional tags supplied by the caller to hint at provider selection",
     )
 
+    def fingerprint_payload(self) -> dict[str, Any]:
+        """Return a deterministic payload used to compute cache fingerprints."""
 
-class QueryFeatures(BaseModel):
-    """Features extracted from a search query for routing."""
+        query_text = str(self.query).strip()
 
-    length: int = Field(..., description="Length of the query in characters")
-    word_count: int = Field(..., description="Number of words in the query")
-    contains_question: bool = Field(
-        ..., description="Whether the query contains a question"
-    )
-    content_type: str = Field(..., description="Detected content type")
-    time_sensitivity: float = Field(..., description="Time sensitivity score (0.0-1.0)")
-    complexity: float = Field(..., description="Query complexity score (0.0-1.0)")
-    factual_nature: float = Field(..., description="Factual nature score (0.0-1.0)")
+        return {
+            "query": query_text,
+            "max_results": self.max_results,
+            "include_raw_content": self.include_raw_content,
+            "advanced": self.advanced,
+            "tags": sorted(self.tags),
+        }
+
+
+__all__ = ["QueryIntent", "SearchQuery"]

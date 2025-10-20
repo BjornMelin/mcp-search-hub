@@ -1,14 +1,9 @@
-fastmcp>=2.3.5
+fastmcp>=2.12.5
+mcp>=1.16.0
 pydantic>=2.11.4
-httpx>=0.28.1
-uvicorn>=0.34.2
-python-dotenv>=1.1.0
-mcp>=1.9.0
-w3lib>=2.3.1
-rapidfuzz>=3.13.0
-dateparser>=1.2.1
+pydantic-settings>=2.3.4
 redis>=6.1.0
-circuitbreaker>=1.4.0
+starlette>=0.37.2
 
 # Test dependencies
 pytest>=8.0.0
