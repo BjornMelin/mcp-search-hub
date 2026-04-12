@@ -78,6 +78,9 @@ class GenericMCPProvider(BaseMCPProvider):
             else:
                 params["search_depth"] = "basic"
             params["include_raw_content"] = query.raw_content
+        elif self.name == "you":
+            params["query"] = query.query
+            params["num_web_results"] = query.max_results
 
         # Add any additional advanced parameters
         if query.advanced:
@@ -385,6 +388,18 @@ class GenericMCPProvider(BaseMCPProvider):
                     ],
                 }
             )
+        elif self.name == "you":
+            base_capabilities.update(
+                {
+                    "max_results_per_query": 20,
+                    "features": [
+                        "web_search",
+                        "news_search",
+                        "advanced_search_operators",
+                        "agent_friendly_results",
+                    ],
+                }
+            )
 
         return base_capabilities
 
@@ -445,6 +460,11 @@ class GenericMCPProvider(BaseMCPProvider):
             if query.raw_content:
                 results_cost *= 1.5
             return search_cost + results_cost
+
+        if self.name == "you":
+            base_cost = 0.01
+            results_cost = query.max_results * 0.0003
+            return base_cost + results_cost
 
         # Default fallback
         return base_cost + results_cost

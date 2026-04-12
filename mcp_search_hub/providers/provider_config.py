@@ -184,4 +184,36 @@ PROVIDER_CONFIGS = {
         # Base cost in USD per query
         "base_cost": Decimal("0.015"),
     },
+    "you": {
+        "env_var": "YDC_API_KEY",
+        "server_type": ServerType.NODE_JS,
+        "package": "@youdotcom-oss/mcp",
+        "tool_name": "you-search",
+        "timeout": 15000,
+        "args": ["@youdotcom-oss/mcp"],
+        # Rate limits
+        "rate_limits": RateLimitConfig(
+            requests_per_minute=30,
+            requests_per_hour=300,
+            requests_per_day=3000,
+            concurrent_requests=8,
+        ),
+        # Budget config
+        "budget": BudgetConfig(
+            default_query_budget=Decimal("0.01"),
+            daily_budget=Decimal("10.00"),
+            monthly_budget=Decimal("150.00"),
+        ),
+        # Retry configuration
+        "retry_config": RetryConfig(
+            max_retries=3,
+            base_delay=1.0,
+            max_delay=30.0,
+            exponential_base=2.0,
+            jitter=0.1,
+        ),
+        "retry_enabled": True,
+        # Base cost in USD per query
+        "base_cost": Decimal("0.01"),
+    },
 }

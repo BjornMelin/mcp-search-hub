@@ -7,6 +7,7 @@ from .firecrawl_mcp import FirecrawlMCPProvider
 from .linkup_mcp import LinkupMCPProvider
 from .perplexity_mcp import PerplexityMCPProvider
 from .tavily_mcp import TavilyMCPProvider
+from .you_mcp import YouMCPProvider
 
 __all__ = [
     "SearchProvider",
@@ -16,4 +17,5 @@ __all__ = [
     "PerplexityMCPProvider",
     "TavilyMCPProvider",
     "FirecrawlMCPProvider",
+    "YouMCPProvider",
 ]

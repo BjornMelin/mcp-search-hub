@@ -112,7 +112,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     # Add API key arguments for each provider
-    for provider in ["linkup", "exa", "perplexity", "tavily", "firecrawl"]:
+    for provider in ["linkup", "exa", "perplexity", "tavily", "firecrawl", "you"]:
         parser.add_argument(
             f"--{provider}-api-key",
             help=f"API key for {provider} provider",
@@ -157,7 +157,7 @@ def main() -> NoReturn:
         os.environ["LOG_LEVEL"] = args.log_level
 
     # Handle API keys from arguments
-    for provider in ["linkup", "exa", "perplexity", "tavily", "firecrawl"]:
+    for provider in ["linkup", "exa", "perplexity", "tavily", "firecrawl", "you"]:
         api_key_arg = getattr(args, f"{provider}_api_key", None)
         if api_key_arg:
             os.environ[f"{provider.upper()}_API_KEY"] = api_key_arg

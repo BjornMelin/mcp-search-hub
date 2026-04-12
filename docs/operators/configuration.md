@@ -56,6 +56,7 @@ EXA_API_KEY=your_exa_key                    # Exa AI API key
 PERPLEXITY_API_KEY=your_perplexity_key      # Perplexity API key
 TAVILY_API_KEY=your_tavily_key              # Tavily API key
 FIRECRAWL_API_KEY=your_firecrawl_key        # Firecrawl API key
+YDC_API_KEY=your_youcom_key                 # You.com API key
 ```
 
 ### Provider Control

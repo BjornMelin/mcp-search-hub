@@ -197,6 +197,7 @@ class AppSettings(BaseSettings):
     firecrawl_timeout: int = Field(
         default=30000, gt=0, description="Firecrawl timeout in ms"
     )
+    you_timeout: int = Field(default=15000, gt=0, description="You.com timeout in ms")
 
     # Nested configurations
     cache: CacheConfig = Field(
@@ -231,6 +232,9 @@ class AppSettings(BaseSettings):
     firecrawl: ProviderSettings = Field(
         default_factory=ProviderSettings, description="Firecrawl provider"
     )
+    you: ProviderSettings = Field(
+        default_factory=ProviderSettings, description="You.com provider"
+    )
 
     @field_validator("environment")
     @classmethod
@@ -256,7 +260,7 @@ class AppSettings(BaseSettings):
 
     def get_enabled_providers(self) -> list[str]:
         """Get list of enabled provider names."""
-        providers = ["linkup", "exa", "perplexity", "tavily", "firecrawl"]
+        providers = ["linkup", "exa", "perplexity", "tavily", "firecrawl", "you"]
         return [p for p in providers if getattr(self, p).enabled]
 
 

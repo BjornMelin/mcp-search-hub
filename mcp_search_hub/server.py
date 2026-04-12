@@ -31,6 +31,7 @@ from .providers.firecrawl_mcp import FirecrawlMCPProvider
 from .providers.linkup_mcp import LinkupMCPProvider
 from .providers.perplexity_mcp import PerplexityMCPProvider
 from .providers.tavily_mcp import TavilyMCPProvider
+from .providers.you_mcp import YouMCPProvider
 from .query_routing.analyzer import QueryAnalyzer
 from .query_routing.hybrid_router import HybridRouter
 from .result_processing.merger import ResultMerger
@@ -175,6 +176,7 @@ class SearchServer:
             "linkup": LinkupMCPProvider,
             "perplexity": PerplexityMCPProvider,
             "tavily": TavilyMCPProvider,
+            "you": YouMCPProvider,
         }
 
         for provider_name, provider_class in provider_classes.items():

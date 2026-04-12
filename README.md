@@ -118,6 +118,7 @@ EXA_API_KEY=your_exa_key
 PERPLEXITY_API_KEY=your_perplexity_key
 TAVILY_API_KEY=your_tavily_key
 FIRECRAWL_API_KEY=your_firecrawl_key
+YDC_API_KEY=your_youcom_key
 ```
 
 ### Getting API Keys
@@ -129,6 +130,7 @@ FIRECRAWL_API_KEY=your_firecrawl_key
 | **Perplexity** | $5 credit | [perplexity.ai](https://perplexity.ai) |
 | **Tavily** | 1,000 requests/month | [tavily.com](https://tavily.com) |
 | **Firecrawl** | 500 requests/month | [firecrawl.dev](https://firecrawl.dev) |
+| **You.com** | Free tier (rate-limited) | [you.com/platform/api-keys](https://you.com/platform/api-keys) |
 
 ⚙️ **[Complete Configuration Guide](docs/operators/configuration.md)**
 
@@ -146,6 +148,7 @@ MCP Search Hub provides all tools from embedded provider MCP servers:
 - **Perplexity**: `perplexity_ask`, `perplexity_research`
 - **Linkup**: `linkup_search_web`
 - **Tavily**: `tavily_search`, `tavily_extract`
+- **You.com**: `you-search`, `you-research`, `you-contents`
 
 🛠️ **[Full Tool Documentation](docs/developers/api-reference.md)**
 
