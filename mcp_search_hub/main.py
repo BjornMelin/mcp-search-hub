@@ -160,7 +160,10 @@ def main() -> NoReturn:
     for provider in ["linkup", "exa", "perplexity", "tavily", "firecrawl", "you"]:
         api_key_arg = getattr(args, f"{provider}_api_key", None)
         if api_key_arg:
-            os.environ[f"{provider.upper()}_API_KEY"] = api_key_arg
+            if provider == "you":
+                os.environ["YDC_API_KEY"] = api_key_arg
+            else:
+                os.environ[f"{provider.upper()}_API_KEY"] = api_key_arg
 
     # Get settings (now incorporating any command-line arguments)
     settings = get_settings()

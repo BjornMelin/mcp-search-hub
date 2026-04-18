@@ -187,10 +187,10 @@ PROVIDER_CONFIGS = {
     "you": {
         "env_var": "YDC_API_KEY",
         "server_type": ServerType.NODE_JS,
-        "package": "@youdotcom-oss/mcp",
+        "package": "@youdotcom-oss/mcp@3.2.2",
         "tool_name": "you-search",
         "timeout": 15000,
-        "args": ["@youdotcom-oss/mcp"],
+        "args": ["@youdotcom-oss/mcp@3.2.2"],
         # Rate limits
         "rate_limits": RateLimitConfig(
             requests_per_minute=30,
@@ -200,7 +200,7 @@ PROVIDER_CONFIGS = {
         ),
         # Budget config
         "budget": BudgetConfig(
-            default_query_budget=Decimal("0.01"),
+            default_query_budget=Decimal("0.02"),
             daily_budget=Decimal("10.00"),
             monthly_budget=Decimal("150.00"),
         ),

@@ -197,8 +197,6 @@ class AppSettings(BaseSettings):
     firecrawl_timeout: int = Field(
         default=30000, gt=0, description="Firecrawl timeout in ms"
     )
-    you_timeout: int = Field(default=15000, gt=0, description="You.com timeout in ms")
-
     # Nested configurations
     cache: CacheConfig = Field(
         default_factory=CacheConfig, description="Cache settings"

@@ -80,7 +80,7 @@ class GenericMCPProvider(BaseMCPProvider):
             params["include_raw_content"] = query.raw_content
         elif self.name == "you":
             params["query"] = query.query
-            params["num_web_results"] = query.max_results
+            params["num_web_results"] = min(query.max_results, 20)
 
         # Add any additional advanced parameters
         if query.advanced:
