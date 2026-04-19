@@ -391,6 +391,7 @@ class GenericMCPProvider(BaseMCPProvider):
         elif self.name == "you":
             base_capabilities.update(
                 {
+                    "supports_raw_content": False,
                     "max_results_per_query": 20,
                     "features": [
                         "web_search",
@@ -463,7 +464,8 @@ class GenericMCPProvider(BaseMCPProvider):
 
         if self.name == "you":
             base_cost = 0.01
-            results_cost = query.max_results * 0.0003
+            bounded_results = min(query.max_results, 20)
+            results_cost = bounded_results * 0.0003
             return base_cost + results_cost
 
         # Default fallback
