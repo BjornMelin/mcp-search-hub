@@ -24,6 +24,7 @@ uv run pytest
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright
+uv run python -m compileall -q mcp_search_hub tests
 uv run python -m build
 ```
 

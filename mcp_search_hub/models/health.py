@@ -25,6 +25,7 @@ class ProviderHealth(BaseModel):
     latency_ms: float | None = Field(
         default=None,
         ge=0.0,
+        allow_inf_nan=False,
         description="Latency of the most recent completed attempt in milliseconds",
     )
     consecutive_failures: int = Field(

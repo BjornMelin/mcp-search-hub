@@ -12,10 +12,10 @@ import httpx
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from mcp_search_hub.config import AppSettings
-from mcp_search_hub.models import HealthStatus
+from mcp_search_hub.models import HealthStatus, ProviderHealth
 from mcp_search_hub.providers import ProviderDefinition, ProviderRegistry
 from mcp_search_hub.server import SearchServer
 from tests.conftest import StubProviderSession, StubRegistry
@@ -25,6 +25,15 @@ def _payload(result: Any) -> dict[str, Any]:
     payload = result.structured_content
     assert isinstance(payload, dict)
     return cast(dict[str, Any], payload)
+
+
+def test_provider_health_rejects_non_finite_latency() -> None:
+    with pytest.raises(ValidationError):
+        ProviderHealth(
+            identifier="provider",
+            status=HealthStatus.HEALTHY,
+            latency_ms=float("inf"),
+        )
 
 
 @pytest.mark.asyncio
