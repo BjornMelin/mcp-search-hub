@@ -1,59 +1,115 @@
-"""Result models."""
+"""Typed provider and federated search results."""
 
-from typing import Any
+from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from decimal import Decimal
+from typing import Annotated, Any
+
+from pydantic import BaseModel, Field, WithJsonSchema
+
+ExactUSD = Annotated[
+    Decimal,
+    Field(ge=Decimal("0")),
+    WithJsonSchema({"type": "string"}, mode="serialization"),
+]
+
+
+class ProviderItem(BaseModel):
+    """Normalized result returned by one provider before fusion."""
+
+    title: str = ""
+    url: str | None = None
+    snippet: str | None = None
+    raw_content: str | None = None
+    original_score: float | None = Field(default=None, allow_inf_nan=False)
+    metadata: dict[str, Any] = Field(default_factory=lambda: dict[str, Any]())
+    provider_rank: int | None = Field(default=None, ge=1, exclude=True)
+
+
+class ProviderResponse(BaseModel):
+    """Successful provider execution."""
+
+    provider: str
+    latency_ms: float = Field(ge=0.0, allow_inf_nan=False)
+    results: list[ProviderItem] = Field(default_factory=lambda: list[ProviderItem]())
+
+
+class ResultSource(BaseModel):
+    """Provenance for one provider contribution to a fused result."""
+
+    provider: str
+    rank: int = Field(ge=1)
+    original_score: float | None = Field(default=None, allow_inf_nan=False)
 
 
 class SearchResult(BaseModel):
-    """A single search result."""
+    """One deduplicated result ranked with reciprocal-rank fusion."""
 
-    title: str = Field(..., description="Result title")
-    url: str = Field(..., description="Result URL")
-    snippet: str = Field(..., description="Result snippet or summary")
-    source: str = Field(..., description="Source provider")
-    score: float = Field(..., description="Relevance score")
-    raw_content: str | None = Field(
-        None, description="Raw content of the result when requested"
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata"
-    )
+    title: str = ""
+    url: str | None = None
+    snippet: str | None = None
+    raw_content: str | None = None
+    score: float = Field(ge=0.0, allow_inf_nan=False)
+    sources: list[ResultSource] = Field(min_length=1)
+    metadata: dict[str, Any] = Field(default_factory=lambda: dict[str, Any]())
 
 
-class SearchResponse(BaseModel):
-    """Response from a search provider."""
+class ProviderExecution(BaseModel):
+    """Compact execution evidence for one successful provider."""
 
-    results: list[SearchResult] = Field(..., description="Search results")
-    query: str = Field(..., description="Original query")
-    total_results: int = Field(..., description="Total number of results")
-    provider: str = Field(..., description="Provider name")
-    timing_ms: float | None = Field(None, description="Search time in milliseconds")
-    error: str | None = Field(None, description="Error message if something went wrong")
-    cost: float | None = Field(None, description="Cost of the search in USD")
-    rate_limited: bool = Field(
-        False, description="Whether the provider was rate limited"
-    )
-    budget_exceeded: bool = Field(
-        False, description="Whether the provider budget was exceeded"
-    )
+    provider: str
+    latency_ms: float = Field(ge=0.0, allow_inf_nan=False)
+    result_count: int = Field(ge=0)
+
+
+class ProviderFailure(BaseModel):
+    """Sanitized provider failure."""
+
+    provider: str
+    error_type: str
+
+
+class ProviderCatalogEntry(BaseModel):
+    """Public routing and cost metadata for one configured provider."""
+
+    identifier: str
+    tool: str
+    tags: list[str]
+    weight: float = Field(gt=0.0, allow_inf_nan=False)
+    timeout_seconds: float = Field(gt=0.0, allow_inf_nan=False)
+    estimated_cost_usd: ExactUSD
+
+
+class ProviderCatalogResponse(BaseModel):
+    """Typed response from the provider catalog tool."""
+
+    providers: list[ProviderCatalogEntry]
 
 
 class CombinedSearchResponse(BaseModel):
-    """Combined response from multiple search providers."""
+    """Public deterministic response from the search tool."""
 
-    results: list[SearchResult] = Field(..., description="Combined search results")
-    query: str = Field(..., description="Original query")
-    providers_used: list[str] = Field(..., description="Providers used for the search")
-    total_results: int = Field(..., description="Total number of results")
-    total_cost: float = Field(0.0, description="Total cost of the search")
-    timing_ms: float = Field(..., description="Total search time in milliseconds")
-    provider_costs: dict[str, float] = Field(
-        default_factory=dict, description="Cost breakdown by provider"
+    query: str
+    results: list[SearchResult] = Field(default_factory=lambda: list[SearchResult]())
+    selected_providers: list[str] = Field(default_factory=lambda: list[str]())
+    successful_providers: list[ProviderExecution] = Field(
+        default_factory=lambda: list[ProviderExecution]()
     )
-    rate_limited_providers: list[str] = Field(
-        default_factory=list, description="Providers that were rate limited"
-    )
-    budget_exceeded_providers: list[str] = Field(
-        default_factory=list, description="Providers that exceeded their budget"
-    )
+    failed_providers: list[ProviderFailure] = Field(default_factory=lambda: list[ProviderFailure]())
+    timed_out_providers: list[str] = Field(default_factory=lambda: list[str]())
+    inferred_tags: list[str] = Field(default_factory=lambda: list[str]())
+    estimated_cost_usd: ExactUSD
+    elapsed_ms: float = Field(ge=0.0, allow_inf_nan=False)
+
+
+__all__ = [
+    "CombinedSearchResponse",
+    "ProviderCatalogEntry",
+    "ProviderCatalogResponse",
+    "ProviderExecution",
+    "ProviderFailure",
+    "ProviderItem",
+    "ProviderResponse",
+    "ResultSource",
+    "SearchResult",
+]

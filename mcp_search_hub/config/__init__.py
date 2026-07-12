@@ -1,23 +1,21 @@
-"""Configuration management module."""
+"""Configuration exports."""
 
 from .settings import (
     AppSettings,
-    CacheConfig,
-    MergerSettings,
-    MiddlewareConfig,
+    MiddlewareSettings,
     ProviderSettings,
-    RetryConfig,
+    ResultSettings,
     RouterSettings,
     get_settings,
+    resolve_env_references,
 )
 
 __all__ = [
     "AppSettings",
-    "CacheConfig",
-    "MergerSettings",
-    "MiddlewareConfig",
+    "MiddlewareSettings",
     "ProviderSettings",
-    "RetryConfig",
+    "ResultSettings",
     "RouterSettings",
     "get_settings",
+    "resolve_env_references",
 ]

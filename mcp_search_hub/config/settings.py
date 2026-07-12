@@ -1,161 +1,203 @@
-"""Application settings with modern Pydantic v2 patterns."""
+"""Typed application and provider configuration."""
 
+from __future__ import annotations
+
+import os
+import re
+from decimal import Decimal
 from functools import lru_cache
+from typing import Any, Literal, cast
+from urllib.parse import unquote, urlsplit
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-class CacheConfig(BaseModel):
-    """Cache configuration settings."""
-
-    redis_url: str = Field(
-        default="redis://localhost:6379", description="Redis connection URL"
-    )
-    memory_ttl: int = Field(
-        default=300, ge=0, description="Memory cache TTL in seconds"
-    )
-    redis_ttl: int = Field(default=3600, ge=0, description="Redis cache TTL in seconds")
-    redis_enabled: bool = Field(default=False, description="Enable Redis caching")
-    prefix: str = Field(default="search:", description="Cache key prefix")
-    fingerprint_enabled: bool = Field(
-        default=True, description="Enable semantic fingerprinting"
-    )
-    clean_interval: int = Field(
-        default=600, ge=0, description="Cache cleanup interval in seconds"
-    )
-    ttl_jitter: int = Field(
-        default=60, ge=0, description="Cache TTL jitter in seconds to prevent stampede"
-    )
+_ENV_REFERENCE = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*$")
+_PROVIDER_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_-]*$")
+_LOCAL_HTTP_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
-class RetryConfig(BaseModel):
-    """Retry configuration settings."""
-
-    max_retries: int = Field(default=3, ge=0, description="Maximum retry attempts")
-    base_delay: float = Field(
-        default=1.0, gt=0, description="Base delay between retries"
-    )
-    max_delay: float = Field(
-        default=60.0, gt=0, description="Maximum delay between retries"
-    )
-    exponential_base: float = Field(
-        default=2.0, gt=1, description="Exponential backoff base"
-    )
-    jitter: bool = Field(default=True, description="Add randomization to retry delays")
+def _default_field_aliases() -> dict[str, list[str]]:
+    return {
+        "title": ["title", "name"],
+        "url": ["url", "link"],
+        "snippet": ["snippet", "description", "text"],
+        "score": ["score", "relevance", "confidence"],
+        "raw_content": ["raw_content", "content"],
+    }
 
 
-class ProviderSettings(BaseModel):
-    """Provider configuration settings."""
+def resolve_env_references(value: Any) -> Any:
+    """Resolve explicit ``$NAME`` references without expanding arbitrary strings."""
 
-    api_key: SecretStr = Field(
-        default=SecretStr(""), description="API key for the provider"
-    )
-    enabled: bool = Field(default=True, description="Whether provider is enabled")
-    timeout: float = Field(default=30.0, gt=0, description="Request timeout in seconds")
-
-
-# Router settings
-class RouterSettings(BaseModel):
-    """Router configuration settings."""
-
-    max_providers: int = Field(
-        default=3, ge=1, description="Maximum providers per query"
-    )
-    min_confidence: float = Field(
-        default=0.6, ge=0, le=1, description="Minimum confidence threshold"
-    )
-    execution_strategy: str = Field(default="auto", description="Execution strategy")
-    base_timeout_ms: int = Field(
-        default=10000, gt=0, description="Base timeout in milliseconds"
-    )
-    max_concurrent: int = Field(
-        default=3, ge=1, description="Maximum concurrent provider executions"
-    )
+    if isinstance(value, str) and _ENV_REFERENCE.fullmatch(value):
+        name = value[1:]
+        try:
+            return os.environ[name]
+        except KeyError as exc:
+            raise ValueError(
+                f"Missing environment variable referenced by provider: {name}"
+            ) from exc
+    if isinstance(value, dict):
+        mapping = cast(dict[str, Any], value)
+        return {key: resolve_env_references(item) for key, item in mapping.items()}
+    if isinstance(value, list):
+        sequence = cast(list[Any], value)
+        return [resolve_env_references(item) for item in sequence]
+    return value
 
 
-# Merger settings
-class MergerSettings(BaseModel):
-    """Merger configuration settings."""
+class StrictModel(BaseModel):
+    """Reject misspelled fields in deployment-owned configuration objects."""
 
-    fuzzy_url_threshold: float = Field(
-        default=92.0, description="Threshold for fuzzy URL matching"
-    )
-    content_similarity_threshold: float = Field(
-        default=0.85, description="Threshold for content similarity"
-    )
-    use_content_similarity: bool = Field(
-        default=True, description="Whether to use content similarity"
-    )
-    max_results: int = Field(
-        default=10, description="Maximum number of results to return"
-    )
-    provider_weights: dict[str, float] = Field(
-        default_factory=dict, description="Per-provider quality weights"
-    )
-    recency_enabled: bool = Field(
-        default=True, description="Whether to boost recent results"
-    )
-    credibility_enabled: bool = Field(
-        default=True, description="Whether to use credibility scoring"
-    )
-    consensus_weight: float = Field(
-        default=0.5, description="Weight for consensus boosting"
-    )
+    model_config = ConfigDict(extra="forbid")
 
 
-class MiddlewareConfig(BaseModel):
-    """Middleware configuration settings."""
+class RouterSettings(StrictModel):
+    """Deterministic routing and query-budget defaults."""
 
-    # Auth middleware
-    auth_enabled: bool = Field(default=True, description="Enable authentication")
-    auth_api_keys: list[str] = Field(default_factory=list, description="Valid API keys")
-    auth_skip_paths: list[str] = Field(
-        default_factory=lambda: [
-            "/health",
-            "/metrics",
-            "/docs",
-            "/redoc",
-            "/openapi.json",
-        ],
-        description="Paths to skip authentication",
-    )
+    max_providers: int = Field(default=3, ge=1, le=20)
+    default_timeout_seconds: float = Field(default=20.0, gt=0.0, le=300.0)
+    default_budget_usd: Decimal | None = Field(default=None, gt=Decimal("0"))
 
-    # Rate limiting
-    rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting")
-    rate_limit_requests: int = Field(
-        default=100, gt=0, description="Requests per window"
-    )
-    rate_limit_window: int = Field(
-        default=60, gt=0, description="Time window in seconds"
-    )
-    rate_limit_global: int = Field(
-        default=1000, gt=0, description="Global requests limit"
-    )
-    rate_limit_skip_paths: list[str] = Field(
-        default_factory=lambda: ["/health", "/metrics"],
-        description="Paths to skip rate limiting",
-    )
 
-    # Logging
-    logging_enabled: bool = Field(default=True, description="Enable request logging")
-    logging_include_headers: bool = Field(
-        default=True, description="Include headers in logs"
+class ResultSettings(StrictModel):
+    """Public result limits and fusion settings."""
+
+    max_results: int = Field(default=20, ge=1, le=100)
+    reciprocal_rank_k: int = Field(default=60, ge=1, le=1000)
+
+
+class MiddlewareSettings(StrictModel):
+    """Native FastMCP middleware settings."""
+
+    rate_limit_requests: int = Field(default=120, ge=1)
+    rate_limit_window_minutes: int = Field(default=1, ge=1, le=1440)
+    include_log_payloads: bool = False
+
+
+class ProviderSettings(StrictModel):
+    """Configuration for one generic downstream MCP search provider."""
+
+    enabled: bool = True
+    transport: str | dict[str, Any] | None = None
+    command: list[str] | None = None
+    env: dict[str, str] = Field(default_factory=lambda: dict[str, str]())
+    tool: str = Field(default="search", min_length=1)
+    tags: set[str] = Field(default_factory=lambda: set[str]())
+    weight: float = Field(default=1.0, gt=0.0, allow_inf_nan=False)
+    timeout_seconds: float = Field(default=20.0, gt=0.0, le=300.0)
+    estimated_cost_usd: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
+    query_argument: str = Field(default="query", min_length=1)
+    max_results_argument: str | None = "max_results"
+    raw_content_argument: str | None = "include_raw_content"
+    static_arguments: dict[str, Any] = Field(default_factory=lambda: dict[str, Any]())
+    result_path: list[str | int] = Field(default_factory=lambda: ["results"])
+    field_aliases: dict[str, list[str]] = Field(default_factory=_default_field_aliases)
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, value: set[str]) -> set[str]:
+        return {tag.strip().lower() for tag in value if tag.strip()}
+
+    @field_validator("transport")
+    @classmethod
+    def validate_transport(cls, value: str | dict[str, Any] | None) -> str | dict[str, Any] | None:
+        if isinstance(value, str) and (not value.strip() or value != value.strip()):
+            raise ValueError("Provider transport strings must be nonblank and trimmed")
+        if isinstance(value, dict) and not value:
+            raise ValueError("Provider transport mappings must not be empty")
+        return value
+
+    @field_validator(
+        "tool",
+        "query_argument",
+        "max_results_argument",
+        "raw_content_argument",
     )
-    logging_include_body: bool = Field(
-        default=False, description="Include body in logs"
-    )
-    logging_max_body_size: int = Field(
-        default=1024, ge=0, description="Max body size to log"
-    )
-    logging_sensitive_headers: list[str] = Field(
-        default_factory=lambda: ["authorization", "x-api-key", "cookie", "set-cookie"],
-        description="Headers to redact from logs",
-    )
+    @classmethod
+    def validate_tool_argument_names(cls, value: str | None) -> str | None:
+        if value is not None and (not value.strip() or value != value.strip()):
+            raise ValueError("Provider tool and argument names must be nonblank and trimmed")
+        return value
+
+    @model_validator(mode="after")
+    def validate_connection(self) -> ProviderSettings:
+        dynamic_arguments = [
+            argument
+            for argument in (
+                self.query_argument,
+                self.max_results_argument,
+                self.raw_content_argument,
+            )
+            if argument is not None
+        ]
+        if len(dynamic_arguments) != len(set(dynamic_arguments)):
+            raise ValueError("Provider dynamic argument names must be unique")
+        shadowed_arguments = set(dynamic_arguments).intersection(self.static_arguments)
+        if shadowed_arguments:
+            raise ValueError(
+                "Provider static arguments must not shadow dynamic arguments: "
+                f"{sorted(shadowed_arguments)}"
+            )
+        allowed_fields = {"title", "url", "snippet", "score", "raw_content"}
+        unknown_fields = set(self.field_aliases) - allowed_fields
+        if unknown_fields:
+            raise ValueError(f"Unknown result field aliases: {sorted(unknown_fields)}")
+        invalid_aliases = {
+            field_name: aliases
+            for field_name, aliases in self.field_aliases.items()
+            if not aliases or any(not alias.strip() or alias != alias.strip() for alias in aliases)
+        }
+        if invalid_aliases:
+            raise ValueError("Result field alias lists must contain nonblank, trimmed names")
+        defaults = _default_field_aliases()
+        self.field_aliases = {
+            field_name: list(dict.fromkeys(self.field_aliases.get(field_name, aliases)))
+            for field_name, aliases in defaults.items()
+        }
+        if not self.enabled:
+            return self
+        if (self.transport is None) == (self.command is None):
+            raise ValueError("Enabled providers require exactly one of transport or command")
+        if self.command is not None and (
+            not self.command
+            or not self.command[0].strip()
+            or self.command[0] != self.command[0].strip()
+        ):
+            raise ValueError("Provider command must contain an executable")
+        if self.transport is not None and self.env:
+            raise ValueError(
+                "Provider env is only valid with command; embed headers or env in transport"
+            )
+        return self
+
+    def resolved_transport(self, identifier: str) -> Any:
+        """Build the FastMCP client transport after resolving explicit secrets."""
+
+        if self.command is not None:
+            from fastmcp.client.transports.stdio import StdioTransport
+
+            command = cast(list[str], resolve_env_references(self.command))
+            env = resolve_env_references(self.env)
+            if not command or not command[0].strip() or command[0] != command[0].strip():
+                raise ValueError("Resolved provider command must contain a trimmed executable")
+            return StdioTransport(
+                command=command[0],
+                args=command[1:],
+                env=env or None,
+                keep_alive=True,
+            )
+        if self.transport is None:
+            raise ValueError(f"Provider {identifier!r} has no transport")
+        transport = resolve_env_references(self.transport)
+        if isinstance(transport, str) and (not transport.strip() or transport != transport.strip()):
+            raise ValueError("Resolved provider transport strings must be nonblank and trimmed")
+        return transport
 
 
 class AppSettings(BaseSettings):
-    """Main application settings with modern Pydantic v2 patterns."""
+    """Primary application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -163,108 +205,86 @@ class AppSettings(BaseSettings):
         env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
-        validate_assignment=True,
-        validate_default=True,
     )
 
-    # Application metadata
-    app_name: str = Field(default="MCP Search Hub", description="Application name")
-    environment: str = Field(default="development", description="Runtime environment")
+    app_name: str = "MCP Search Hub"
+    environment: Literal["development", "test", "staging", "production"] = "development"
+    transport: Literal["stdio", "http"] = "stdio"
+    host: str = "127.0.0.1"
+    port: int = Field(default=8000, ge=1, le=65_535)
+    http_path: str = "/mcp"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    auth_tokens: list[SecretStr] = Field(default_factory=lambda: list[SecretStr]())
+    providers: dict[str, ProviderSettings] = Field(
+        default_factory=lambda: dict[str, ProviderSettings]()
+    )
+    router: RouterSettings = Field(default_factory=RouterSettings)
+    results: ResultSettings = Field(default_factory=ResultSettings)
+    middleware: MiddlewareSettings = Field(default_factory=MiddlewareSettings)
 
-    # Server configuration
-    host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8000, ge=1, le=65535, description="Server port")
-    log_level: str = Field(default="INFO", description="Logging level")
-    transport: str = Field(default="streamable-http", description="Transport mode")
-
-    # Budget
-    default_budget: float | None = Field(
-        default=None, ge=0, description="Default query budget"
-    )
-
-    # LLM routing
-    llm_routing_enabled: bool = Field(
-        default=False, description="Enable LLM-based routing for complex queries"
-    )
-
-    # Provider timeouts (in milliseconds for compatibility)
-    linkup_timeout: int = Field(default=10000, gt=0, description="Linkup timeout in ms")
-    exa_timeout: int = Field(default=15000, gt=0, description="Exa timeout in ms")
-    perplexity_timeout: int = Field(
-        default=20000, gt=0, description="Perplexity timeout in ms"
-    )
-    tavily_timeout: int = Field(default=10000, gt=0, description="Tavily timeout in ms")
-    firecrawl_timeout: int = Field(
-        default=30000, gt=0, description="Firecrawl timeout in ms"
-    )
-
-    # Nested configurations
-    cache: CacheConfig = Field(
-        default_factory=CacheConfig, description="Cache settings"
-    )
-    retry: RetryConfig = Field(
-        default_factory=RetryConfig, description="Retry settings"
-    )
-    router: RouterSettings = Field(
-        default_factory=RouterSettings, description="Router settings"
-    )
-    merger: MergerSettings = Field(
-        default_factory=MergerSettings, description="Merger settings"
-    )
-    middleware: MiddlewareConfig = Field(
-        default_factory=MiddlewareConfig, description="Middleware settings"
-    )
-
-    # Provider configurations
-    linkup: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Linkup provider"
-    )
-    exa: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Exa provider"
-    )
-    perplexity: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Perplexity provider"
-    )
-    tavily: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Tavily provider"
-    )
-    firecrawl: ProviderSettings = Field(
-        default_factory=ProviderSettings, description="Firecrawl provider"
-    )
-
-    @field_validator("environment")
+    @field_validator("http_path")
     @classmethod
-    def validate_environment(cls, v: str) -> str:
-        """Validate environment value."""
-        valid_envs = {"development", "staging", "production", "test"}
-        if v.lower() not in valid_envs:
-            raise ValueError(f"Invalid environment: {v}. Must be one of {valid_envs}")
-        return v.lower()
+    def validate_http_path(cls, value: str) -> str:
+        if not value.startswith("/"):
+            raise ValueError("HTTP path must start with '/'")
+        parsed = urlsplit(value)
+        if parsed.path != value or parsed.scheme or parsed.netloc:
+            raise ValueError("HTTP path must not contain a query, fragment, or authority")
+        decoded_path = unquote(parsed.path)
+        if decoded_path != parsed.path:
+            raise ValueError("HTTP path must not contain percent-encoded characters")
+        if any(segment in {".", ".."} for segment in decoded_path.split("/")):
+            raise ValueError("HTTP path must not contain dot segments")
+        if decoded_path.rstrip("/") == "/health":
+            raise ValueError("HTTP path '/health' is reserved for the health endpoint")
+        return value
 
-    @field_validator("log_level")
+    @field_validator("auth_tokens")
     @classmethod
-    def validate_log_level(cls, v: str) -> str:
-        """Validate log level."""
-        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-        if v.upper() not in valid_levels:
-            raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
-        return v.upper()
+    def validate_auth_tokens(cls, value: list[SecretStr]) -> list[SecretStr]:
+        tokens = [secret.get_secret_value() for secret in value]
+        if any(not token or token != token.strip() for token in tokens):
+            raise ValueError("AUTH_TOKENS entries must be nonblank without surrounding whitespace")
+        if len(tokens) != len(set(tokens)):
+            raise ValueError("AUTH_TOKENS entries must be unique")
+        return value
 
-    def get_provider_config(self, provider_name: str) -> ProviderSettings | None:
-        """Get configuration for a specific provider."""
-        return getattr(self, provider_name.lower(), None)
+    @field_validator("providers")
+    @classmethod
+    def validate_provider_identifiers(
+        cls, value: dict[str, ProviderSettings]
+    ) -> dict[str, ProviderSettings]:
+        invalid = [name for name in value if not _PROVIDER_IDENTIFIER.fullmatch(name)]
+        if invalid:
+            raise ValueError(f"Invalid provider identifiers: {sorted(invalid)}")
+        return value
 
-    def get_enabled_providers(self) -> list[str]:
-        """Get list of enabled provider names."""
-        providers = ["linkup", "exa", "perplexity", "tavily", "firecrawl"]
-        return [p for p in providers if getattr(self, p).enabled]
+    @model_validator(mode="after")
+    def require_auth_for_network_bind(self) -> AppSettings:
+        if self.transport == "http":
+            self.validate_http_bind()
+        return self
+
+    def validate_http_bind(self) -> None:
+        """Reject unauthenticated HTTP binds outside the local host."""
+
+        if self.host not in _LOCAL_HTTP_HOSTS and not self.auth_tokens:
+            raise ValueError("HTTP network binds require at least one AUTH_TOKENS entry")
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
-    """Get cached application settings."""
+    """Return the process-wide settings instance."""
+
     return AppSettings()
 
 
-# Alias for compatibility
-get_app_settings = get_settings
+__all__ = [
+    "AppSettings",
+    "MiddlewareSettings",
+    "ProviderSettings",
+    "ResultSettings",
+    "RouterSettings",
+    "get_settings",
+    "resolve_env_references",
+]

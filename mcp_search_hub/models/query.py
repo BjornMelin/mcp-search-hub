@@ -1,50 +1,39 @@
-"""Query models."""
+"""Typed public search request."""
 
-from pydantic import BaseModel, Field
+from __future__ import annotations
+
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SearchQuery(BaseModel):
-    """A search query submitted to the system."""
+    """One federated search request."""
 
-    query: str = Field(..., description="The search query text")
-    advanced: bool = Field(
-        False, description="Whether to use advanced search capabilities"
-    )
-    max_results: int = Field(
-        10, description="Maximum number of results to return", ge=1, le=100
-    )
-    content_type: str | None = Field(
-        None, description="Optional explicit content type hint"
-    )
-    providers: list[str] | None = Field(
-        None, description="Optional explicit provider selection"
-    )
-    budget: float | None = Field(None, description="Optional budget constraint in USD")
-    timeout_ms: int = Field(
-        5000, description="Timeout in milliseconds", ge=1000, le=30000
-    )
-    raw_content: bool = Field(
-        False, description="Whether to include raw content in search results"
-    )
-    routing_strategy: str | None = Field(
-        None,
-        description="Execution strategy: 'parallel' (faster) or 'cascade' (more reliable)",
-    )
-    routing_hints: str | None = Field(
-        None,
-        description="Natural language guidance for routing decisions (e.g., 'prioritize recent news')",
-    )
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    query: str = Field(min_length=1, max_length=4000)
+    max_results: int = Field(default=10, ge=1, le=100)
+    include_raw_content: bool = False
+    providers: list[str] | None = None
+    tags: set[str] = Field(default_factory=set)
+    timeout_seconds: float = Field(default=20.0, gt=0.0, le=300.0)
+    budget_usd: Decimal | None = Field(default=None, gt=Decimal("0"))
+
+    @field_validator("providers")
+    @classmethod
+    def normalize_providers(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        normalized = list(dict.fromkeys(item.strip().lower() for item in value))
+        if not normalized or any(not item for item in normalized):
+            raise ValueError("providers must contain non-empty identifiers")
+        return normalized
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, value: set[str]) -> set[str]:
+        return {tag.strip().lower() for tag in value if tag.strip()}
 
 
-class QueryFeatures(BaseModel):
-    """Features extracted from a search query for routing."""
-
-    length: int = Field(..., description="Length of the query in characters")
-    word_count: int = Field(..., description="Number of words in the query")
-    contains_question: bool = Field(
-        ..., description="Whether the query contains a question"
-    )
-    content_type: str = Field(..., description="Detected content type")
-    time_sensitivity: float = Field(..., description="Time sensitivity score (0.0-1.0)")
-    complexity: float = Field(..., description="Query complexity score (0.0-1.0)")
-    factual_nature: float = Field(..., description="Factual nature score (0.0-1.0)")
+__all__ = ["SearchQuery"]

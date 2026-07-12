@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "search-hub": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/mcp-search-hub",
+        "mcp-search-hub"
+      ],
+      "env": {
+        "PROVIDERS": "{}"
+      }
+    }
+  }
+}

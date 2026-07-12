@@ -1,656 +1,230 @@
-"""FastMCP search server implementation using unified router."""
+"""FastMCP 3 server wiring."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import time
-import uuid
-from typing import Any
+from contextlib import asynccontextmanager
+from decimal import Decimal
+from typing import Annotated, Any
 
-from fastmcp import Context, FastMCP
-from pydantic import ValidationError
+from fastmcp import FastMCP
+from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
+from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
+from fastmcp.server.middleware.middleware import Middleware, MiddlewareContext
+from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimitingMiddleware
+from pydantic import Field, WithJsonSchema
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
-from .config import get_settings
-from .middleware import (
-    AuthMiddleware,
-    ErrorHandlerMiddleware,
-    LoggingMiddleware,
-    RateLimitMiddleware,
-    RetryMiddleware,
+from . import __version__
+from .config import AppSettings, get_settings
+from .models import (
+    CombinedSearchResponse,
+    HealthResponse,
+    HealthStatus,
+    ProviderCatalogEntry,
+    ProviderCatalogResponse,
+    SearchQuery,
 )
-from .models.base import HealthResponse, HealthStatus, MetricsResponse, ProviderStatus
-from .models.query import SearchQuery
-from .models.results import CombinedSearchResponse, SearchResponse
-from .providers.base import SearchProvider
-from .providers.exa_mcp import ExaMCPProvider
-from .providers.firecrawl_mcp import FirecrawlMCPProvider
-from .providers.linkup_mcp import LinkupMCPProvider
-from .providers.perplexity_mcp import PerplexityMCPProvider
-from .providers.tavily_mcp import TavilyMCPProvider
-from .query_routing.analyzer import QueryAnalyzer
-from .query_routing.hybrid_router import HybridRouter
-from .result_processing.merger import ResultMerger
-from .utils.cache import SearchCache
-from .utils.metrics import MetricsTracker
+from .orchestrator import SearchOrchestrator
+from .providers import ProviderRegistry, ProviderRegistryProtocol
+from .routing import RoutingPlanner
 
-logger = logging.getLogger(__name__)
+SearchText = Annotated[str, Field(min_length=1, max_length=4000, pattern=r"\S")]
+ProviderIdentifier = Annotated[str, Field(min_length=1, pattern=r"\S")]
+ProviderIdentifiers = Annotated[list[ProviderIdentifier], Field(min_length=1)]
+BudgetUSD = Annotated[
+    Decimal,
+    Field(gt=Decimal("0")),
+    WithJsonSchema(
+        {
+            "anyOf": [
+                {"type": "number", "exclusiveMinimum": 0},
+                {
+                    "type": "string",
+                    "pattern": (
+                        r"^(?:\+?(?:[0-9]*[1-9][0-9]*)(?:\.[0-9]*)?"
+                        r"|\+?0*\.[0-9]*[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?$"
+                    ),
+                },
+            ]
+        }
+    ),
+]
 
 
 class SearchServer:
-    """FastMCP search server implementation with unified routing and provider management."""
+    """Configure the public MCP surface from one typed settings object."""
 
-    def __init__(self) -> None:
-        """Initialize the SearchServer with all components and providers."""
-        # Initialize settings
-        self.settings = get_settings()
+    def __init__(
+        self,
+        settings: AppSettings | None = None,
+        registry: ProviderRegistryProtocol | None = None,
+    ) -> None:
+        self.settings = settings or get_settings()
+        self.registry = registry or ProviderRegistry.from_settings(self.settings)
+        self.orchestrator = SearchOrchestrator(
+            registry=self.registry,
+            planner=RoutingPlanner(
+                max_providers=self.settings.router.max_providers,
+                default_budget_usd=self.settings.router.default_budget_usd,
+            ),
+            max_results=self.settings.results.max_results,
+            reciprocal_rank_k=self.settings.results.reciprocal_rank_k,
+        )
 
-        # Initialize FastMCP server
+        @asynccontextmanager
+        async def lifespan(_: FastMCP[Any]):
+            try:
+                await self.registry.startup()
+                yield {"registry": self.registry}
+            finally:
+                await self.registry.close()
+
         self.mcp = FastMCP(
-            name="MCP Search Hub",
-            instructions="""
-            This server provides access to multiple search providers through a unified interface.
-            Use the search tool to find information with automatic provider selection.
-            """,
+            name=self.settings.app_name,
+            version=__version__,
+            instructions=(
+                "Federated search with deterministic provider routing, reciprocal-rank "
+                "fusion, explicit provenance, and bounded cost and time."
+            ),
+            auth=self._auth_verifier(),
+            middleware=self._middleware(),
+            lifespan=lifespan,
+        )
+        self._register_tools()
+        self._register_routes()
+
+    def health(self) -> HealthResponse:
+        """Return current provider lifecycle health without making network calls."""
+
+        states = self.registry.health()
+        total = len(self.registry.definitions())
+        healthy = sum(state.status == HealthStatus.HEALTHY for state in states.values())
+        if total == 0:
+            status = HealthStatus.DEGRADED
+        elif healthy == total:
+            status = HealthStatus.HEALTHY
+        elif healthy == 0:
+            status = HealthStatus.UNHEALTHY
+        else:
+            status = HealthStatus.DEGRADED
+        return HealthResponse(
+            status=status,
+            healthy_providers=healthy,
+            total_providers=total,
+            providers=states,
+            extra={"environment": self.settings.environment, "version": __version__},
+        )
+
+    def provider_catalog(self) -> list[ProviderCatalogEntry]:
+        """Return non-secret provider capabilities and routing inputs."""
+
+        return [
+            ProviderCatalogEntry(
+                identifier=definition.identifier,
+                tool=definition.tool,
+                tags=sorted(definition.tags),
+                weight=definition.weight,
+                timeout_seconds=definition.timeout_seconds,
+                estimated_cost_usd=definition.estimated_cost_usd,
+            )
+            for definition in self.registry.definitions()
+        ]
+
+    def http_app(self):
+        """Build the ASGI application for embedding or tests."""
+
+        return self.mcp.http_app(path=self.settings.http_path)
+
+    async def run_http(self) -> None:
+        self.settings.validate_http_bind()
+        await self.mcp.run_http_async(
+            transport="http",
+            host=self.settings.host,
+            port=self.settings.port,
+            path=self.settings.http_path,
             log_level=self.settings.log_level,
         )
 
-        # Setup middleware
-        self._setup_middleware()
+    async def run_stdio(self) -> None:
+        await self.mcp.run_stdio_async(log_level=self.settings.log_level)
 
-        # Initialize providers directly
-        self.providers = self._initialize_providers()
-        logger.info(f"Initialized providers: {list(self.providers.keys())}")
-
-        # Initialize components
-        self.analyzer = QueryAnalyzer()
-
-        # Initialize router
-        self.router = HybridRouter(
-            providers=self.providers,
-            settings=self.settings,
-        )
-
-        self.merger = ResultMerger()
-
-        # Initialize Redis cache
-        self.cache = SearchCache(
-            redis_url=self.settings.cache.redis_url,
-            default_ttl=self.settings.cache.redis_ttl,
-            ttl_jitter=self.settings.cache.ttl_jitter,
-            prefix=self.settings.cache.prefix,
-        )
-        logger.info(
-            f"Initialized SearchCache with Redis at {self.settings.cache.redis_url}"
-        )
-
-        self.metrics = MetricsTracker()
-
-        # Register tools and custom routes
-        self._register_tools()
-        self._register_custom_routes()
-
-        # Provider tools will be registered when the server starts
-        self._provider_tools_registered = False
-
-    def _setup_middleware(self):
-        """Set up and configure middleware components."""
-        # Get the Starlette app from FastMCP
-        app = self.mcp.http_app
-
-        # Skip middleware setup if http_app is not a Starlette app (e.g., in tests)
-        if not hasattr(app, "add_middleware"):
-            logger.warning(
-                "http_app does not support add_middleware, skipping middleware setup"
-            )
-            return
-
-        # Add middleware directly to the Starlette app
-        middleware_config = self.settings.middleware
-        retry_config = self.settings.retry
-
-        # Add middleware in reverse order (last added runs first)
-        # Note: Retry middleware uses retry config from root level
-        app.add_middleware(
-            RetryMiddleware,
-            max_retries=retry_config.max_retries,
-            base_delay=retry_config.base_delay,
-            max_delay=retry_config.max_delay,
-            exponential_base=retry_config.exponential_base,
-            jitter=retry_config.jitter,
-            skip_paths=middleware_config.rate_limit_skip_paths,  # Using rate limit skip paths
-        )
-        logger.info("Retry middleware initialized")
-
-        if middleware_config.rate_limit_enabled:
-            app.add_middleware(
-                RateLimitMiddleware,
-                limit=middleware_config.rate_limit_requests,
-                window=middleware_config.rate_limit_window,
-                global_limit=middleware_config.rate_limit_global,
-                global_window=middleware_config.rate_limit_window,
-                skip_paths=middleware_config.rate_limit_skip_paths,
-            )
-            logger.info("Rate limit middleware initialized")
-
-        if middleware_config.auth_enabled:
-            app.add_middleware(
-                AuthMiddleware,
-                api_keys=middleware_config.auth_api_keys,
-                skip_auth_paths=middleware_config.auth_skip_paths,
-            )
-            logger.info("Authentication middleware initialized")
-
-        if middleware_config.logging_enabled:
-            app.add_middleware(
-                LoggingMiddleware,
-                log_level=self.settings.log_level,
-                include_headers=middleware_config.logging_include_headers,
-                include_body=middleware_config.logging_include_body,
-                sensitive_headers=middleware_config.logging_sensitive_headers,
-                max_body_size=middleware_config.logging_max_body_size,
-            )
-            logger.info("Logging middleware initialized")
-
-        # Error handler is always enabled
-        app.add_middleware(
-            ErrorHandlerMiddleware,
-            include_traceback=self.settings.environment == "development",
-            redact_sensitive_data=True,
-        )
-        logger.info("Error handler middleware initialized")
-
-    def _initialize_providers(self) -> dict[str, SearchProvider]:
-        """Initialize providers with direct imports."""
-        settings = get_settings()
-        providers = {}
-
-        # Map of provider names to classes
-        provider_classes = {
-            "exa": ExaMCPProvider,
-            "firecrawl": FirecrawlMCPProvider,
-            "linkup": LinkupMCPProvider,
-            "perplexity": PerplexityMCPProvider,
-            "tavily": TavilyMCPProvider,
+    def _auth_verifier(self) -> StaticTokenVerifier | None:
+        tokens: dict[str, dict[str, Any]] = {
+            secret.get_secret_value(): {
+                "client_id": f"configured-client-{index}",
+                "scopes": list[str](),
+            }
+            for index, secret in enumerate(self.settings.auth_tokens, start=1)
         }
+        return StaticTokenVerifier(tokens=tokens) if tokens else None
 
-        for provider_name, provider_class in provider_classes.items():
-            # Get provider settings from new structure
-            provider_settings = settings.get_provider_config(provider_name)
-            if not provider_settings:
-                logger.warning(f"No settings found for provider {provider_name}")
-                continue
+    def _middleware(self) -> list[Middleware]:
+        middleware: list[Middleware] = [
+            StructuredLoggingMiddleware(
+                log_level=getattr(logging, self.settings.log_level),
+                include_payloads=self.settings.middleware.include_log_payloads,
+            ),
+            SlidingWindowRateLimitingMiddleware(
+                max_requests=self.settings.middleware.rate_limit_requests,
+                window_minutes=self.settings.middleware.rate_limit_window_minutes,
+                get_client_id=_rate_limit_client_id,
+            ),
+        ]
+        return middleware
 
-            # Skip disabled providers
-            if not provider_settings.enabled:
-                logger.info(f"Provider {provider_name} is disabled")
-                continue
-
-            # Get API key
-            api_key = None
-            if provider_settings.api_key:
-                api_key = provider_settings.api_key.get_secret_value()
-
-            # Create provider instance
-            try:
-                providers[provider_name] = provider_class(api_key=api_key)
-                logger.info(f"Successfully initialized provider: {provider_name}")
-            except Exception as e:
-                logger.error(f"Failed to initialize provider {provider_name}: {e}")
-
-        return providers
-
-    def _register_tools(self):
-        """Register search tools with FastMCP server."""
-
-        @self.mcp.tool(
-            name="search",
-            description="Search across multiple providers with intelligent routing",
-        )
-        async def search(
-            query: str,
-            ctx: Context,
-            max_results: int = 10,
-            raw_content: bool = False,
-            advanced: dict[str, Any] | None = None,
-        ) -> SearchResponse:
-            """Execute a search query across multiple providers."""
-            request_id = str(uuid.uuid4())
-            ctx.info(f"Processing search request {request_id}: {query}")
-
-            # Build search query object
-            search_query = SearchQuery(
+    def _register_tools(self) -> None:
+        async def search_tool(
+            query: SearchText,
+            max_results: Annotated[int, Field(ge=1, le=100)] = 10,
+            include_raw_content: bool = False,
+            providers: ProviderIdentifiers | None = None,
+            tags: list[str] | None = None,
+            timeout_seconds: Annotated[float | None, Field(gt=0.0, le=300.0)] = None,
+            budget_usd: BudgetUSD | None = None,
+        ) -> CombinedSearchResponse:
+            request = SearchQuery(
                 query=query,
                 max_results=max_results,
-                raw_content=raw_content,
-                advanced=advanced,
-            )
-
-            # Use search_with_routing which handles caching internally
-            response = await self.search_with_routing(search_query, request_id, ctx)
-            return SearchResponse(results=response.results, metadata=response.metadata)
-
-    async def _register_provider_tools(self):
-        """Register provider-specific tools dynamically."""
-        # Initialize all providers
-        init_tasks = []
-        for provider_name, provider in self.providers.items():
-            try:
-                init_tasks.append(provider.initialize())
-            except Exception as e:
-                logger.error(
-                    f"Failed to create initialization task for {provider_name}: {e}"
-                )
-
-        # Wait for all initializations
-        init_results = await asyncio.gather(*init_tasks, return_exceptions=True)
-
-        # Log any initialization errors
-        for provider_name, result in zip(
-            self.providers.keys(), init_results, strict=False
-        ):
-            if isinstance(result, Exception):
-                logger.error(f"Failed to initialize {provider_name}: {result}")
-
-        # Register tools for successfully initialized providers
-        for provider_name, provider in self.providers.items():
-            if not provider.initialized:
-                logger.warning(
-                    f"Skipping tool registration for uninitialized provider: {provider_name}"
-                )
-                continue
-
-            try:
-                # Get provider's tools
-                tools = await provider.list_tools()
-
-                for tool in tools:
-                    # Create a closure to capture the current values
-                    def create_tool_wrapper(
-                        prov_name: str,
-                        prov: SearchProvider,
-                        orig_tool_name: str,
-                        tool_desc: str,
-                    ):
-                        @self.mcp.tool(
-                            name=f"{prov_name}_{orig_tool_name}",
-                            description=f"{tool_desc} (via {prov_name})",
-                        )
-                        async def provider_tool_wrapper(ctx: Context, **kwargs):
-                            """Wrapper function for provider-specific tools."""
-                            request_id = str(uuid.uuid4())
-                            ctx.info(
-                                f"Invoking {prov_name} tool {orig_tool_name} with request {request_id}"
-                            )
-
-                            try:
-                                # Use the provider's invoke_tool method
-                                return await prov.invoke_tool(orig_tool_name, kwargs)
-                            except Exception as e:
-                                ctx.error(
-                                    f"Error invoking {prov_name} tool {orig_tool_name}: {str(e)}"
-                                )
-                                raise
-
-                        return provider_tool_wrapper
-
-                    # Register the tool
-                    create_tool_wrapper(
-                        provider_name, provider, tool.name, tool.description
-                    )
-
-                logger.info(
-                    f"Registered {len(tools)} tools for provider {provider_name}"
-                )
-
-            except Exception as e:
-                logger.error(f"Failed to register tools for {provider_name}: {e}")
-
-    def _register_custom_routes(self):
-        """Register custom FastMCP HTTP routes."""
-        # Use http_app for custom routes
-        app = self.mcp.http_app
-
-        @app.post("/search/combined")
-        async def search_combined(request: Request) -> JSONResponse:
-            """Execute a combined search across multiple providers."""
-            try:
-                # Parse request body
-                try:
-                    data = await request.json()
-                except json.JSONDecodeError as e:
-                    return JSONResponse(
-                        content={
-                            "error": "Invalid JSON in request body",
-                            "details": str(e),
-                        },
-                        status_code=400,
-                    )
-
-                # Validate query
-                try:
-                    search_query = SearchQuery(**data)
-                except ValidationError as e:
-                    return JSONResponse(
-                        content={
-                            "error": "Invalid search query parameters",
-                            "details": e.errors(),
-                        },
-                        status_code=422,
-                    )
-
-                request_id = str(uuid.uuid4())
-
-                # Create a simple context for logging
-                class SimpleContext:
-                    def info(self, msg):
-                        logger.info(msg)
-
-                    def warning(self, msg):
-                        logger.warning(msg)
-
-                    def error(self, msg):
-                        logger.error(msg)
-
-                ctx = SimpleContext()
-
-                # Use search_with_routing
-                try:
-                    response = await self.search_with_routing(
-                        search_query, request_id, ctx
-                    )
-                except TimeoutError:
-                    return JSONResponse(
-                        content={
-                            "error": "Search request timed out",
-                            "request_id": request_id,
-                        },
-                        status_code=504,
-                    )
-                except Exception as e:
-                    # Check if it's a known provider error
-                    if "rate limit" in str(e).lower():
-                        return JSONResponse(
-                            content={
-                                "error": "Rate limit exceeded",
-                                "details": str(e),
-                                "request_id": request_id,
-                            },
-                            status_code=429,
-                        )
-                    if "budget" in str(e).lower():
-                        return JSONResponse(
-                            content={
-                                "error": "Budget limit exceeded",
-                                "details": str(e),
-                                "request_id": request_id,
-                            },
-                            status_code=402,
-                        )
-                    raise
-
-                return JSONResponse(content=response.model_dump(mode="json"))
-
-            except Exception as e:
-                logger.error(f"Error in search_combined: {str(e)}", exc_info=True)
-                return JSONResponse(
-                    content={
-                        "error": "Internal server error",
-                        "message": str(e),
-                        "request_id": request_id if "request_id" in locals() else None,
-                    },
-                    status_code=500,
-                )
-
-        @app.get("/health")
-        async def health_check(request: Request) -> JSONResponse:
-            """Health check endpoint."""
-            # Build provider health status
-            provider_health = {}
-            for name, provider in self.providers.items():
-                status = await provider.check_status()
-                if status:
-                    # Get rate limit and budget info
-                    is_rate_limited = provider.rate_limiter.is_in_cooldown()
-                    budget_info = provider.budget_tracker.get_usage_report()
-                    budget_exceeded = budget_info.get("daily_percent_used", 0) >= 100
-
-                    status_message = status[1]
-                    health_status = status[0]
-
-                    # Update health status based on rate limits and budget
-                    if is_rate_limited:
-                        status_message = f"{status_message} (RATE LIMITED)"
-                        if health_status != HealthStatus.FAILED:
-                            health_status = HealthStatus.DEGRADED
-
-                    if budget_exceeded:
-                        status_message = f"{status_message} (BUDGET EXCEEDED)"
-                        if health_status != HealthStatus.FAILED:
-                            health_status = HealthStatus.DEGRADED
-
-                    provider_health[name] = ProviderStatus(
-                        name=name,
-                        health=health_status,
-                        status=health_status != HealthStatus.FAILED,
-                        message=status_message,
-                        rate_limited=is_rate_limited,
-                        budget_exceeded=budget_exceeded,
-                    )
-                else:
-                    provider_health[name] = ProviderStatus(
-                        name=name,
-                        health=HealthStatus.UNHEALTHY,
-                        status=False,
-                        message="Provider unresponsive",
-                    )
-
-            # Overall health
-            overall_health = HealthStatus.HEALTHY
-            if all(
-                p.health == HealthStatus.UNHEALTHY for p in provider_health.values()
-            ):
-                overall_health = HealthStatus.UNHEALTHY
-            elif any(
-                p.health in [HealthStatus.UNHEALTHY, HealthStatus.DEGRADED]
-                for p in provider_health.values()
-            ):
-                overall_health = HealthStatus.DEGRADED
-
-            response = HealthResponse(
-                status=overall_health.value,
-                healthy_providers=len(
-                    [
-                        p
-                        for p in provider_health.values()
-                        if p.health == HealthStatus.HEALTHY
-                    ]
+                include_raw_content=include_raw_content,
+                providers=providers,
+                tags=set(tags or []),
+                timeout_seconds=(
+                    timeout_seconds
+                    if timeout_seconds is not None
+                    else self.settings.router.default_timeout_seconds
                 ),
-                total_providers=len(provider_health),
-                providers=provider_health,
+                budget_usd=budget_usd,
             )
+            return await self.orchestrator.execute(request)
 
-            status_code = 200 if overall_health == HealthStatus.HEALTHY else 503
-            return JSONResponse(
-                content=response.model_dump(mode="json"), status_code=status_code
-            )
+        self.mcp.tool(
+            name="search",
+            description="Search selected providers and return fused results with provenance.",
+        )(search_tool)
 
-        @app.get("/metrics")
-        async def metrics(request: Request) -> JSONResponse:
-            """Metrics endpoint."""
-            # Get performance metrics
-            metrics_data = self.metrics.get_metrics()
+        async def get_provider_info() -> ProviderCatalogResponse:
+            return ProviderCatalogResponse(providers=self.provider_catalog())
 
-            # Build provider metrics
-            provider_metrics = {}
-            for name in self.providers:
-                if name in metrics_data:
-                    provider_metrics[name] = {
-                        "queries": metrics_data[name].get("queries", 0),
-                        "successes": metrics_data[name].get("successes", 0),
-                        "failures": metrics_data[name].get("failures", 0),
-                        "success_rate": metrics_data[name].get("success_rate", 0.0),
-                        "avg_response_time": metrics_data[name].get(
-                            "avg_response_time", 0.0
-                        ),
-                    }
+        self.mcp.tool(
+            name="get_provider_info",
+            description="List configured provider routing and cost metadata.",
+        )(get_provider_info)
 
-            # Aggregate metrics
-            total_queries = sum(m.get("queries", 0) for m in provider_metrics.values())
-            total_successes = sum(
-                m.get("successes", 0) for m in provider_metrics.values()
-            )
-            total_failures = sum(
-                m.get("failures", 0) for m in provider_metrics.values()
-            )
+    def _register_routes(self) -> None:
+        async def health_route(_: Request) -> Response:
+            return JSONResponse(self.health().model_dump(mode="json"))
 
-            response = MetricsResponse(
-                total_queries=total_queries,
-                total_successes=total_successes,
-                total_failures=total_failures,
-                cache_hit_rate=metrics_data.get("cache_hit_rate", 0.0),
-                avg_response_time=metrics_data.get("avg_response_time", 0.0),
-                provider_metrics=provider_metrics,
-                last_updated=metrics_data.get("last_updated", time.time()),
-            )
+        self.mcp.custom_route("/health", methods=["GET"], include_in_schema=True)(health_route)
 
-            return JSONResponse(content=response.model_dump(mode="json"))
 
-    async def search_with_routing(
-        self, search_query: SearchQuery, request_id: str, ctx: Context
-    ) -> CombinedSearchResponse:
-        """Execute a search using the unified router."""
-        # Check cache
-        cached_result = await self.cache.get(search_query)
+def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
+    token = get_access_token()
+    if token is not None:
+        return f"client:{token.client_id}"
+    return "anonymous"
 
-        if cached_result:
-            ctx.info(f"Cache hit for request {request_id}")
-            # Track cache hit metric
-            self.metrics.record_query(
-                provider_name="_cache",
-                success=True,
-                response_time=0.001,
-                result_count=len(cached_result.results),
-            )
-            return cached_result
 
-        # Route and execute
-        ctx.info(f"Request {request_id} - Starting search with hybrid router")
-        start_time = time.time()
-
-        # Route query to appropriate providers
-        routing_decision = await self.router.route(search_query)
-        ctx.info(
-            f"Request {request_id} - Routing decision: {routing_decision.model_dump()}"
-        )
-
-        # Execute search across selected providers
-        results = await self.router.execute(search_query, routing_decision)
-
-        response_time = time.time() - start_time
-        ctx.info(f"Request {request_id} - Search completed in {response_time:.2f}s")
-
-        # Merge results from all providers
-        merged_results = self.merger.merge_results(results)
-
-        # Build combined response
-        response = CombinedSearchResponse(
-            results=merged_results,
-            metadata={
-                "request_id": request_id,
-                "query": search_query.query,
-                "routing_decision": routing_decision.model_dump(),
-                "providers_used": list(results.keys()),
-                "result_count": len(merged_results),
-                "response_time": response_time,
-            },
-        )
-
-        # Cache the response
-        await self.cache.set(search_query, response)
-
-        # Track metrics for actual providers used
-        for provider_name in results:
-            provider_results = results[provider_name]
-            self.metrics.record_query(
-                provider_name=provider_name,
-                success=len(provider_results) > 0,
-                response_time=response_time
-                / len(results),  # Approximate per-provider time
-                result_count=len(provider_results),
-            )
-
-        return response
-
-    async def start(
-        self,
-        transport: str = "streamable-http",
-        host: str = "0.0.0.0",
-        port: int = 8000,
-    ):
-        """Start the FastMCP server."""
-        # Initialize all providers and register their tools
-        if not self._provider_tools_registered:
-            logger.info("Initializing providers and registering tools...")
-            await self._register_provider_tools()
-            self._provider_tools_registered = True
-
-        # Run the server based on transport
-        logger.info(
-            f"Starting MCP Search Hub on {host}:{port} with transport {transport}"
-        )
-
-        if transport == "stdio":
-            await self.mcp.run_stdio_async()
-        elif transport == "streamable-http":
-            await self.mcp.run_streamable_http_async(host=host, port=port)
-        else:
-            # Default HTTP
-            await self.mcp.run_http_async(host=host, port=port)
-
-    def run(
-        self,
-        transport: str = "streamable-http",
-        host: str = "0.0.0.0",
-        port: int = 8000,
-        log_level: str = "INFO",
-    ):
-        """Run the server synchronously."""
-        asyncio.run(self.start(transport=transport, host=host, port=port))
-
-    async def close(self):
-        """Close all providers and cleanup resources."""
-        logger.info("Closing all providers...")
-        close_tasks = []
-
-        for provider_name, provider in self.providers.items():
-            if provider.initialized:
-                try:
-                    close_tasks.append(provider.close())
-                except Exception as e:
-                    logger.error(
-                        f"Failed to create close task for {provider_name}: {e}"
-                    )
-
-        # Wait for all providers to close
-        if close_tasks:
-            close_results = await asyncio.gather(*close_tasks, return_exceptions=True)
-
-            # Log any close errors
-            for provider_name, result in zip(
-                self.providers.keys(), close_results, strict=False
-            ):
-                if isinstance(result, Exception):
-                    logger.error(f"Failed to close {provider_name}: {result}")
-
-        # Close cache
-        try:
-            await self.cache.close()
-            logger.info("Closed cache connections")
-        except Exception as e:
-            logger.error(f"Failed to close cache connections: {e}")
-
-        logger.info("All resources closed")
+__all__ = ["SearchServer"]
