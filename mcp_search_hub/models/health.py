@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class HealthStatus(str, Enum):
+class HealthStatus(StrEnum):
     """Enumeration of supported health states."""
 
     HEALTHY = "healthy"
@@ -21,13 +21,11 @@ class ProviderHealth(BaseModel):
 
     identifier: str = Field(description="Provider identifier")
     status: HealthStatus = Field(description="Current provider status")
-    message: str | None = Field(
-        default=None, description="Optional human friendly message"
-    )
+    message: str | None = Field(default=None, description="Optional human friendly message")
     latency_ms: float | None = Field(
         default=None,
         ge=0.0,
-        description="Latency of the last successful call in milliseconds",
+        description="Latency of the most recent completed attempt in milliseconds",
     )
     consecutive_failures: int = Field(
         default=0, ge=0, description="Number of consecutive failed attempts"
@@ -44,9 +42,7 @@ class HealthResponse(BaseModel):
         default_factory=dict,
         description="Mapping of provider identifier to health data",
     )
-    extra: dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata"
-    )
+    extra: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
-__all__ = ["HealthStatus", "ProviderHealth", "HealthResponse"]
+__all__ = ["HealthResponse", "HealthStatus", "ProviderHealth"]

@@ -1,57 +1,39 @@
-"""Query models used by the orchestrator and routing pipeline."""
+"""Typed public search request."""
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Any
+from decimal import Decimal
 
-from pydantic import BaseModel, Field
-
-
-class QueryIntent(str, Enum):
-    """Classifies the intent of a search query."""
-
-    GENERAL = "general"
-    TECHNICAL = "technical"
-    RESEARCH = "research"
-    NEWS = "news"
-    CODE = "code"
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SearchQuery(BaseModel):
-    """User request captured from FastMCP tool invocation."""
+    """One federated search request."""
 
-    query: str = Field(
-        min_length=1, description="Natural language query provided by the caller"
-    )
-    max_results: int = Field(
-        default=10, ge=1, le=50, description="Maximum number of results to return"
-    )
-    include_raw_content: bool = Field(
-        default=False,
-        description="Whether providers should return raw content bodies when available",
-    )
-    advanced: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Provider-specific knobs forwarded to downstream tools",
-    )
-    tags: set[str] = Field(
-        default_factory=set,
-        description="Optional tags supplied by the caller to hint at provider selection",
-    )
+    model_config = ConfigDict(str_strip_whitespace=True)
 
-    def fingerprint_payload(self) -> dict[str, Any]:
-        """Return a deterministic payload used to compute cache fingerprints."""
+    query: str = Field(min_length=1, max_length=4000)
+    max_results: int = Field(default=10, ge=1, le=100)
+    include_raw_content: bool = False
+    providers: list[str] | None = None
+    tags: set[str] = Field(default_factory=set)
+    timeout_seconds: float = Field(default=20.0, gt=0.0, le=300.0)
+    budget_usd: Decimal | None = Field(default=None, gt=Decimal("0"))
 
-        query_text = str(self.query).strip()
+    @field_validator("providers")
+    @classmethod
+    def normalize_providers(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        normalized = list(dict.fromkeys(item.strip().lower() for item in value))
+        if not normalized or any(not item for item in normalized):
+            raise ValueError("providers must contain non-empty identifiers")
+        return normalized
 
-        return {
-            "query": query_text,
-            "max_results": self.max_results,
-            "include_raw_content": self.include_raw_content,
-            "advanced": self.advanced,
-            "tags": sorted(self.tags),
-        }
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, value: set[str]) -> set[str]:
+        return {tag.strip().lower() for tag in value if tag.strip()}
 
 
-__all__ = ["QueryIntent", "SearchQuery"]
+__all__ = ["SearchQuery"]

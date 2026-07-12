@@ -1,6 +1,6 @@
-"""Routing utilities responsible for provider selection."""
+"""Routing exports."""
 
-from .classifier import QueryClassifier
+from .classifier import infer_tags
 from .planner import RoutingPlan, RoutingPlanner
 
-__all__ = ["QueryClassifier", "RoutingPlan", "RoutingPlanner"]
+__all__ = ["RoutingPlan", "RoutingPlanner", "infer_tags"]

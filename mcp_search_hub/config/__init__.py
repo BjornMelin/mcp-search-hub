@@ -1,14 +1,21 @@
-"""Configuration management module."""
+"""Configuration exports."""
 
-from . import settings as _settings
+from .settings import (
+    AppSettings,
+    MiddlewareSettings,
+    ProviderSettings,
+    ResultSettings,
+    RouterSettings,
+    get_settings,
+    resolve_env_references,
+)
 
-AppSettings = _settings.AppSettings
-CacheConfig = _settings.CacheConfig
-MiddlewareConfig = _settings.MiddlewareConfig
-ProviderSettings = _settings.ProviderSettings
-ResultConfig = _settings.ResultConfig
-RetryConfig = _settings.RetryConfig
-RouterSettings = _settings.RouterSettings
-get_settings = _settings.get_settings
-
-__all__ = list(_settings.__all__)
+__all__ = [
+    "AppSettings",
+    "MiddlewareSettings",
+    "ProviderSettings",
+    "ResultSettings",
+    "RouterSettings",
+    "get_settings",
+    "resolve_env_references",
+]

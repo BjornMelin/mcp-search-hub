@@ -1,0 +1,11 @@
+{
+  "docs": {
+    "enabled": false,
+    "command": ["replace-with-provider-command"],
+    "env": {"API_KEY": "$DOCS_API_KEY"},
+    "tool": "search",
+    "tags": ["general", "technical"],
+    "estimated_cost_usd": "0.01",
+    "result_path": ["results"]
+  }
+}

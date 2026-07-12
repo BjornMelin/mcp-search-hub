@@ -1,3 +1,10 @@
-"""MCP Search Hub package."""
+"""MCP Search Hub package metadata."""
 
-__version__ = "1.0.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("mcp-search-hub")
+except PackageNotFoundError:  # source checkout before installation
+    __version__ = "0+unknown"
+
+__all__ = ["__version__"]

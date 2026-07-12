@@ -1,222 +1,100 @@
 # MCP Search Hub
 
-> 🔍 **Intelligent multi-provider search aggregation server built on FastMCP 2.12**
+MCP Search Hub runs one search request across configured downstream Model Context Protocol (MCP) servers. It selects providers deterministically, enforces request-level cost and timeout budgets, then combines results with reciprocal-rank fusion (RRF) and explicit source provenance.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FastMCP](https://img.shields.io/badge/FastMCP-2.12-green.svg)](https://github.com/fastmcp)
+The hub does not bundle search providers, crawl the web, score providers with a large language model (LLM), or manage provider credentials. Each provider is an MCP transport and a declarative result mapping supplied at deployment time.
 
-MCP Search Hub embeds official MCP servers from five leading search providers within a unified interface, intelligently routes queries to the most appropriate provider(s), and combines/ranks results for optimal relevance.
+## What MCP Search Hub includes
 
-## ✨ Key Features
+- FastMCP 3.4.4 lifecycle, bearer-token verification, structured logging, per-token rate limits, and one bounded unauthenticated rate-limit bucket
+- concurrent provider calls under one orchestrator-owned timeout budget
+- explicit provider selection or deterministic tag/weight routing
+- optional estimated request-cost budget
+- URL/title deduplication and standard RRF (`k=60` by default)
+- per-result provider, original-rank, and original-score provenance
+- stdio and Streamable HTTP transports
 
-- **🏗️ Unified Interface**: Single MCP server for all search providers
-- **🧠 Intelligent Routing**: Automatically selects optimal providers based on query characteristics
-- **⚡ Official Provider Integration**: Embeds official MCP servers (Linkup, Exa, Perplexity, Tavily, Firecrawl)
-- **💰 Cost Optimization**: 30-45% cost reduction through intelligent provider selection
-- **🚀 Zero Maintenance**: Provider updates flow through automatically
-- **📊 Smart Result Merging**: Deduplication and multi-factor ranking
-- **⚡ Performance Optimized**: Multi-tier caching and parallel execution
-- **🔧 Production Ready**: Error handling, rate limiting, monitoring
+## Local development
 
-## 🚀 Quick Start
-
-Get up and running in 5 minutes:
+Requires Python 3.11–3.13 and uv 0.11.28 or newer.
 
 ```bash
-# 1. Clone and install using uv
-git clone https://github.com/BjornMelin/mcp-search-hub
-cd mcp-search-hub
-uv sync
-
-# 2. Interactive setup (recommended)
-python scripts/setup_claude_desktop.py
-
-# 3. Start searching!
-# The script will guide you through API key setup and Claude Desktop integration
+uv sync --frozen --group dev
+uv run pytest
+uv run ruff format --check .
+uv run ruff check .
+uv run pyright
+uv run python -m build
 ```
 
-After setup, restart Claude Desktop and ask: *"What MCP tools do you have available?"*
-
-**📖 [Complete Setup Guide](docs/users/getting-started.md)** | **⚡ [Quick Setup Script](scripts/setup_claude_desktop.py)**
-
-## 🎯 Why MCP Search Hub?
-
-### Provider Strengths
-
-Each provider excels in different areas. MCP Search Hub automatically routes queries to leverage these strengths:
-
-| Provider | Strengths | Best For | Accuracy |
-|----------|-----------|----------|----------|
-| **Linkup** | Factual information, current events | News, facts, real-time data | 91.0% |
-| **Exa** | Semantic search, academic content | Research papers, technical docs | 90.0% |
-| **Perplexity** | AI-powered analysis, current events | Complex queries, analysis | 86.0% |
-| **Tavily** | RAG-optimized results | Retrieval applications | 73.0% |
-| **Firecrawl** | Deep content extraction | Web scraping, full content | N/A |
-
-*Accuracy scores from SimpleQA benchmark*
-
-### Architecture Benefits
-
-```mermaid
-graph TB
-    User[Claude Desktop/Code] --> Hub[MCP Search Hub]
-    Hub --> Router[Intelligent Router]
-    
-    Router -->|Academic Query| Exa[Exa MCP Server]
-    Router -->|News Query| Perplexity[Perplexity MCP Server]
-    Router -->|Factual Query| Linkup[Linkup MCP Server]
-    Router -->|Scraping Task| Firecrawl[Firecrawl MCP Server]
-    
-    Hub --> Cache[Smart Caching]
-    Hub --> Merger[Result Merger]
-    
-    style Hub fill:#e1f5fe
-    style Router fill:#f3e5f5
-    style Cache fill:#e8f5e8
-    style Merger fill:#fff3e0
-```
-
-**Benefits:**
-- **Single Integration**: One MCP server instead of five
-- **Zero Configuration**: No need to manage multiple servers
-- **Automatic Updates**: Provider improvements flow through automatically
-- **Cost Efficient**: Intelligent routing reduces unnecessary API calls
-- **Quality Results**: Multi-provider consensus improves accuracy
-
-## 📚 Documentation
-
-### For Users
-- **[Getting Started](docs/users/getting-started.md)** - Complete setup guide and first steps
-- **[Configuration](docs/operators/configuration.md)** - Detailed configuration reference
-- **[API Reference](docs/developers/api-reference.md)** - Complete tool and endpoint documentation
-- **[Troubleshooting](docs/troubleshooting/common-issues.md)** - Solutions to common problems
-
-### For Developers
-- **[Contributing](docs/developers/contributing.md)** - How to contribute to the project
-- **[Development](docs/developers/development.md)** - Development workflows and practices
-- **[Architecture](docs/architecture/overview.md)** - System design and components
-
-### Advanced Topics
-- **[Provider Integration](docs/architecture/provider-integration.md)** - How providers are embedded
-- **[Caching Strategy](docs/architecture/caching.md)** - Multi-tier caching system
-- **[Performance Tuning](docs/operators/production-setup.md)** - Optimization strategies
-
-📖 **[Complete Documentation Index](docs/README.md)**
-
-## 🔑 Quick Configuration
-
-At minimum, you need API keys for the providers you want to use:
+Start with stdio (the default):
 
 ```bash
-# Copy environment template
-cp .env.template .env
-
-# Add your API keys
-LINKUP_API_KEY=your_linkup_key
-EXA_API_KEY=your_exa_key
-PERPLEXITY_API_KEY=your_perplexity_key
-TAVILY_API_KEY=your_tavily_key
-FIRECRAWL_API_KEY=your_firecrawl_key
+uv run mcp-search-hub
 ```
 
-### Getting API Keys
+This starts an empty hub. Configure at least one provider before calling `search`.
 
-| Provider | Free Tier | Sign Up |
-|----------|-----------|---------|
-| **Linkup** | 100 requests/month | [linkup.so](https://linkup.so) |
-| **Exa** | 1,000 requests/month | [exa.ai](https://exa.ai) |
-| **Perplexity** | $5 credit | [perplexity.ai](https://perplexity.ai) |
-| **Tavily** | 1,000 requests/month | [tavily.com](https://tavily.com) |
-| **Firecrawl** | 500 requests/month | [firecrawl.dev](https://firecrawl.dev) |
-
-⚙️ **[Complete Configuration Guide](docs/operators/configuration.md)**
-
-## 🚀 Available Tools
-
-MCP Search Hub provides all tools from embedded provider MCP servers:
-
-### Core Search Tools
-- **`search`** - Intelligent multi-provider search with automatic routing
-- **`get_provider_info`** - Information about available providers
-
-### Provider-Specific Tools (25+ tools available)
-- **Firecrawl**: `firecrawl_scrape`, `firecrawl_search`, `firecrawl_crawl`, `firecrawl_extract`
-- **Exa**: `web_search_exa`, `research_paper_search`, `company_research`, `linkedin_search`
-- **Perplexity**: `perplexity_ask`, `perplexity_research`
-- **Linkup**: `linkup_search_web`
-- **Tavily**: `tavily_search`, `tavily_extract`
-
-🛠️ **[Full Tool Documentation](docs/developers/api-reference.md)**
-
-## 🏗️ Architecture
-
-MCP Search Hub uses a modular architecture with embedded MCP servers:
-
-```mermaid
-graph TB
-    subgraph "MCP Search Hub"
-        Server[FastMCP Server]
-        Router[Query Router]
-        Cache[Tiered Cache]
-        Merger[Result Merger]
-    end
-    
-    subgraph "Embedded MCP Servers"
-        LinkupMCP[Linkup MCP]
-        ExaMCP[Exa MCP]
-        PerplexityMCP[Perplexity MCP]
-        TavilyMCP[Tavily MCP]
-        FirecrawlMCP[Firecrawl MCP]
-    end
-    
-    Client[Claude Desktop] --> Server
-    Server --> Router
-    Router --> LinkupMCP
-    Router --> ExaMCP
-    Router --> PerplexityMCP
-    Router --> TavilyMCP
-    Router --> FirecrawlMCP
-    
-    style Server fill:#e1f5fe
-    style Router fill:#f3e5f5
-    style Cache fill:#e8f5e8
-    style Merger fill:#fff3e0
-```
-
-🏗️ **[Architecture Documentation](docs/architecture/overview.md)**
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to get started:
-
-1. **Fork** the repository
-2. **Create** a feature branch
-3. **Make** your changes with tests
-4. **Submit** a pull request
-
-🤝 **[Contributing Guide](docs/developers/contributing.md)** | 🛠️ **[Development Setup](docs/developers/development.md)**
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgements
-
-- **[FastMCP](https://github.com/fastmcp)** - The framework powering this server
-- **Provider Teams** - For their excellent APIs and official MCP servers
-
-## 🔗 Links
-
-- **[GitHub Repository](https://github.com/BjornMelin/mcp-search-hub)**
-- **[Documentation](docs/README.md)**
-- **[Issue Tracker](https://github.com/BjornMelin/mcp-search-hub/issues)**
-- **[Releases](https://github.com/BjornMelin/mcp-search-hub/releases)**
-
----
-
-**Ready to get started?** Follow our [Getting Started Guide](docs/users/getting-started.md) or run the interactive setup:
+Start the HTTP transport on loopback:
 
 ```bash
-python scripts/setup_claude_desktop.py
+TRANSPORT=http uv run mcp-search-hub
 ```
+
+Non-loopback HTTP binds fail closed unless `AUTH_TOKENS` contains at least one bearer token. Tokens must be nonblank, unique, and free of surrounding whitespace. For public production ingress, keep the hub on a private or loopback interface and terminate identity at a production authentication gateway. The built-in static tokens support constrained deployments.
+
+## Provider configuration
+
+`PROVIDERS` is a JSON object keyed by lowercase provider identifier. A provider uses either a remote `transport` or a local `command`, never both.
+
+The values below are disabled placeholders. Replace the endpoint and credentials, then set `enabled` to `true`.
+
+```json
+{
+  "docs": {
+    "enabled": false,
+    "transport": "https://example.com/mcp",
+    "tool": "search",
+    "tags": ["general", "technical"],
+    "weight": 1.2,
+    "timeout_seconds": 15,
+    "estimated_cost_usd": "0.01",
+    "query_argument": "query",
+    "max_results_argument": "limit",
+    "raw_content_argument": "include_content",
+    "static_arguments": {"language": "en"},
+    "result_path": ["results"],
+    "field_aliases": {
+      "title": ["title"],
+      "url": ["url"],
+      "snippet": ["description"],
+      "score": ["score"],
+      "raw_content": ["content"]
+    }
+  }
+}
+```
+
+An exact string such as `$DOCS_API_KEY` resolves from the process environment and fails startup when missing. Partial interpolation is not supported. The hub passes transport mappings to FastMCP, so remote headers can use the same explicit reference form.
+
+See the complete [configuration](https://github.com/BjornMelin/mcp-search-hub/blob/main/docs/configuration.md) and [architecture](https://github.com/BjornMelin/mcp-search-hub/blob/main/docs/architecture.md) contracts.
+
+## MCP tools
+
+`search` accepts:
+
+- `query` (required)
+- `max_results`
+- `include_raw_content`
+- `providers` (optional explicit whitelist)
+- `tags` (optional routing hints)
+- `timeout_seconds`
+- `budget_usd`
+
+The response names selected, successful, failed, and timed-out providers. Every fused result has a `sources` list with provider, original rank, and optional original score. The hub omits provider error text from caller responses.
+
+`get_provider_info` returns non-secret tool, tag, weight, timeout, and estimated cost metadata. `GET /health` is available with the HTTP transport, so `HTTP_PATH` cannot be `/health`.
+
+## License
+
+MIT. See [LICENSE](https://github.com/BjornMelin/mcp-search-hub/blob/main/LICENSE).

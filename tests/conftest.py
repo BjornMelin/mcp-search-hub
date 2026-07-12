@@ -1,143 +1,167 @@
-"""Shared test fixtures for the refactored MCP Search Hub."""
+"""Shared deterministic provider doubles."""
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
-from dataclasses import dataclass
-from typing import Any
+import time
+from decimal import Decimal
 
 import pytest
-from fastmcp.client.client import CallToolResult
 
-from mcp_search_hub.models import HealthStatus, ProviderHealth, SearchQuery
-
-
-@dataclass
-class StubCall:
-    provider: str
-    results: list[dict[str, Any]]
-    latency_ms: float = 10.0
-
-    def to_result(self) -> CallToolResult:
-        return CallToolResult(
-            content=[],
-            structured_content=None,
-            data={"results": self.results},
-            is_error=False,
-        )
+from mcp_search_hub.models import (
+    HealthStatus,
+    ProviderHealth,
+    ProviderItem,
+    ProviderResponse,
+    SearchQuery,
+)
+from mcp_search_hub.providers import ProviderDefinition, ProviderSession
 
 
 class StubProviderSession:
-    """Lightweight provider session for orchestrator tests."""
+    """Provider double with configurable delay, response, and failure."""
 
-    def __init__(self, identifier: str, tags: Iterable[str], responses: list[StubCall]):
+    def __init__(
+        self,
+        identifier: str,
+        *,
+        tags: set[str] | None = None,
+        weight: float = 1.0,
+        cost: str = "0",
+        timeout_seconds: float = 5.0,
+        results: list[ProviderItem] | None = None,
+        delay: float = 0.0,
+        error: Exception | None = None,
+    ) -> None:
         self.identifier = identifier
-        self.tags = set(tags)
-        self.weight = 1.0
-        self.default_tool = "search"
-        self.timeout = 5.0
-        self._responses = asyncio.Queue()
-        for response in responses:
-            self._responses.put_nowait(response)
-        self._started = False
+        self.tags = tags or set()
+        self.weight = weight
+        self.estimated_cost_usd = Decimal(cost)
+        self.timeout_seconds = timeout_seconds
+        self.ready = False
+        self.results = results or []
+        self.delay = delay
+        self.error = error
         self.invocations = 0
-        self._health = ProviderHealth(
-            identifier=identifier,
-            status=HealthStatus.HEALTHY,
-            message="ready",
-            latency_ms=None,
-            consecutive_failures=0,
-        )
+        self.last_max_results: int | None = None
+        self.timeout_count = 0
+        self.last_timeout_seconds: float | None = None
+        self._operation_sequence = 0
+        self._operation_started: dict[int, float] = {}
+        self._timed_out_operations: set[int] = set()
 
     async def start(self) -> None:
-        self._started = True
+        self.ready = True
 
-    async def call_search(self, query: SearchQuery):
-        if not self._started:
-            await self.start()
-        response: StubCall = await self._responses.get()
+    def begin_call(self) -> int:
+        self._operation_sequence += 1
+        self._operation_started[self._operation_sequence] = time.perf_counter()
+        return self._operation_sequence
+
+    async def call_search(self, query: SearchQuery, operation_id: int) -> ProviderResponse:
+        del operation_id
         self.invocations += 1
-        return response.to_result(), response.latency_ms
+        self.last_max_results = query.max_results
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.error is not None:
+            raise self.error
+        return ProviderResponse(
+            provider=self.identifier,
+            latency_ms=self.delay * 1000,
+            results=self.results[: query.max_results],
+        )
 
     async def close(self) -> None:
-        self._started = False
+        self.ready = False
 
     def health(self) -> ProviderHealth:
-        return self._health.model_copy()
+        if self.timeout_count:
+            return ProviderHealth(
+                identifier=self.identifier,
+                status=HealthStatus.UNHEALTHY,
+                message="TimeoutError",
+                latency_ms=(self.last_timeout_seconds or 0) * 1000,
+                consecutive_failures=self.timeout_count,
+            )
+        return ProviderHealth(
+            identifier=self.identifier,
+            status=HealthStatus.HEALTHY if self.ready else HealthStatus.DEGRADED,
+            message="ready" if self.ready else "stopped",
+        )
+
+    def record_timeout(self, operation_id: int) -> None:
+        if operation_id in self._timed_out_operations:
+            return
+        self._timed_out_operations.add(operation_id)
+        self.timeout_count += 1
+        self.last_timeout_seconds = time.perf_counter() - self._operation_started[operation_id]
 
 
 class StubRegistry:
-    """Registry that exposes a static provider set."""
+    """Lifecycle-aware registry double."""
 
-    def __init__(self, sessions: list[StubProviderSession]):
-        self._sessions = sessions
-        self._started = False
-        self._definitions = []
+    def __init__(self, sessions: list[StubProviderSession]) -> None:
+        self.sessions = sessions
+        self.started = False
+        self._definitions = [
+            ProviderDefinition(
+                identifier=session.identifier,
+                transport="memory://unused",
+                tool="search",
+                tags=frozenset(session.tags),
+                weight=session.weight,
+                timeout_seconds=session.timeout_seconds,
+                estimated_cost_usd=session.estimated_cost_usd,
+            )
+            for session in sessions
+        ]
 
     async def startup(self) -> None:
-        self._started = True
-        for session in self._sessions:
-            await session.start()
+        await asyncio.gather(*(session.start() for session in self.sessions))
+        self.started = True
 
-    async def ensure_started(self) -> None:
-        if not self._started:
+    async def ensure_started(self, required_identifiers: set[str] | None = None) -> None:
+        del required_identifiers
+        if not self.started:
             await self.startup()
 
-    def active_sessions(self) -> list[StubProviderSession]:
-        return self._sessions
+    def active_sessions(self) -> list[ProviderSession]:
+        return [session for session in self.sessions if session.ready]
 
-    def definitions(self):  # pragma: no cover - patched by server tests
+    def definitions(self) -> list[ProviderDefinition]:
         return self._definitions
 
+    def recovering_identifiers(self) -> set[str]:
+        return {session.identifier for session in self.sessions if not session.ready}
+
     def health(self) -> dict[str, ProviderHealth]:
-        return {session.identifier: session.health() for session in self._sessions}
+        return {session.identifier: session.health() for session in self.sessions}
 
     async def close(self) -> None:
-        for session in self._sessions:
-            await session.close()
-        self._started = False
+        await asyncio.gather(*(session.close() for session in self.sessions))
+        self.started = False
 
 
 @pytest.fixture
-def stub_sessions() -> list[StubProviderSession]:
-    alpha = StubProviderSession(
-        "alpha",
-        tags={"general"},
-        responses=[
-            StubCall(
-                provider="alpha",
-                results=[
-                    {
-                        "title": "Alpha Result",
-                        "url": "https://alpha.example",
-                        "score": 0.5,
-                    }
-                ],
-                latency_ms=12.0,
-            )
-        ],
+def alpha_result() -> ProviderItem:
+    return ProviderItem(
+        title="Alpha documentation",
+        url="https://example.com/docs?utm_source=test",
+        snippet="Alpha",
+        original_score=0.9,
     )
-    beta = StubProviderSession(
-        "beta",
-        tags={"code"},
-        responses=[
-            StubCall(
-                provider="beta",
-                results=[
-                    {
-                        "title": "Beta Result",
-                        "url": "https://beta.example",
-                        "score": 0.9,
-                    }
-                ],
-                latency_ms=8.0,
-            )
-        ],
-    )
-    return [alpha, beta]
 
 
 @pytest.fixture
-def stub_registry(stub_sessions: list[StubProviderSession]) -> StubRegistry:
-    return StubRegistry(stub_sessions)
+def stub_registry(alpha_result: ProviderItem) -> StubRegistry:
+    return StubRegistry(
+        [
+            StubProviderSession(
+                "alpha",
+                tags={"general", "technical"},
+                cost="0.01",
+                results=[alpha_result],
+            )
+        ]
+    )
