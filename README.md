@@ -61,6 +61,7 @@ The values below are disabled placeholders. Replace the endpoint and credentials
     "timeout_seconds": 15,
     "estimated_cost_usd": "0.01",
     "query_argument": "query",
+    "query_as_list": false,
     "max_results_argument": "limit",
     "raw_content_argument": "include_content",
     "static_arguments": {"language": "en"},
@@ -75,6 +76,10 @@ The values below are disabled placeholders. Replace the endpoint and credentials
   }
 }
 ```
+
+`query_as_list` defaults to `false` (a string); set it to `true` for tools that accept a one-element query array. Result fields containing arrays of strings are joined with newlines.
+
+For an opt-in, keyless web search setup, see the [Parallel Search MCP example](docs/parallel.md). The default hub still starts with no providers.
 
 An exact string such as `$DOCS_API_KEY` resolves from the process environment and fails startup when missing. Partial interpolation is not supported. The hub passes transport mappings to FastMCP, so remote headers can use the same explicit reference form.
 

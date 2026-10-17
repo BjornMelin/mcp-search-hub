@@ -39,6 +39,7 @@ Settings use Pydantic Settings. Nested environment keys use `__`, and `PROVIDERS
 | `timeout_seconds` | Provider cap applied by the orchestrator |
 | `estimated_cost_usd` | Planner cost estimate for one request |
 | `*_argument` | Downstream names for query, limit, and raw-content flags |
+| `query_as_list` | `false` by default; `true` sends the query as a one-element string array |
 | `static_arguments` | Deployment-owned constant tool arguments |
 | `result_path` | String/integer path from the provider response to result items |
 | `field_aliases` | Canonical title/URL/snippet/score/raw-content mappings |
@@ -48,5 +49,9 @@ Enabled providers require exactly one of `transport` or `command`. `env` is vali
 Transport strings, command executables, tool names, and argument names must be nonblank and free of surrounding whitespace. Dynamic argument names must be unique and cannot overlap `static_arguments`. Transport mappings must contain at least one field, provider weights must be finite positive numbers, and unknown fields in provider, router, result, or middleware objects fail configuration.
 
 Partial `field_aliases` mappings inherit defaults for omitted canonical fields. Alias lists must contain at least one trimmed name. The hub returns only declared canonical result fields and does not forward undeclared provider fields as metadata.
+
+Result text fields (title, URL, snippet, and raw content) accept strings or arrays of strings. Arrays are joined with newlines, omitting blank entries; empty arrays become absent text. Other values retain their string conversion. This makes excerpt arrays readable without a provider-specific adapter.
+
+See the [Parallel Search MCP setup](parallel.md) for an array-query provider example.
 
 The resolver expands an exact `$NAME` string recursively in transports, stdio env, and static arguments. Missing names fail configuration. Resolved transport URLs and command executables must remain nonblank and trimmed. The resolver leaves strings that contain `$NAME` unchanged, which avoids implicit interpolation rules.

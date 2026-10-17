@@ -89,6 +89,7 @@ class ProviderSettings(StrictModel):
     timeout_seconds: float = Field(default=20.0, gt=0.0, le=300.0)
     estimated_cost_usd: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
     query_argument: str = Field(default="query", min_length=1)
+    query_as_list: bool = False
     max_results_argument: str | None = "max_results"
     raw_content_argument: str | None = "include_raw_content"
     static_arguments: dict[str, Any] = Field(default_factory=lambda: dict[str, Any]())

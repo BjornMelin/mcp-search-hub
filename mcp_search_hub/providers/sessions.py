@@ -72,6 +72,7 @@ class ProviderDefinition:
     timeout_seconds: float = 20.0
     estimated_cost_usd: Decimal = Decimal("0")
     query_argument: str = "query"
+    query_as_list: bool = False
     max_results_argument: str | None = "max_results"
     raw_content_argument: str | None = "include_raw_content"
     static_arguments: dict[str, Any] = field(default_factory=lambda: dict[str, Any]())
@@ -217,7 +218,9 @@ class MCPProviderSession:
             raise RuntimeError("Provider calls require an asyncio task")
         self._operation_tasks[operation_id] = operation_task
         arguments = dict(self.definition.static_arguments)
-        arguments[self.definition.query_argument] = query.query
+        arguments[self.definition.query_argument] = (
+            [query.query] if self.definition.query_as_list else query.query
+        )
         if self.definition.max_results_argument is not None:
             arguments[self.definition.max_results_argument] = query.max_results
         if self.definition.raw_content_argument is not None:
@@ -429,7 +432,14 @@ def _plain_data(value: Any) -> Any:
 def _optional_text(value: Any) -> str | None:
     if value is None:
         return None
-    text = str(value).strip()
+    if isinstance(value, list):
+        parts = cast(list[Any], value)
+        if all(isinstance(part, str) for part in parts):
+            text = "\n".join(part.strip() for part in cast(list[str], parts) if part.strip())
+        else:
+            text = str(parts).strip()
+    else:
+        text = str(value).strip()
     return text or None
 
 
