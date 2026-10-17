@@ -66,6 +66,7 @@ class ProviderRegistry:
                     timeout_seconds=provider.timeout_seconds,
                     estimated_cost_usd=provider.estimated_cost_usd,
                     query_argument=provider.query_argument,
+                    query_as_list=provider.query_as_list,
                     max_results_argument=provider.max_results_argument,
                     raw_content_argument=provider.raw_content_argument,
                     static_arguments=resolve_env_references(provider.static_arguments),

@@ -1,0 +1,30 @@
+{
+  "parallel": {
+    "enabled": true,
+    "transport": {
+      "mcpServers": {
+        "parallel": {
+          "transport": "http",
+          "url": "https://search.parallel.ai/mcp",
+          "headers": {
+            "User-Agent": "mcp-search-hub/1.0.0"
+          }
+        }
+      }
+    },
+    "tool": "web_search",
+    "tags": ["general", "technical"],
+    "query_argument": "search_queries",
+    "query_as_list": true,
+    "max_results_argument": null,
+    "raw_content_argument": null,
+    "static_arguments": {
+      "objective": "Find relevant web pages for the supplied search query.",
+      "session_id": "$PARALLEL_SEARCH_SESSION_ID"
+    },
+    "result_path": ["results"],
+    "field_aliases": {
+      "snippet": ["excerpts"]
+    }
+  }
+}
